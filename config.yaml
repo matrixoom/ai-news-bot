@@ -1,9 +1,21 @@
+# LLM Configuration - Choose your AI model provider
+llm:
+  # Provider: 'claude' or 'deepseek'
+  # Claude (Anthropic): Excellent quality, higher cost
+  # DeepSeek: Good quality, much lower cost, better Chinese support
+  provider: claude
+
+  # Optional: Specify a model (if not set, uses provider's default)
+  # Claude models: claude-sonnet-4-5-20250929, claude-3-5-sonnet-20241022
+  # DeepSeek models: deepseek-chat, deepseek-reasoner
+  # model: claude-sonnet-4-5-20250929
+
 news:
   # Enable fetching real-time news from RSS feeds (recommended)
   # Set to false to use AI-generated news based on AI's knowledge (may be outdated)
   use_real_sources: true
 
-  # Enable web search tool (uses DuckDuckGo API via Claude tool calling)
+  # Enable web search tool (uses DuckDuckGo API via LLM tool calling)
   # Note: DuckDuckGo API often returns limited results. RSS feeds (use_real_sources) is more reliable.
   enable_web_search: false
 

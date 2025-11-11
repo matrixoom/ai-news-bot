@@ -28,13 +28,21 @@ def main():
         logger.info("=" * 60)
         logger.info("AI News Bot Starting")
         logger.info(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"LLM Provider: {config.llm_provider}")
+        if config.llm_model:
+            logger.info(f"LLM Model: {config.llm_model}")
         logger.info(f"Language: {config.ai_response_language}")
         logger.info(f"Web Search: {config.enable_web_search}")
         logger.info("=" * 60)
 
         # Initialize news generator
         logger.info("Initializing news generator...")
-        news_gen = NewsGenerator(enable_web_search=config.enable_web_search)
+        news_gen = NewsGenerator(
+            provider_name=config.llm_provider,
+            api_key=config.llm_api_key,
+            model=config.llm_model,
+            enable_web_search=config.enable_web_search
+        )
 
         # Generate news digest
         logger.info("Generating AI news digest...")

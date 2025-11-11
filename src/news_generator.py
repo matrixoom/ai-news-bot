@@ -1,48 +1,58 @@
 """
-AI News Generator using Anthropic API
+AI News Generator using configurable LLM providers
 """
 import os
 from typing import Dict, List, Optional
-from anthropic import Anthropic
 from .logger import setup_logger
 from .web_search import WebSearchTool, get_search_tool_definition
 from .news_fetcher import NewsFetcher
+from .llm_providers import get_llm_provider, BaseLLMProvider
 
 
 logger = setup_logger(__name__)
 
 
 class NewsGenerator:
-    """Generate AI news digest using Anthropic's Claude API"""
+    """Generate AI news digest using configurable LLM providers"""
 
-    def __init__(self, api_key: Optional[str] = None, enable_web_search: bool = False):
+    def __init__(
+        self,
+        provider_name: str = "claude",
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        enable_web_search: bool = False
+    ):
         """
         Initialize the NewsGenerator.
 
         Args:
-            api_key: Anthropic API key. If None, will read from ANTHROPIC_API_KEY env var
+            provider_name: Name of LLM provider to use ('claude' or 'deepseek')
+            api_key: API key for the provider. If None, will read from environment
+            model: Model name to use. If None, uses provider's default model
             enable_web_search: Whether to enable web search tool for fetching current news
 
         Raises:
-            ValueError: If API key is not provided and not in environment
+            ValueError: If provider is not recognized or API key is not provided
         """
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError(
-                "Anthropic API key must be provided or set in ANTHROPIC_API_KEY environment variable"
-            )
-
-        self.client = Anthropic(api_key=self.api_key)
+        # Initialize LLM provider
+        self.provider = get_llm_provider(
+            provider_name=provider_name,
+            api_key=api_key,
+            model=model
+        )
+        
         self.enable_web_search = enable_web_search
         self.search_tool = WebSearchTool() if enable_web_search else None
         self.news_fetcher = NewsFetcher()
-        logger.info(f"NewsGenerator initialized successfully (web_search: {enable_web_search})")
+        logger.info(
+            f"NewsGenerator initialized with {self.provider.provider_name} "
+            f"(model: {self.provider.model}, web_search: {enable_web_search})"
+        )
 
     def generate_news_digest(
         self,
         topics: List[str],
         prompt_template: str,
-        model: str = "claude-sonnet-4-5-20250929",
         max_tokens: int = 2000,
         language: str = "en"
     ) -> str:
@@ -53,7 +63,6 @@ class NewsGenerator:
         Args:
             topics: List of topics to cover in the news digest
             prompt_template: Template string with {topics} placeholder
-            model: Claude model to use
             max_tokens: Maximum tokens in response
             language: Language code for the response (e.g., 'en', 'zh', 'es', 'fr', 'ja')
 
@@ -94,124 +103,66 @@ class NewsGenerator:
                 language_name = language_names.get(language.lower(), language.upper())
                 prompt += f"\n\nIMPORTANT: Please respond entirely in {language_name}."
 
-            logger.info(f"Generating news digest with model: {model}, language: {language}, web_search: {self.enable_web_search}")
+            logger.info(f"Generating news digest with {self.provider.provider_name}, language: {language}, web_search: {self.enable_web_search}")
             logger.debug(f"Topics: {topics}")
 
-            # Prepare messages and tools
+            # Prepare messages
             messages = [{"role": "user", "content": prompt}]
-            tools = [get_search_tool_definition()] if self.enable_web_search else None
 
-            # Agentic loop for tool use
-            response_text = None
-            max_iterations = 8  # Limit iterations to prevent excessive searches
-            search_count = 0
-            max_searches = 6  # Limit total number of searches
+            # If web search is disabled, just generate
+            if not self.enable_web_search:
+                return self.provider.generate(
+                    messages=messages,
+                    max_tokens=max_tokens
+                )
 
-            for iteration in range(max_iterations):
-                # Call Anthropic API
-                if tools:
-                    message = self.client.messages.create(
-                        model=model,
-                        max_tokens=max_tokens,
-                        messages=messages,
-                        tools=tools
-                    )
-                else:
-                    message = self.client.messages.create(
-                        model=model,
-                        max_tokens=max_tokens,
-                        messages=messages
-                    )
-
-                logger.debug(f"Iteration {iteration + 1}: stop_reason = {message.stop_reason}")
-
-                # Check if we got a final response
-                if message.stop_reason == "end_turn":
-                    # Extract text from content blocks
-                    for block in message.content:
-                        if block.type == "text":
-                            response_text = block.text
-                            break
-                    break
-
-                # Check if Claude wants to use a tool
-                elif message.stop_reason == "tool_use":
-                    # Add assistant's response to messages
-                    messages.append({
-                        "role": "assistant",
-                        "content": message.content
-                    })
-
-                    # Process tool calls
-                    tool_results = []
-                    for block in message.content:
-                        if block.type == "tool_use":
-                            tool_name = block.name
-                            tool_input = block.input
-
-                            logger.info(f"Tool call: {tool_name} with input: {tool_input}")
-
-                            # Execute the tool
-                            if tool_name == "web_search" and self.search_tool:
-                                search_count += 1
-
-                                # Check if we've exceeded max searches
-                                if search_count > max_searches:
-                                    result_text = "Maximum number of searches reached. Please create the digest based on the information gathered so far."
-                                else:
-                                    query = tool_input.get("query", "AI news 2025")
-                                    max_results = tool_input.get("max_results", 10)
-                                    search_results = self.search_tool.search_news(query, max_results)
-
-                                    # Format search results
-                                    if search_results:
-                                        result_text = f"Search results for '{query}':\n\n"
-                                        for i, result in enumerate(search_results, 1):
-                                            result_text += f"{i}. {result['title']}\n"
-                                            result_text += f"   {result['snippet']}\n"
-                                            if result['url']:
-                                                result_text += f"   URL: {result['url']}\n"
-                                            result_text += "\n"
-                                    else:
-                                        result_text = f"No results found for '{query}'. Try a different query or proceed with the information you have."
-
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content": result_text
-                                })
-
-                    # Add tool results to messages
-                    if tool_results:
-                        messages.append({
-                            "role": "user",
-                            "content": tool_results
-                        })
+            # With web search enabled, use tool calling
+            tools = [get_search_tool_definition()]
+            
+            # Create tool handler for search
+            search_count = [0]  # Use list to allow modification in closure
+            max_searches = 6
+            
+            def tool_handler(tool_name: str, tool_input: dict, tool_use_id: str) -> str:
+                """Handle tool calls for web search"""
+                if tool_name == "web_search" and self.search_tool:
+                    search_count[0] += 1
+                    
+                    if search_count[0] > max_searches:
+                        return "Maximum number of searches reached. Please create the digest based on the information gathered so far."
+                    
+                    query = tool_input.get("query", "AI news 2025")
+                    max_results = tool_input.get("max_results", 10)
+                    search_results = self.search_tool.search_news(query, max_results)
+                    
+                    # Format search results
+                    if search_results:
+                        result_text = f"Search results for '{query}':\n\n"
+                        for i, result in enumerate(search_results, 1):
+                            result_text += f"{i}. {result['title']}\n"
+                            result_text += f"   {result['snippet']}\n"
+                            if result['url']:
+                                result_text += f"   URL: {result['url']}\n"
+                            result_text += "\n"
+                        return result_text
                     else:
-                        # No valid tool results, break
-                        break
-
-                    # Force generation after max searches
-                    if search_count >= max_searches:
-                        logger.info(f"Reached max searches ({max_searches}), forcing final generation")
-                        # Add a message to prompt Claude to generate final output
-                        messages.append({
-                            "role": "user",
-                            "content": "You have gathered enough information. Please now create a comprehensive news digest based on all the search results you've collected."
-                        })
-                else:
-                    # Unexpected stop reason
-                    break
-
-            # If we didn't get a response through the loop, extract from last message
-            if response_text is None:
-                for block in message.content:
-                    if block.type == "text":
-                        response_text = block.text
-                        break
-
-            if response_text is None:
-                raise Exception("No text response received from Claude")
+                        return f"No results found for '{query}'. Try a different query or proceed with the information you have."
+                
+                return "Tool not available"
+            
+            # Convert tools to appropriate format if using DeepSeek
+            if self.provider.provider_name == "deepseek":
+                from .llm_providers.deepseek_provider import DeepSeekProvider
+                if isinstance(self.provider, DeepSeekProvider):
+                    tools = self.provider.convert_claude_tools_to_openai_format(tools)
+            
+            response_text = self.provider.generate_with_tools(
+                messages=messages,
+                tools=tools,
+                max_tokens=max_tokens,
+                max_iterations=8,
+                tool_handler=tool_handler
+            )
 
             logger.info("News digest generated successfully")
             logger.debug(f"Response length: {len(response_text)} characters")
@@ -261,7 +212,6 @@ class NewsGenerator:
     def generate_news_digest_from_sources(
         self,
         prompt_template: str,
-        model: str = "claude-sonnet-4-5-20250929",
         max_tokens: int = 4000,
         language: str = "en",
         include_chinese: bool = True,
@@ -272,7 +222,6 @@ class NewsGenerator:
 
         Args:
             prompt_template: Template for summarization instructions
-            model: Claude model to use
             max_tokens: Maximum tokens in response
             language: Language code for the response
             include_chinese: Whether to include Chinese news sources
@@ -298,7 +247,6 @@ class NewsGenerator:
                 return self.generate_news_digest(
                     topics=["AI industry news"],
                     prompt_template=prompt_template,
-                    model=model,
                     max_tokens=max_tokens,
                     language=language
                 )
@@ -348,17 +296,12 @@ CRITICAL REQUIREMENTS:
 
             logger.info(f"Generating summary from {len(news_data['international']) + len(news_data['domestic'])} news items")
 
-            # Call Anthropic API
-            message = self.client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                messages=[
-                    {"role": "user", "content": summarization_prompt}
-                ]
+            # Use provider to generate response
+            messages = [{"role": "user", "content": summarization_prompt}]
+            response_text = self.provider.generate(
+                messages=messages,
+                max_tokens=max_tokens
             )
-
-            # Extract the response text
-            response_text = message.content[0].text
 
             logger.info("News digest generated successfully from real sources")
             logger.debug(f"Response length: {len(response_text)} characters")

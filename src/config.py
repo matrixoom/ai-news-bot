@@ -158,6 +158,35 @@ Format your response as a structured news digest with clear sections."""
         """Maximum news items to fetch per source"""
         return self.config_data.get("news", {}).get("max_items_per_source", 5)
 
+    @property
+    def llm_provider(self) -> str:
+        """Get the LLM provider to use (claude or deepseek)"""
+        # Check environment variable first, then config file
+        env_provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+        if env_provider:
+            return env_provider
+        return self.config_data.get("llm", {}).get("provider", "claude").lower()
+
+    @property
+    def llm_model(self) -> Optional[str]:
+        """Get the specific model to use (if specified)"""
+        # Check environment variable first, then config file
+        env_model = os.getenv("LLM_MODEL", "").strip()
+        if env_model:
+            return env_model
+        return self.config_data.get("llm", {}).get("model")
+
+    @property
+    def llm_api_key(self) -> Optional[str]:
+        """Get the API key for the LLM provider"""
+        # Check environment variables based on provider
+        provider = self.llm_provider
+        if provider == "deepseek":
+            return os.getenv("DEEPSEEK_API_KEY")
+        elif provider == "claude":
+            return os.getenv("ANTHROPIC_API_KEY")
+        return None
+
     def get(self, key: str, default: Any = None) -> Any:
         """
         Get configuration value by key.
