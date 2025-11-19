@@ -18,18 +18,41 @@ class NewsFetcher:
         """Initialize the news fetcher"""
         # RSS feed sources for AI news (reliable sources only)
         self.rss_feeds = {
+            # Major Tech Media
             "TechCrunch AI": "https://techcrunch.com/tag/artificial-intelligence/feed/",
             "VentureBeat AI": "https://venturebeat.com/category/ai/feed/",
             "MIT Technology Review": "https://www.technologyreview.com/feed/",
             "Ars Technica AI": "https://arstechnica.com/tag/ai/feed/",
             "Wired AI": "https://www.wired.com/feed/tag/ai/latest/rss",
             "The Next Web": "https://thenextweb.com/feed",
+            "The Verge AI": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+            "Engadget AI": "https://www.engadget.com/tag/ai/rss.xml",
+
+            # Official AI Company Blogs
+            "OpenAI Blog": "https://openai.com/blog/rss/",
+            "Google AI Blog": "https://blog.google/technology/ai/rss/",
+            "DeepMind Blog": "https://deepmind.google/blog/rss.xml",
+            "Meta AI Blog": "https://ai.meta.com/blog/rss/",
+            "Microsoft AI Blog": "https://blogs.microsoft.com/ai/feed/",
+
+            # Research & Academic
+            "arXiv AI": "https://rss.arxiv.org/rss/cs.AI",
+            "arXiv Machine Learning": "https://rss.arxiv.org/rss/cs.LG",
+            "arXiv Computer Vision": "https://rss.arxiv.org/rss/cs.CV",
+            "arXiv NLP": "https://rss.arxiv.org/rss/cs.CL",
+
+            # Industry Verticals
+            "Healthcare IT News AI": "https://www.healthcareitnews.com/taxonomy/term/31/feed",
+            "Robotics Business Review": "https://www.roboticsbusinessreview.com/feed/",
+            "Autonomous Vehicle News": "https://www.autonomousvehicleinternational.com/feed",
         }
 
-        # Chinese AI news sources (using Google News RSS as fallback)
+        # Chinese AI news sources
         self.chinese_feeds = {
             "Google News AI (CN)": "https://news.google.com/rss/search?q=人工智能+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
             "Google News Tech (CN)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            "Google News LLM (CN)": "https://news.google.com/rss/search?q=大模型+GPT+Claude&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            "Google News Robotics (CN)": "https://news.google.com/rss/search?q=机器人+自动驾驶&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
         }
 
     def fetch_rss_feed(self, feed_url: str, max_items: int = 10) -> List[Dict[str, str]]:

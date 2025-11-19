@@ -212,7 +212,7 @@ class NewsGenerator:
     def generate_news_digest_from_sources(
         self,
         prompt_template: str,
-        max_tokens: int = 4000,
+        max_tokens: int = 8000,
         language: str = "en",
         include_chinese: bool = True,
         max_items_per_source: int = 5
@@ -255,7 +255,7 @@ class NewsGenerator:
             formatted_news = self.news_fetcher.format_news_for_summary(news_data)
 
             # Create summarization prompt
-            summarization_prompt = f"""Based on the following recent AI news articles, create a well-organized news digest.
+            summarization_prompt = f"""You are a senior AI industry analyst. Based on the following recent AI news articles, create a comprehensive, in-depth news digest.
 
 {formatted_news}
 
@@ -263,12 +263,21 @@ Instructions:
 {prompt_template}
 
 CRITICAL REQUIREMENTS:
-- SELECT ONLY THE TOP 10 MOST IMPORTANT news items from all the items provided above
-- Quality over quantity - prioritize groundbreaking, high-impact news
+- SELECT 15-20 HIGH-QUALITY news items from all the items provided above
+- Balance coverage across different categories (LLM, Agents, Research, Products, etc.)
+- Include both international and domestic news when available
+- Prioritize: groundbreaking research, major product launches, significant policy changes, large funding rounds
+- Prefer primary sources (official blogs, research papers) over secondary reporting
 - Avoid duplicate or overly similar news items
-- Focus on cutting-edge developments and industry-shaping events
+
+CONTENT DEPTH REQUIREMENTS:
+- Each news summary should be 4-6 sentences
+- Include: what happened, technical details, why it matters, potential implications
+- Include specific numbers, metrics, and data when available
 - Maintain accuracy - only include information from the provided articles
-- Format the output in clean, readable markdown
+
+FORMATTING REQUIREMENTS:
+- Format the output in clean, readable markdown with category headers
 - Include source attributions as clickable markdown links: [Source Name](URL)
 - Use the **Link:** field from each news item to create the clickable source link
 - Example: "Source: [TechCrunch](https://techcrunch.com/article-url)" or "来源: [网站名称](URL)"

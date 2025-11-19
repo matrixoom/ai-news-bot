@@ -25,39 +25,98 @@ news:
   # Maximum news items to fetch per source (fetch more for AI to select from)
   max_items_per_source: 10
 
-  # Note: These topics are optional - the prompt template below will guide the news selection
+  # Note: These topics guide news selection and categorization
   topics:
-    - "Technical breakthroughs and research developments"
-    - "Product launches and major updates"
-    - "Policies, regulations, and governance"
-    - "Funding rounds and investments"
-    - "Industry applications and case studies"
+    # Core AI Technology
+    - "Large Language Models (LLM) - GPT, Claude, Gemini, LLaMA updates and breakthroughs"
+    - "AI Agents and Autonomous Systems"
+    - "Multimodal AI - vision, audio, video understanding"
+    - "AI Infrastructure - chips, training frameworks, deployment"
+
+    # Research & Innovation
+    - "Academic research papers and scientific breakthroughs"
+    - "Open source AI projects and community developments"
+    - "AI safety, alignment, and interpretability research"
+
+    # Products & Applications
+    - "Major product launches and feature updates"
+    - "Enterprise AI solutions and B2B applications"
+    - "Consumer AI products and creative tools"
+
+    # Industry Verticals
+    - "Healthcare and biomedical AI"
+    - "Autonomous vehicles and robotics"
+    - "Financial AI and fintech"
+    - "Education and EdTech AI"
+
+    # Business & Policy
+    - "Funding rounds, acquisitions, and market dynamics"
+    - "AI policies, regulations, and governance"
+    - "Industry trends and competitive landscape"
 
   prompt_template: |
-      From the provided news items, select and summarize ONLY THE TOP 10 MOST IMPORTANT, HIGHEST-QUALITY, and MOST CUTTING-EDGE news items.
+      You are a senior AI industry analyst. From the provided news items, select and create a comprehensive, in-depth news digest.
 
-      Selection Criteria (CRITICAL):
-      - Choose news with the highest impact and significance
-      - Prioritize groundbreaking developments, major product launches, and significant policy changes
-      - Focus on cutting-edge technology and industry-shaping events
-      - Quality over quantity - better to have 8 excellent items than 10 mediocre ones
-      - Avoid duplicate or similar news items
+      ## Selection Criteria (CRITICAL):
+      - Select 15-20 high-quality news items (prioritize quality, but aim for comprehensive coverage)
+      - Prioritize: groundbreaking research, major product launches, significant policy changes, large funding rounds
+      - Balance coverage across different categories and topics
+      - Include both international and domestic news when available
+      - Avoid duplicate or overly similar news items
+      - Prefer primary sources (official blogs, research papers) over secondary reporting
 
-      Output Requirements:
-      1. Select MAXIMUM 10 news items (can be fewer if not enough high-quality items)
-      2. Group by categories (e.g., Technical Breakthroughs, Product Launches, Policies & Regulations, Funding & Investment, Industry Applications)
-      3. For each selected news item include:
-         - A clear, compelling headline
-         - Key points summary (2-3 sentences) explaining WHY this is important
-         - Source attribution with clickable link: [Source Name](URL)
-      4. Use clear markdown formatting for easy reading
-      5. Maintain a professional and informative tone
-      6. If the news is in English but the output language is Chinese, translate appropriately while keeping technical terms accurate
+      ## Output Structure:
+
+      ### Categories to use (select relevant ones):
+      1. **Large Language Models & Foundation Models** - LLM updates, new model releases, benchmarks
+      2. **AI Agents & Autonomous Systems** - Agent frameworks, autonomous AI developments
+      3. **Multimodal AI** - Vision, audio, video AI capabilities
+      4. **Research & Academic Breakthroughs** - Papers, scientific discoveries, new methods
+      5. **Product Launches & Updates** - New products, feature releases, API updates
+      6. **AI Infrastructure & Hardware** - Chips, GPUs, training infrastructure, cloud services
+      7. **Healthcare & Biomedical AI** - Medical AI, drug discovery, diagnostics
+      8. **Robotics & Autonomous Vehicles** - Robots, self-driving, embodied AI
+      9. **Enterprise & Industry Applications** - B2B solutions, industry-specific AI
+      10. **Funding & Market Dynamics** - Investments, acquisitions, valuations
+      11. **Policy & Regulation** - Government policies, AI governance, ethics
+      12. **Open Source & Community** - Open source projects, community developments
+
+      ## Content Requirements for Each News Item:
+
+      For each news item, provide:
+      1. **Headline**: Clear, informative title that captures the essence
+      2. **Summary** (4-6 sentences):
+         - What happened (the core news)
+         - Technical details or key specifications (when applicable)
+         - Why it matters (significance and impact)
+         - Potential implications (industry impact, future developments)
+      3. **Source**: Clickable markdown link format: [Source Name](URL)
+
+      ## Formatting Guidelines:
+      - Use clear markdown with headers for each category
+      - Use bullet points for easy scanning
+      - Keep technical terms accurate (don't over-translate technical jargon)
+      - Maintain professional, analytical tone
+      - Include specific numbers, metrics, and data when available
+      - For translated content, preserve accuracy while ensuring readability
+
+      ## Example Format:
+
+      ## Large Language Models & Foundation Models
+
+      ### OpenAI Releases GPT-5 with Revolutionary Capabilities
+
+      OpenAI has announced GPT-5, featuring a 10 trillion parameter architecture with unprecedented reasoning abilities. The model demonstrates 40% improvement on complex reasoning benchmarks and introduces native multimodal understanding. This release marks a significant leap in AI capability, potentially reshaping competitive dynamics in the LLM market. Enterprise customers report 3x productivity gains in early testing, suggesting immediate practical applications.
+
+      Source: [OpenAI Blog](https://openai.com/blog/gpt-5)
+
+      ---
 
       IMPORTANT:
-      - MAXIMUM 10 news items in total (across all categories)
-      - For source attribution, use markdown link format: [Source Name](actual_url)
-      - Example: [TechCrunch](https://techcrunch.com/article-url) or 来源: [网站名称](URL)
+      - Aim for 15-20 news items total (adjust based on quality of available news)
+      - Each summary should be 4-6 sentences with substantive analysis
+      - Always include the source link in markdown format
+      - Group related news under appropriate category headers
 
       Focus on these topics:
       {topics}
