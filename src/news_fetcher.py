@@ -3,7 +3,7 @@ News fetcher module - Fetches real-time AI news from various sources
 """
 import requests
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 import xml.etree.ElementTree as ET
 from .logger import setup_logger
 
@@ -128,8 +128,7 @@ class NewsFetcher:
     def fetch_recent_news(
         self,
         include_chinese: bool = True,
-        max_items_per_source: int = 5,
-        days_back: int = 7
+        max_items_per_source: int = 5
     ) -> Dict[str, List[Dict[str, str]]]:
         """
         Fetch recent AI news from all configured sources.
@@ -137,7 +136,6 @@ class NewsFetcher:
         Args:
             include_chinese: Whether to include Chinese news sources
             max_items_per_source: Maximum items to fetch per source
-            days_back: Only include news from the past N days
 
         Returns:
             Dictionary with 'international' and 'domestic' news lists

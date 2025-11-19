@@ -4,6 +4,7 @@ AI News Generator using configurable LLM providers
 import os
 from typing import Dict, List, Optional
 from .logger import setup_logger
+from .config import LANGUAGE_NAMES
 from .web_search import WebSearchTool, get_search_tool_definition
 from .news_fetcher import NewsFetcher
 from .llm_providers import get_llm_provider, BaseLLMProvider
@@ -84,23 +85,8 @@ class NewsGenerator:
                 prompt += "\n\nIMPORTANT: Use the web_search tool to find the most recent AI news from 2025. You can search 3-5 times with different queries to gather diverse news. After gathering news, create a comprehensive digest based on what you found."
 
             # Add language instruction if not English
-            language_names = {
-                "zh": "Chinese (中文)",
-                "es": "Spanish (Español)",
-                "fr": "French (Français)",
-                "ja": "Japanese (日本語)",
-                "de": "German (Deutsch)",
-                "ko": "Korean (한국어)",
-                "pt": "Portuguese (Português)",
-                "ru": "Russian (Русский)",
-                "ar": "Arabic (العربية)",
-                "hi": "Hindi (हिन्दी)",
-                "it": "Italian (Italiano)",
-                "nl": "Dutch (Nederlands)",
-            }
-
             if language and language.lower() != "en":
-                language_name = language_names.get(language.lower(), language.upper())
+                language_name = LANGUAGE_NAMES.get(language.lower(), language.upper())
                 prompt += f"\n\nIMPORTANT: Please respond entirely in {language_name}."
 
             logger.info(f"Generating news digest with {self.provider.provider_name}, language: {language}, web_search: {self.enable_web_search}")
@@ -284,23 +270,8 @@ FORMATTING REQUIREMENTS:
 """
 
             # Add language instruction if not English
-            language_names = {
-                "zh": "Chinese (中文)",
-                "es": "Spanish (Español)",
-                "fr": "French (Français)",
-                "ja": "Japanese (日本語)",
-                "de": "German (Deutsch)",
-                "ko": "Korean (한국어)",
-                "pt": "Portuguese (Português)",
-                "ru": "Russian (Русский)",
-                "ar": "Arabic (العربية)",
-                "hi": "Hindi (हिन्दी)",
-                "it": "Italian (Italiano)",
-                "nl": "Dutch (Nederlands)",
-            }
-
             if language and language.lower() != "en":
-                language_name = language_names.get(language.lower(), language.upper())
+                language_name = LANGUAGE_NAMES.get(language.lower(), language.upper())
                 summarization_prompt += f"\n\nIMPORTANT: Please respond entirely in {language_name}."
 
             logger.info(f"Generating summary from {len(news_data['international']) + len(news_data['domestic'])} news items")

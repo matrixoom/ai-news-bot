@@ -75,46 +75,6 @@ class WebSearchTool:
             logger.error(f"Search failed: {str(e)}", exc_info=True)
             return []
 
-    def search_ai_news(self, max_results: int = 15) -> str:
-        """
-        Search for recent AI news and format results.
-
-        Args:
-            max_results: Maximum number of results
-
-        Returns:
-            Formatted string with search results
-        """
-        # Search queries for different aspects of AI news
-        queries = [
-            "artificial intelligence news 2025",
-            "AI breakthroughs 2025",
-            "machine learning updates 2025",
-            "AI product launches 2025",
-            "OpenAI ChatGPT news 2025"
-        ]
-
-        all_results = []
-
-        for query in queries:
-            results = self.search_news(query, max_results=3)
-            all_results.extend(results)
-
-        if not all_results:
-            logger.warning("No search results found")
-            return "No recent news found via web search."
-
-        # Format results
-        formatted = "Recent AI News from Web Search:\n\n"
-        for i, result in enumerate(all_results[:max_results], 1):
-            formatted += f"{i}. {result['title']}\n"
-            formatted += f"   {result['snippet']}\n"
-            if result['url']:
-                formatted += f"   Source: {result['url']}\n"
-            formatted += "\n"
-
-        return formatted
-
 
 def get_search_tool_definition() -> Dict:
     """

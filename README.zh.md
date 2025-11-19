@@ -29,8 +29,6 @@
 | **GitHub Actions** | 仓库 Secrets | 自动化每日运行（推荐）|
 
 > 💡 **提示**：先在本地开发环境测试，然后部署到 GitHub Actions 实现自动化。
->
-> 📋 **配置检查清单**：使用 [CONFIGURATION_CHECKLIST.md](CONFIGURATION_CHECKLIST.md) 确保所有配置正确。
 
 ## 快速开始（本地开发）
 
@@ -134,7 +132,7 @@ AI_RESPONSE_LANGUAGE=ja  # 日语输出
 8. 简洁 - 超简短
 9. 中文 - 中文示例
 
-📖 **完整指南**：参见 [PROMPT_GUIDE.md](PROMPT_GUIDE.md) 了解自定义和多语言详情。
+📖 **完整指南**：参见 `config.examples.yaml` 了解自定义和多语言详情。
 
 ### 5. 本地运行
 
@@ -289,8 +287,6 @@ OpenAI发布了GPT-5...
 项目包含一个 GitHub Actions 工作流，默认在每天 UTC 时间 00:00（北京时间 08:00）运行。
 
 > **重要**：GitHub Actions 使用**仓库 Secrets** 进行配置（不是环境变量）。所有设置都必须添加为 secrets。
->
-> 📖 **详细设置指南**：参见 [GITHUB_SETUP.md](GITHUB_SETUP.md) 获取带截图的分步说明和故障排除。
 
 ### 步骤 1：添加 GitHub 仓库 Secrets
 
@@ -386,19 +382,13 @@ ai-news-bot/
 │       ├── __init__.py
 │       ├── email_notifier.py        # 邮件通知
 │       └── webhook_notifier.py      # Webhook 通知
-├── docs/
-│   └── CONFIGURATION_GUIDE.md       # 详细配置指南
 ├── main.py                          # 主应用入口
 ├── config.yaml                      # 活动配置文件
-├── config.examples.yaml             # 9 个预设提示词模板 ⭐
 ├── requirements.txt                 # Python 依赖
 ├── .env.example                     # 示例环境变量
-├── GITHUB_SETUP.md                  # GitHub Actions 设置指南
-├── CONFIGURATION_CHECKLIST.md       # 配置检查清单
-├── test_setup.py                    # 配置验证脚本
-├── example_usage.py                 # 使用示例
 ├── .gitignore
-└── README.md
+├── README.md
+└── README.zh.md                     # 中文文档
 ```
 
 ## 使用示例
@@ -443,12 +433,7 @@ NOTIFICATION_METHODS=email,webhook
 - 在任何设备上都舒适的阅读体验
 
 **预览您的邮件：**
-```bash
-python test_email_format.py
-open email_preview.html
-```
-
-📖 **详细指南**：参见 [EMAIL_FORMAT_GUIDE.md](EMAIL_FORMAT_GUIDE.md) 了解自定义选项和故障排除。
+在本地运行机器人并检查生成的 HTML 邮件内容。
 
 ## Resend.com 邮件设置指南
 

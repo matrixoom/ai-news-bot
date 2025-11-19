@@ -29,8 +29,6 @@ Choose your deployment method:
 | **GitHub Actions** | Repository Secrets | Automated daily runs (recommended) |
 
 > 💡 **Tip**: Start with local development to test, then deploy to GitHub Actions for automation.
->
-> 📋 **Setup Checklist**: Use [CONFIGURATION_CHECKLIST.md](CONFIGURATION_CHECKLIST.md) to ensure everything is configured correctly.
 
 ## Quick Start (Local Development)
 
@@ -134,7 +132,7 @@ AI_RESPONSE_LANGUAGE=ja  # Japanese output
 8. Concise - Ultra-brief
 9. Chinese - 中文示例
 
-📖 **Full Guide**: See [PROMPT_GUIDE.md](PROMPT_GUIDE.md) for customization and multi-language details.
+📖 **Full Guide**: See `config.examples.yaml` for customization and multi-language details.
 
 ### 5. Run Locally
 
@@ -289,8 +287,6 @@ The system automatically adds: "IMPORTANT: Please respond entirely in Chinese (�
 The project includes a GitHub Actions workflow that runs daily at midnight UTC (00:00).
 
 > **Important**: GitHub Actions uses **Repository Secrets** for configuration (NOT environment variables). All settings must be added as secrets.
->
-> 📖 **Detailed Setup Guide**: See [GITHUB_SETUP.md](GITHUB_SETUP.md) for step-by-step instructions with screenshots and troubleshooting.
 
 ### Step 1: Add GitHub Repository Secrets
 
@@ -386,19 +382,13 @@ ai-news-bot/
 │       ├── __init__.py
 │       ├── email_notifier.py        # Email notification
 │       └── webhook_notifier.py      # Webhook notification
-├── docs/
-│   └── CONFIGURATION_GUIDE.md       # Detailed configuration guide
 ├── main.py                          # Main application entry point
 ├── config.yaml                      # Active configuration file
-├── config.examples.yaml             # 9 pre-built prompt templates ⭐
 ├── requirements.txt                 # Python dependencies
 ├── .env.example                     # Example environment variables
-├── GITHUB_SETUP.md                  # GitHub Actions setup guide
-├── CONFIGURATION_CHECKLIST.md       # Setup checklist
-├── test_setup.py                    # Configuration verification script
-├── example_usage.py                 # Usage examples
 ├── .gitignore
-└── README.md
+├── README.md
+└── README.zh.md                     # Chinese documentation
 ```
 
 ## Usage Examples
@@ -443,12 +433,7 @@ The bot generates **email-optimized content** that looks stunning across all ema
 - Comfortable reading experience on any device
 
 **Preview your emails:**
-```bash
-python test_email_format.py
-open email_preview.html
-```
-
-📖 **Detailed Guide**: See [EMAIL_FORMAT_GUIDE.md](EMAIL_FORMAT_GUIDE.md) for customization options and troubleshooting.
+Run the bot locally and check the generated HTML email content.
 
 ## Email Setup Guide with Resend.com
 

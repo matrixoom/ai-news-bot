@@ -12,6 +12,23 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 
+# Supported language codes and their display names
+LANGUAGE_NAMES = {
+    "zh": "Chinese (中文)",
+    "es": "Spanish (Español)",
+    "fr": "French (Français)",
+    "ja": "Japanese (日本語)",
+    "de": "German (Deutsch)",
+    "ko": "Korean (한국어)",
+    "pt": "Portuguese (Português)",
+    "ru": "Russian (Русский)",
+    "ar": "Arabic (العربية)",
+    "hi": "Hindi (हिन्दी)",
+    "it": "Italian (Italiano)",
+    "nl": "Dutch (Nederlands)",
+}
+
+
 class Config:
     """Application configuration manager"""
 
