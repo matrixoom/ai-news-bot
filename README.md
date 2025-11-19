@@ -4,10 +4,14 @@ An automated system that generates and distributes daily AI news digests using A
 
 ## Features
 
-- **AI-Powered News Generation**: Uses Anthropic's Claude Sonnet 4.5 (latest model, released Sept 2025) to generate comprehensive AI news digests
+- **Multi-Provider LLM Support**: Choose between Claude (Anthropic) or DeepSeek for news generation
+- **Real-Time News Fetching**: Fetches actual news from RSS feeds for accurate, up-to-date content
+- **AI-Powered News Generation**: Uses Claude Sonnet 4.5 or DeepSeek to generate comprehensive AI news digests
+- **Web Search Integration**: Optional DuckDuckGo web search for additional news sources
 - **Beautiful Email Formatting**: Automatically converts AI content to stunning HTML emails - no markdown, just clean professional design
 - **Customizable Prompts**: 9 pre-built templates (comprehensive, research, business, technical, etc.) or create your own
 - **Multilingual Support**: Generate news in 13+ languages including English, Chinese, Spanish, French, Japanese, and more
+- **Chinese News Sources**: Built-in support for Chinese AI news sources (36Kr, JiQiZhiXin, etc.)
 - **Multiple Notification Channels**: Supports email (via Resend.com) and webhook notifications
 - **Flexible Configuration**: Easy-to-customize topics and notification settings via YAML config
 - **Automated Scheduling**: GitHub Actions workflow for daily automated execution
@@ -54,8 +58,12 @@ cp .env.example .env
 Edit `.env` with your actual values:
 
 ```env
-# Required: Anthropic API Key
-ANTHROPIC_API_KEY=your_api_key_here
+# LLM Provider Configuration
+LLM_PROVIDER=claude  # Options: 'claude' or 'deepseek'
+
+# API Keys (provide the one you're using)
+ANTHROPIC_API_KEY=your_api_key_here      # For Claude
+DEEPSEEK_API_KEY=your_deepseek_api_key   # For DeepSeek
 
 # Optional: Email Configuration with Resend.com
 RESEND_API_KEY=re_your_api_key_here
@@ -69,7 +77,10 @@ WEBHOOK_URL=https://your-webhook-url.com/endpoint
 NOTIFICATION_METHODS=email,webhook
 
 # Language Settings (optional, defaults to 'en')
-AI_RESPONSE_LANGUAGE=en
+AI_RESPONSE_LANGUAGE=zh
+
+# Web Search (optional, defaults to false)
+ENABLE_WEB_SEARCH=false
 ```
 
 > **Note**: The `.env` file is only for **local development**. For GitHub Actions automation, you'll configure these as **GitHub Secrets** (see [GitHub Actions Setup](#github-actions-setup) below).
@@ -142,9 +153,12 @@ The bot requires the following configuration. How you set them depends on your d
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | ✅ Required | Your Anthropic API key |
+| `LLM_PROVIDER` | Optional | LLM provider to use: `claude` or `deepseek` (default: `claude`) |
+| `ANTHROPIC_API_KEY` | If using Claude | Your Anthropic API key |
+| `DEEPSEEK_API_KEY` | If using DeepSeek | Your DeepSeek API key |
 | `NOTIFICATION_METHODS` | ✅ Required | Comma-separated list: `email`, `webhook`, or `email,webhook` |
 | `AI_RESPONSE_LANGUAGE` | Optional | Language code for AI responses (default: `en`). Supports: `zh`, `es`, `fr`, `ja`, `de`, `ko`, `pt`, `ru`, `ar`, `hi`, `it`, `nl` |
+| `ENABLE_WEB_SEARCH` | Optional | Enable web search for news (default: `false`) |
 | `RESEND_API_KEY` | If using email | Your Resend.com API key |
 | `EMAIL_FROM` | If using email | Sender email address (must be verified in Resend) |
 | `EMAIL_TO` | If using email | Recipient email address |
@@ -154,10 +168,18 @@ The bot requires the following configuration. How you set them depends on your d
 
 The `config.yaml` file allows you to customize the news digest behavior:
 
+**LLM Configuration**:
+- **Provider**: Choose between `claude` or `deepseek`
+- **Model**: Optionally specify a specific model version
+
 **News Configuration**:
+- **use_real_sources**: Enable fetching news from RSS feeds (recommended, default: true)
+- **enable_web_search**: Enable DuckDuckGo web search (default: false)
+- **include_chinese_sources**: Include Chinese news sources (default: true)
+- **max_items_per_source**: Maximum news items per source (default: 10)
 - **Topics**: Focus areas for news selection (optional, guides the AI)
-- **Prompt Template**: The instruction template for Claude API
-  - Default: Comprehensive 10-item digest (5 international + 5 domestic)
+- **Prompt Template**: The instruction template for the LLM
+  - Default: Comprehensive 15-20 item digest with category headers
   - Fully customizable with your own prompts
   - See `config.examples.yaml` for 9 pre-built templates
 
@@ -165,9 +187,19 @@ The `config.yaml` file allows you to customize the news digest behavior:
 
 **Example Structure**:
 ```yaml
+llm:
+  provider: claude  # or 'deepseek'
+  # model: claude-sonnet-4-5-20250929  # optional
+
 news:
+  use_real_sources: true
+  enable_web_search: false
+  include_chinese_sources: true
+  max_items_per_source: 10
+
   topics:
-    - "Technical breakthroughs"
+    - "Large Language Models (LLM)"
+    - "AI Agents and Autonomous Systems"
     - "Product launches"
 
   prompt_template: |
@@ -179,37 +211,46 @@ logging:
   format: "%(asctime)s - %(levelname)s - %(message)s"
 ```
 
-### AI Model Configuration
+### LLM Provider Configuration
 
-The bot uses **Claude Sonnet 4.5** (`claude-sonnet-4-5-20250929`) by default - Anthropic's latest and most capable model for general use.
+The bot supports multiple LLM providers. Configure in `config.yaml` or via environment variables:
 
-**To use a different model**, modify `src/news_generator.py:39`:
-
-```python
-# Available models (as of October 2025):
-model: str = "claude-sonnet-4-5-20250929"  # Latest Sonnet (default) - Best for most tasks
-# model: str = "claude-haiku-4-5-20251001"  # Latest Haiku - Fastest, most cost-effective
-# model: str = "claude-opus-4-1-20250805"   # Latest Opus - Most powerful (higher cost)
-
-# Or use aliases (automatically use latest version):
-# model: str = "claude-sonnet-4-5"  # Alias for latest Sonnet
-# model: str = "claude-haiku-4-5"   # Alias for latest Haiku
-# model: str = "claude-opus-4-1"    # Alias for latest Opus
+#### Claude (Anthropic) - Default
+```yaml
+llm:
+  provider: claude
+  model: claude-sonnet-4-5-20250929  # optional, uses default if not set
 ```
 
-**Pricing (per million tokens):**
+**Available Claude Models:**
+- `claude-sonnet-4-5-20250929` - Latest Sonnet (default) - Best for most tasks
+- `claude-3-5-sonnet-20241022` - Previous Sonnet version
+
+**Claude Pricing (per million tokens):**
 - Claude Sonnet 4.5: $3 input / $15 output
-- Claude Haiku 4.5: $1 input / $5 output
-- Claude Opus 4.1: Higher cost, maximum capability
 
-Or pass the model parameter when calling:
-```python
-news_gen.generate_news_digest(
-    topics=topics,
-    prompt_template=template,
-    model="claude-sonnet-4-5-20250929"
-)
+#### DeepSeek - Cost-Effective Alternative
+```yaml
+llm:
+  provider: deepseek
+  model: deepseek-chat  # optional, uses default if not set
 ```
+
+**Available DeepSeek Models:**
+- `deepseek-chat` - General chat model (default)
+- `deepseek-reasoner` - Enhanced reasoning model
+
+**DeepSeek Pricing:**
+- Much lower cost than Claude
+- Better Chinese language support
+- Good quality for news summarization
+
+#### Choosing a Provider
+
+| Provider | Pros | Cons | Best For |
+|----------|------|------|----------|
+| **Claude** | Excellent quality, reliable | Higher cost | Production, high-quality output |
+| **DeepSeek** | Low cost, good Chinese | Slightly lower quality | Budget-conscious, Chinese content |
 
 ### Language Configuration
 
@@ -265,7 +306,9 @@ Add the following secrets one by one:
 
 | Secret Name | Example Value | Description |
 |-------------|---------------|-------------|
-| `ANTHROPIC_API_KEY` | `sk-ant-api03-xxx...` | Your Anthropic API key |
+| `LLM_PROVIDER` | `claude` or `deepseek` | LLM provider to use (default: `claude`) |
+| `ANTHROPIC_API_KEY` | `sk-ant-api03-xxx...` | Your Anthropic API key (if using Claude) |
+| `DEEPSEEK_API_KEY` | `sk-xxx...` | Your DeepSeek API key (if using DeepSeek) |
 | `NOTIFICATION_METHODS` | `email,webhook` | Notification channels (comma-separated) |
 
 #### 📧 Email Secrets (if using email notifications)
@@ -287,6 +330,7 @@ Add the following secrets one by one:
 | Secret Name | Example Value | Description |
 |-------------|---------------|-------------|
 | `AI_RESPONSE_LANGUAGE` | `zh` or `es` or `ja` | Language code (defaults to `en` if not set) |
+| `ENABLE_WEB_SEARCH` | `true` or `false` | Enable web search for news (defaults to `false`) |
 
 ### Step 2: Enable GitHub Actions
 
@@ -330,7 +374,14 @@ ai-news-bot/
 │   ├── __init__.py
 │   ├── config.py                    # Configuration management
 │   ├── logger.py                    # Logging utilities
-│   ├── news_generator.py            # Anthropic API integration
+│   ├── news_generator.py            # News generation orchestration
+│   ├── news_fetcher.py              # RSS feed news fetching
+│   ├── web_search.py                # DuckDuckGo web search integration
+│   ├── llm_providers/
+│   │   ├── __init__.py
+│   │   ├── base_provider.py         # Base LLM provider interface
+│   │   ├── claude_provider.py       # Anthropic Claude provider
+│   │   └── deepseek_provider.py     # DeepSeek provider
 │   └── notifiers/
 │       ├── __init__.py
 │       ├── email_notifier.py        # Email notification
@@ -513,4 +564,6 @@ For issues and feature requests, please use the GitHub issue tracker.
 
 ## Credits
 
-Powered by [Anthropic Claude](https://www.anthropic.com)
+Powered by:
+- [Anthropic Claude](https://www.anthropic.com)
+- [DeepSeek](https://www.deepseek.com)
