@@ -8,6 +8,7 @@
 [![GitHub Forks](https://img.shields.io/github/forks/giftedunicorn/ai-news-bot?style=flat-square&logo=github&color=blue)](https://github.com/giftedunicorn/ai-news-bot/network/members)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
+[![Discord](https://img.shields.io/badge/Discord-Join_Community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/AtfQPh8T2T)
 [![Email](https://img.shields.io/badge/Email-Notification-00D4AA?style=flat-square)](https://resend.com/)
 [![Webhook](https://img.shields.io/badge/Webhook-Support-00D4AA?style=flat-square)](#)
 [![Slack](https://img.shields.io/badge/Slack-Integration-00D4AA?style=flat-square)](https://slack.com/)
@@ -713,7 +714,8 @@ MIT License - See LICENSE file for details
 
 ## Support
 
-For issues and feature requests, please use the GitHub issue tracker.
+- **Discord Community**: Join our [Discord server](https://discord.gg/AtfQPh8T2T) for discussions, support, and updates
+- **GitHub Issues**: For bug reports and feature requests, use the [GitHub issue tracker](https://github.com/giftedunicorn/ai-news-bot/issues)
 
 ## Credits
 
