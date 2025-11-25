@@ -8,6 +8,7 @@
 [![GitHub Forks](https://img.shields.io/github/forks/giftedunicorn/ai-news-bot?style=flat-square&logo=github&color=blue)](https://github.com/giftedunicorn/ai-news-bot/network/members)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
+[![Discord](https://img.shields.io/badge/Discord-加入社区-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/AtfQPh8T2T)
 [![邮件](https://img.shields.io/badge/邮件-通知-00D4AA?style=flat-square)](https://resend.com/)
 [![Webhook](https://img.shields.io/badge/Webhook-支持-00D4AA?style=flat-square)](#)
 [![Slack](https://img.shields.io/badge/Slack-集成-00D4AA?style=flat-square)](https://slack.com/)
@@ -576,7 +577,8 @@ MIT 许可证 - 详见 LICENSE 文件
 
 ## 支持
 
-如有问题和功能请求，请使用 GitHub issue 跟踪器。
+- **Discord 社区**：加入我们的 [Discord 服务器](https://discord.gg/AtfQPh8T2T) 进行讨论、获取支持和了解更新
+- **GitHub Issues**：报告 bug 和功能请求，请使用 [GitHub issue 跟踪器](https://github.com/giftedunicorn/ai-news-bot/issues)
 
 ## 致谢
 
