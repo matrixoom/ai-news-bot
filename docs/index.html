@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI News Bot - Automated daily AI news digests powered by Claude and DeepSeek">
+    <title>AI News Bot - Automated AI News Digests</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header {
+            padding: 60px 0 40px;
+            text-align: center;
+            color: white;
+        }
+
+        header h1 {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        header p {
+            font-size: 1.4rem;
+            opacity: 0.95;
+            margin-bottom: 30px;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 15px 35px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-primary {
+            background: white;
+            color: #667eea;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-secondary:hover {
+            background: white;
+            color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        main {
+            background: white;
+            border-radius: 20px 20px 0 0;
+            margin-top: 40px;
+            padding: 60px 0;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 60px 0;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 12px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .feature-card p {
+            color: #666;
+            line-height: 1.7;
+        }
+
+        .section {
+            margin: 80px 0;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 50px;
+            color: #333;
+        }
+
+        .providers {
+            display: flex;
+            justify-content: center;
+            gap: 50px;
+            flex-wrap: wrap;
+            margin: 40px 0;
+        }
+
+        .provider-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            min-width: 250px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .provider-card h3 {
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+        }
+
+        .provider-card p {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .languages {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin: 40px 0;
+        }
+
+        .language-tag {
+            background: #e9ecef;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: 600;
+            color: #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .language-tag:hover {
+            background: #667eea;
+            color: white;
+            transform: scale(1.05);
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 25px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 30px 0;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin: 60px 0;
+            text-align: center;
+        }
+
+        .stat-item {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #667eea;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            color: #666;
+            margin-top: 10px;
+        }
+
+        footer {
+            background: #2d2d2d;
+            color: white;
+            padding: 40px 0;
+            text-align: center;
+        }
+
+        footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2.5rem;
+            }
+
+            header p {
+                font-size: 1.1rem;
+            }
+
+            .features {
+                grid-template-columns: 1fr;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+
+        .highlight {
+            background: linear-gradient(120deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>AI News Bot</h1>
+            <p>Automated daily AI news digests powered by Claude & DeepSeek</p>
+            <div class="cta-buttons">
+                <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">Get Started</a>
+                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" class="btn btn-secondary">Documentation</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <section class="section">
+                <h2 class="section-title">Why <span class="highlight">AI News Bot</span>?</h2>
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-number">13+</span>
+                        <span class="stat-label">Languages Supported</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">2</span>
+                        <span class="stat-label">LLM Providers</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">100%</span>
+                        <span class="stat-label">Automated</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Key Features</h2>
+                <div class="features">
+                    <div class="feature-card">
+                        <div class="feature-icon">🤖</div>
+                        <h3>Multi-LLM Support</h3>
+                        <p>Choose between Claude (Anthropic) or DeepSeek for news generation. Switch providers easily based on your needs and budget.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📰</div>
+                        <h3>Real-Time News</h3>
+                        <p>Fetches actual news from RSS feeds including TechCrunch, Hacker News, MIT Tech Review, and Chinese sources like 36Kr.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">✨</div>
+                        <h3>Beautiful Emails</h3>
+                        <p>Automatically converts AI content to stunning HTML emails. Works perfectly in Gmail, Outlook, Apple Mail, and mobile apps.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🌍</div>
+                        <h3>Multilingual</h3>
+                        <p>Generate news in 13+ languages including English, Chinese, Spanish, French, Japanese, German, and more.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚙️</div>
+                        <h3>Highly Customizable</h3>
+                        <p>9 pre-built prompt templates or create your own. Customize topics, sources, and notification channels.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🚀</div>
+                        <h3>GitHub Actions</h3>
+                        <p>Automated daily execution with GitHub Actions. Set it up once and receive news every day automatically.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Supported LLM Providers</h2>
+                <div class="providers">
+                    <div class="provider-card">
+                        <h3>Claude (Anthropic)</h3>
+                        <p>Excellent quality and reliability</p>
+                        <p style="margin-top: 10px; font-size: 0.9rem;">Claude Sonnet 4.5</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>DeepSeek</h3>
+                        <p>Cost-effective with great Chinese support</p>
+                        <p style="margin-top: 10px; font-size: 0.9rem;">DeepSeek Chat & Reasoner</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Supported Languages</h2>
+                <div class="languages">
+                    <span class="language-tag">English</span>
+                    <span class="language-tag">中文</span>
+                    <span class="language-tag">Español</span>
+                    <span class="language-tag">Français</span>
+                    <span class="language-tag">日本語</span>
+                    <span class="language-tag">Deutsch</span>
+                    <span class="language-tag">한국어</span>
+                    <span class="language-tag">Português</span>
+                    <span class="language-tag">Русский</span>
+                    <span class="language-tag">العربية</span>
+                    <span class="language-tag">हिन्दी</span>
+                    <span class="language-tag">Italiano</span>
+                    <span class="language-tag">Nederlands</span>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Quick Start</h2>
+                <div class="code-block">
+# Clone the repository
+git clone https://github.com/giftedunicorn/ai-news-bot.git
+cd ai-news-bot
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# Run locally
+python main.py
+                </div>
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="https://github.com/giftedunicorn/ai-news-bot#quick-start-local-development" class="btn btn-primary">View Full Setup Guide</a>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Notification Channels</h2>
+                <div class="features">
+                    <div class="feature-card">
+                        <div class="feature-icon">📧</div>
+                        <h3>Email via Resend</h3>
+                        <p>Beautiful HTML emails delivered reliably through Resend.com. Simple API, no SMTP configuration needed.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🔗</div>
+                        <h3>Webhook Integration</h3>
+                        <p>Send news to Slack, Discord, Microsoft Teams, or any custom webhook endpoint. JSON payload format.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" style="text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 60px; border-radius: 20px; color: white;">
+                <h2 style="font-size: 2.5rem; margin-bottom: 20px;">Ready to Get Started?</h2>
+                <p style="font-size: 1.2rem; margin-bottom: 30px; opacity: 0.95;">Set up your automated AI news digest in minutes</p>
+                <div class="cta-buttons">
+                    <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">View on GitHub</a>
+                    <a href="https://github.com/giftedunicorn/ai-news-bot#readme" class="btn btn-secondary">Read Docs</a>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 AI News Bot. Open Source under MIT License.</p>
+            <p style="margin-top: 15px;">
+                Powered by
+                <a href="https://www.anthropic.com" target="_blank">Anthropic Claude</a> &
+                <a href="https://www.deepseek.com" target="_blank">DeepSeek</a>
+            </p>
+            <p style="margin-top: 15px;">
+                <a href="https://github.com/giftedunicorn/ai-news-bot" target="_blank">GitHub</a> |
+                <a href="https://github.com/giftedunicorn/ai-news-bot/issues" target="_blank">Issues</a> |
+                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" target="_blank">Documentation</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+
+        // Add animation on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.feature-card, .provider-card').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(el);
+        });
+    </script>
+</body>
+</html>
