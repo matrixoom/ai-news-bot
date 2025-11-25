@@ -1,0 +1,223 @@
+"""
+Discord notification module
+"""
+import os
+import requests
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+from ..logger import setup_logger
+
+
+logger = setup_logger(__name__)
+
+
+class DiscordNotifier:
+    """Send Discord notifications with AI news digest using Webhooks"""
+
+    def __init__(
+        self,
+        webhook_url: Optional[str] = None,
+        username: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+        timeout: int = 30
+    ):
+        """
+        Initialize DiscordNotifier.
+
+        Args:
+            webhook_url: Discord Webhook URL
+            username: Optional bot username override
+            avatar_url: Optional bot avatar URL
+            timeout: Request timeout in seconds
+        """
+        self.webhook_url = webhook_url or os.getenv("DISCORD_WEBHOOK_URL")
+        self.username = username or os.getenv("DISCORD_USERNAME", "AI News Bot")
+        self.avatar_url = avatar_url or os.getenv("DISCORD_AVATAR_URL")
+        self.timeout = timeout
+
+        if not self.webhook_url:
+            logger.warning("Discord webhook URL not configured")
+        else:
+            logger.info(f"DiscordNotifier initialized (username: {self.username})")
+
+    def send(
+        self,
+        content: str,
+        title: Optional[str] = None,
+        color: int = 0x0366d6
+    ) -> bool:
+        """
+        Send Discord notification with news digest using embeds.
+
+        Args:
+            content: News digest content
+            title: Title for the notification. If None, uses default with current date
+            color: Embed color (integer representation of hex color)
+
+        Returns:
+            True if message sent successfully, False otherwise
+        """
+        if not self.webhook_url:
+            logger.error("Discord webhook URL is not configured. Skipping Discord send.")
+            return False
+
+        try:
+            # Create default title if not provided
+            if title is None:
+                today = datetime.now().strftime("%Y-%m-%d")
+                title = f"AI News Digest - {today}"
+
+            # Split content into embeds (Discord has limits)
+            embeds = self._create_embeds(title, content, color)
+
+            # Send message(s)
+            success = True
+            for idx, embed_batch in enumerate(self._batch_embeds(embeds)):
+                if not self._send_message(embed_batch):
+                    success = False
+                    logger.error(f"Failed to send embed batch {idx + 1}")
+                    break
+
+            if success:
+                logger.info("Discord message sent successfully")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Unexpected error sending Discord message: {str(e)}", exc_info=True)
+            return False
+
+    def _send_message(self, embeds: List[Dict[str, Any]]) -> bool:
+        """
+        Send a Discord message with embeds.
+
+        Args:
+            embeds: List of embed objects
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            payload: Dict[str, Any] = {
+                "username": self.username,
+                "embeds": embeds
+            }
+
+            if self.avatar_url:
+                payload["avatar_url"] = self.avatar_url
+
+            logger.info(f"Sending Discord message with {len(embeds)} embed(s)")
+
+            response = requests.post(
+                self.webhook_url,
+                json=payload,
+                timeout=self.timeout,
+                headers={"Content-Type": "application/json"}
+            )
+
+            # Discord returns 204 No Content on success
+            if response.status_code in [200, 204]:
+                return True
+            else:
+                logger.error(f"Discord API returned status {response.status_code}: {response.text}")
+                return False
+
+        except requests.exceptions.Timeout:
+            logger.error(f"Discord request timed out after {self.timeout} seconds")
+            return False
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to send Discord message: {str(e)}", exc_info=True)
+            return False
+
+    def _create_embeds(self, title: str, content: str, color: int) -> List[Dict[str, Any]]:
+        """
+        Create Discord embeds from content.
+
+        Args:
+            title: Main title
+            content: Content to embed
+            color: Embed color
+
+        Returns:
+            List of embed objects
+        """
+        embeds = []
+
+        # Split content into sections
+        sections = self._split_content(content)
+
+        # Create main embed with title
+        main_embed: Dict[str, Any] = {
+            "title": title,
+            "description": sections[0][:4096] if sections else "",  # Discord limit
+            "color": color,
+            "timestamp": datetime.now().isoformat(),
+            "footer": {
+                "text": "AI News Bot"
+            }
+        }
+        embeds.append(main_embed)
+
+        # Create additional embeds for remaining sections
+        for section in sections[1:]:
+            if section.strip():
+                embed: Dict[str, Any] = {
+                    "description": section[:4096],  # Discord limit
+                    "color": color
+                }
+                embeds.append(embed)
+
+        return embeds
+
+    def _split_content(self, content: str, max_length: int = 4096) -> List[str]:
+        """
+        Split content into chunks that fit Discord's embed description limit.
+
+        Args:
+            content: Full content
+            max_length: Maximum length per section
+
+        Returns:
+            List of content sections
+        """
+        if len(content) <= max_length:
+            return [content]
+
+        sections = []
+        current_section = []
+        current_length = 0
+
+        for line in content.split('\n'):
+            line_length = len(line) + 1  # +1 for newline
+
+            if current_length + line_length > max_length:
+                # Save current section and start new one
+                if current_section:
+                    sections.append('\n'.join(current_section))
+                current_section = [line]
+                current_length = line_length
+            else:
+                current_section.append(line)
+                current_length += line_length
+
+        # Add remaining section
+        if current_section:
+            sections.append('\n'.join(current_section))
+
+        return sections
+
+    def _batch_embeds(self, embeds: List[Dict[str, Any]], batch_size: int = 10) -> List[List[Dict[str, Any]]]:
+        """
+        Batch embeds to respect Discord's limit of 10 embeds per message.
+
+        Args:
+            embeds: List of all embeds
+            batch_size: Maximum embeds per batch (Discord limit is 10)
+
+        Returns:
+            List of embed batches
+        """
+        batches = []
+        for i in range(0, len(embeds), batch_size):
+            batches.append(embeds[i:i + batch_size])
+        return batches

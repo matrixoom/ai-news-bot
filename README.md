@@ -12,7 +12,7 @@ An automated system that generates and distributes daily AI news digests using A
 - **Customizable Prompts**: 9 pre-built templates (comprehensive, research, business, technical, etc.) or create your own
 - **Multilingual Support**: Generate news in 13+ languages including English, Chinese, Spanish, French, Japanese, and more
 - **Chinese News Sources**: Built-in support for Chinese AI news sources (36Kr, JiQiZhiXin, etc.)
-- **Multiple Notification Channels**: Supports email (via Resend.com) and webhook notifications
+- **Multiple Notification Channels**: Supports email (via Resend.com), webhook, Slack, Telegram, and Discord notifications
 - **Flexible Configuration**: Easy-to-customize topics and notification settings via YAML config
 - **Automated Scheduling**: GitHub Actions workflow for daily automated execution
 - **Robust Error Handling**: Comprehensive logging and retry logic
@@ -72,6 +72,7 @@ EMAIL_TO=recipient@example.com
 WEBHOOK_URL=https://your-webhook-url.com/endpoint
 
 # Notification Methods (comma-separated)
+# Available: email, webhook, slack, telegram, discord
 NOTIFICATION_METHODS=email,webhook
 
 # Language Settings (optional, defaults to 'en')
@@ -154,13 +155,21 @@ The bot requires the following configuration. How you set them depends on your d
 | `LLM_PROVIDER` | Optional | LLM provider to use: `claude` or `deepseek` (default: `claude`) |
 | `ANTHROPIC_API_KEY` | If using Claude | Your Anthropic API key |
 | `DEEPSEEK_API_KEY` | If using DeepSeek | Your DeepSeek API key |
-| `NOTIFICATION_METHODS` | ✅ Required | Comma-separated list: `email`, `webhook`, or `email,webhook` |
+| `NOTIFICATION_METHODS` | ✅ Required | Comma-separated list: `email`, `webhook`, `slack`, `telegram`, `discord`, or any combination (e.g., `email,slack,telegram`) |
 | `AI_RESPONSE_LANGUAGE` | Optional | Language code for AI responses (default: `en`). Supports: `zh`, `es`, `fr`, `ja`, `de`, `ko`, `pt`, `ru`, `ar`, `hi`, `it`, `nl` |
 | `ENABLE_WEB_SEARCH` | Optional | Enable web search for news (default: `false`) |
 | `RESEND_API_KEY` | If using email | Your Resend.com API key |
 | `EMAIL_FROM` | If using email | Sender email address (must be verified in Resend) |
 | `EMAIL_TO` | If using email | Recipient email address |
 | `WEBHOOK_URL` | If using webhook | Webhook endpoint URL |
+| `SLACK_WEBHOOK_URL` | If using Slack | Slack Incoming Webhook URL |
+| `SLACK_CHANNEL` | Optional | Override default Slack channel (e.g., `#general`) |
+| `SLACK_USERNAME` | Optional | Override bot username for Slack (default: `AI News Bot`) |
+| `TELEGRAM_BOT_TOKEN` | If using Telegram | Telegram Bot API token from @BotFather |
+| `TELEGRAM_CHAT_ID` | If using Telegram | Telegram chat ID (user, group, or channel ID) |
+| `DISCORD_WEBHOOK_URL` | If using Discord | Discord Webhook URL |
+| `DISCORD_USERNAME` | Optional | Override bot username for Discord (default: `AI News Bot`) |
+| `DISCORD_AVATAR_URL` | Optional | Custom avatar URL for Discord bot |
 
 ### Configuration File (config.yaml)
 
@@ -305,7 +314,7 @@ Add the following secrets one by one:
 | `LLM_PROVIDER` | `claude` or `deepseek` | LLM provider to use (default: `claude`) |
 | `ANTHROPIC_API_KEY` | `sk-ant-api03-xxx...` | Your Anthropic API key (if using Claude) |
 | `DEEPSEEK_API_KEY` | `sk-xxx...` | Your DeepSeek API key (if using DeepSeek) |
-| `NOTIFICATION_METHODS` | `email,webhook` | Notification channels (comma-separated) |
+| `NOTIFICATION_METHODS` | `email,slack,telegram` | Notification channels (comma-separated) |
 
 #### 📧 Email Secrets (if using email notifications)
 
@@ -319,7 +328,30 @@ Add the following secrets one by one:
 
 | Secret Name | Example Value | Description |
 |-------------|---------------|-------------|
-| `WEBHOOK_URL` | `https://hooks.slack.com/...` | Your webhook endpoint URL |
+| `WEBHOOK_URL` | `https://example.com/webhook` | Your webhook endpoint URL |
+
+#### 💬 Slack Secrets (if using Slack notifications)
+
+| Secret Name | Example Value | Description |
+|-------------|---------------|-------------|
+| `SLACK_WEBHOOK_URL` | `https://hooks.slack.com/services/...` | Slack Incoming Webhook URL |
+| `SLACK_CHANNEL` | `#ai-news` | (Optional) Override default channel |
+| `SLACK_USERNAME` | `AI News Bot` | (Optional) Override bot username |
+
+#### 📱 Telegram Secrets (if using Telegram notifications)
+
+| Secret Name | Example Value | Description |
+|-------------|---------------|-------------|
+| `TELEGRAM_BOT_TOKEN` | `123456:ABC-DEF...` | Telegram Bot API token from @BotFather |
+| `TELEGRAM_CHAT_ID` | `123456789` | Chat ID (use @userinfobot to get your ID) |
+
+#### 🎮 Discord Secrets (if using Discord notifications)
+
+| Secret Name | Example Value | Description |
+|-------------|---------------|-------------|
+| `DISCORD_WEBHOOK_URL` | `https://discord.com/api/webhooks/...` | Discord Webhook URL |
+| `DISCORD_USERNAME` | `AI News Bot` | (Optional) Override bot username |
+| `DISCORD_AVATAR_URL` | `https://example.com/avatar.png` | (Optional) Custom avatar URL |
 
 #### 🌍 Optional Secrets
 
@@ -399,16 +431,32 @@ ai-news-bot/
 NOTIFICATION_METHODS=email
 ```
 
-### Webhook Only
+### Slack Only
 
 ```env
-NOTIFICATION_METHODS=webhook
+NOTIFICATION_METHODS=slack
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 ```
 
-### Both Email and Webhook
+### Telegram Only
 
 ```env
-NOTIFICATION_METHODS=email,webhook
+NOTIFICATION_METHODS=telegram
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
+```
+
+### Discord Only
+
+```env
+NOTIFICATION_METHODS=discord
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR/WEBHOOK/URL
+```
+
+### Multiple Channels
+
+```env
+NOTIFICATION_METHODS=email,slack,telegram,discord
 ```
 
 ## Email Format
@@ -466,7 +514,9 @@ Run the bot locally and check the generated HTML email content.
 - **Modern**: Built for developers with excellent documentation
 - **Analytics**: Track email delivery and engagement
 
-## Webhook Integration
+## Notification Channels Setup
+
+### Webhook Integration
 
 The webhook sends a JSON payload:
 
@@ -480,10 +530,97 @@ The webhook sends a JSON payload:
 ```
 
 Compatible with:
-- Slack (use Incoming Webhooks)
-- Discord (use Webhook URLs)
 - Microsoft Teams
 - Custom webhook endpoints
+- Any service that accepts JSON webhooks
+
+### Slack Setup
+
+1. **Create a Slack App**
+   - Go to [https://api.slack.com/apps](https://api.slack.com/apps)
+   - Click "Create New App" → "From scratch"
+   - Name your app (e.g., "AI News Bot") and select your workspace
+
+2. **Enable Incoming Webhooks**
+   - In your app settings, go to "Incoming Webhooks"
+   - Toggle "Activate Incoming Webhooks" to On
+   - Click "Add New Webhook to Workspace"
+   - Select the channel where you want to receive news
+   - Copy the webhook URL
+
+3. **Configure in .env**
+   ```env
+   NOTIFICATION_METHODS=slack
+   SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   SLACK_CHANNEL=#ai-news  # Optional: override default channel
+   ```
+
+**Features:**
+- Rich message formatting with blocks
+- Color-coded attachments
+- Mobile-friendly notifications
+- Channel and username customization
+
+### Telegram Setup
+
+1. **Create a Telegram Bot**
+   - Open Telegram and search for [@BotFather](https://t.me/botfather)
+   - Send `/newbot` command
+   - Follow the prompts to name your bot
+   - Copy the API token provided
+
+2. **Get Your Chat ID**
+   - Start a chat with your new bot
+   - Send any message to the bot
+   - Search for [@userinfobot](https://t.me/userinfobot) and send it any message
+   - It will reply with your user ID (this is your chat_id)
+   - Alternatively, for groups: add your bot to a group and use [@getidsbot](https://t.me/getidsbot)
+
+3. **Configure in .env**
+   ```env
+   NOTIFICATION_METHODS=telegram
+   TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   TELEGRAM_CHAT_ID=123456789
+   ```
+
+**Features:**
+- HTML and Markdown formatting support
+- Automatic message splitting for long content
+- Works with users, groups, and channels
+- Mobile and desktop notifications
+
+**For Channel/Group:**
+- Add your bot to the channel/group as an administrator
+- Use the channel/group ID as TELEGRAM_CHAT_ID
+- Channel IDs start with `-100` (e.g., `-1001234567890`)
+
+### Discord Setup
+
+1. **Create a Webhook**
+   - Open your Discord server
+   - Go to Server Settings → Integrations → Webhooks
+   - Click "New Webhook"
+   - Name it (e.g., "AI News Bot")
+   - Select the channel for news
+   - Copy the webhook URL
+
+2. **Configure in .env**
+   ```env
+   NOTIFICATION_METHODS=discord
+   DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR/WEBHOOK/URL
+   DISCORD_USERNAME=AI News Bot  # Optional
+   ```
+
+**Features:**
+- Rich embed formatting with colors
+- Automatic content splitting for long messages
+- Custom bot name and avatar
+- Works on desktop and mobile
+
+**Advanced Options:**
+- Set custom avatar: `DISCORD_AVATAR_URL=https://example.com/avatar.png`
+- Multiple embeds for better organization
+- Color-coded sections (default: blue #0366d6)
 
 ## Error Handling
 

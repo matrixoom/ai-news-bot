@@ -1,0 +1,183 @@
+"""
+Slack notification module
+"""
+import os
+import requests
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+from ..logger import setup_logger
+
+
+logger = setup_logger(__name__)
+
+
+class SlackNotifier:
+    """Send Slack notifications with AI news digest"""
+
+    def __init__(
+        self,
+        webhook_url: Optional[str] = None,
+        channel: Optional[str] = None,
+        username: Optional[str] = None,
+        timeout: int = 30
+    ):
+        """
+        Initialize SlackNotifier.
+
+        Args:
+            webhook_url: Slack Webhook URL
+            channel: Optional channel override (e.g., '#general' or '@username')
+            username: Optional bot username override
+            timeout: Request timeout in seconds
+        """
+        self.webhook_url = webhook_url or os.getenv("SLACK_WEBHOOK_URL")
+        self.channel = channel or os.getenv("SLACK_CHANNEL")
+        self.username = username or os.getenv("SLACK_USERNAME", "AI News Bot")
+        self.timeout = timeout
+
+        if not self.webhook_url:
+            logger.warning("Slack webhook URL not configured")
+        else:
+            logger.info(f"SlackNotifier initialized (username: {self.username})")
+
+    def send(
+        self,
+        content: str,
+        title: Optional[str] = None,
+        color: str = "#0366d6"
+    ) -> bool:
+        """
+        Send Slack notification with news digest.
+
+        Args:
+            content: News digest content
+            title: Title for the notification. If None, uses default with current date
+            color: Attachment color (hex color code)
+
+        Returns:
+            True if message sent successfully, False otherwise
+        """
+        if not self.webhook_url:
+            logger.error("Slack webhook URL is not configured. Skipping Slack send.")
+            return False
+
+        try:
+            # Create default title if not provided
+            if title is None:
+                today = datetime.now().strftime("%Y-%m-%d")
+                title = f"AI News Digest - {today}"
+
+            # Split content into sections for better formatting
+            sections = self._format_content(content)
+
+            # Prepare Slack message with blocks
+            payload: Dict[str, Any] = {
+                "username": self.username,
+                "blocks": [
+                    {
+                        "type": "header",
+                        "text": {
+                            "type": "plain_text",
+                            "text": title,
+                            "emoji": True
+                        }
+                    },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": sections[0] if sections else content[:3000]
+                        }
+                    }
+                ],
+                "attachments": [
+                    {
+                        "color": color,
+                        "text": "",
+                        "footer": "AI News Bot",
+                        "footer_icon": "https://platform.slack-edge.com/img/default_application_icon.png",
+                        "ts": int(datetime.now().timestamp())
+                    }
+                ]
+            }
+
+            # Add channel if specified
+            if self.channel:
+                payload["channel"] = self.channel
+
+            # Add additional sections if content is long
+            for section in sections[1:4]:  # Limit to first 4 sections due to Slack limits
+                payload["blocks"].append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": section[:3000]  # Slack has text length limits
+                    }
+                })
+
+            logger.info(f"Sending Slack message to {self.channel or 'default channel'}")
+
+            # Send to Slack
+            response = requests.post(
+                self.webhook_url,
+                json=payload,
+                timeout=self.timeout,
+                headers={"Content-Type": "application/json"}
+            )
+
+            # Check response
+            response.raise_for_status()
+
+            if response.text == "ok":
+                logger.info("Slack message sent successfully")
+                return True
+            else:
+                logger.error(f"Slack API returned unexpected response: {response.text}")
+                return False
+
+        except requests.exceptions.Timeout:
+            logger.error(f"Slack request timed out after {self.timeout} seconds")
+            return False
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to send Slack message: {str(e)}", exc_info=True)
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error sending Slack message: {str(e)}", exc_info=True)
+            return False
+
+    def _format_content(self, content: str) -> List[str]:
+        """
+        Format content into sections for Slack blocks.
+
+        Args:
+            content: Raw content
+
+        Returns:
+            List of formatted sections
+        """
+        # Split by double newlines to get paragraphs/sections
+        sections = []
+        current_section = []
+
+        for line in content.split('\n'):
+            # Convert markdown-style headers to Slack format
+            if line.startswith('# '):
+                if current_section:
+                    sections.append('\n'.join(current_section))
+                    current_section = []
+                current_section.append(f"*{line[2:].strip()}*")
+            elif line.startswith('## '):
+                if current_section:
+                    sections.append('\n'.join(current_section))
+                    current_section = []
+                current_section.append(f"*{line[3:].strip()}*")
+            elif line.startswith('**') and line.endswith('**'):
+                # Bold text
+                current_section.append(line)
+            else:
+                current_section.append(line)
+
+        if current_section:
+            sections.append('\n'.join(current_section))
+
+        return sections if sections else [content]

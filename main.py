@@ -9,7 +9,13 @@ from datetime import datetime
 from src.config import Config
 from src.logger import setup_logger
 from src.news_generator import NewsGenerator
-from src.notifiers import EmailNotifier, WebhookNotifier
+from src.notifiers import (
+    EmailNotifier,
+    WebhookNotifier,
+    SlackNotifier,
+    TelegramNotifier,
+    DiscordNotifier
+)
 
 
 def main():
@@ -102,6 +108,39 @@ def main():
             else:
                 results["failed"].append("webhook")
                 logger.warning("Webhook notification failed")
+
+        # Send Slack notification if enabled
+        if "slack" in notification_methods:
+            logger.info("Sending Slack notification...")
+            slack_notifier = SlackNotifier()
+            if slack_notifier.send(news_digest):
+                results["sent"].append("slack")
+                logger.info("Slack notification sent successfully")
+            else:
+                results["failed"].append("slack")
+                logger.warning("Slack notification failed")
+
+        # Send Telegram notification if enabled
+        if "telegram" in notification_methods:
+            logger.info("Sending Telegram notification...")
+            telegram_notifier = TelegramNotifier()
+            if telegram_notifier.send(news_digest):
+                results["sent"].append("telegram")
+                logger.info("Telegram notification sent successfully")
+            else:
+                results["failed"].append("telegram")
+                logger.warning("Telegram notification failed")
+
+        # Send Discord notification if enabled
+        if "discord" in notification_methods:
+            logger.info("Sending Discord notification...")
+            discord_notifier = DiscordNotifier()
+            if discord_notifier.send(news_digest):
+                results["sent"].append("discord")
+                logger.info("Discord notification sent successfully")
+            else:
+                results["failed"].append("discord")
+                logger.warning("Discord notification failed")
 
         # Summary
         logger.info("=" * 60)

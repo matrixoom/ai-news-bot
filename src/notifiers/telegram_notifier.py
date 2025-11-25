@@ -1,0 +1,239 @@
+"""
+Telegram notification module
+"""
+import os
+import requests
+from typing import Optional
+from datetime import datetime
+from ..logger import setup_logger
+
+
+logger = setup_logger(__name__)
+
+
+class TelegramNotifier:
+    """Send Telegram notifications with AI news digest"""
+
+    def __init__(
+        self,
+        bot_token: Optional[str] = None,
+        chat_id: Optional[str] = None,
+        timeout: int = 30
+    ):
+        """
+        Initialize TelegramNotifier.
+
+        Args:
+            bot_token: Telegram Bot API token
+            chat_id: Telegram chat ID (can be user ID, group ID, or channel ID)
+            timeout: Request timeout in seconds
+        """
+        self.bot_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN")
+        self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
+        self.timeout = timeout
+
+        if self.bot_token:
+            self.api_url = f"https://api.telegram.org/bot{self.bot_token}"
+        else:
+            self.api_url = None
+
+        if not self.bot_token or not self.chat_id:
+            logger.warning("Telegram bot token or chat ID not configured")
+        else:
+            logger.info(f"TelegramNotifier initialized (chat_id: {self._mask_chat_id(self.chat_id)})")
+
+    def send(
+        self,
+        content: str,
+        title: Optional[str] = None,
+        parse_mode: str = "HTML"
+    ) -> bool:
+        """
+        Send Telegram notification with news digest.
+
+        Args:
+            content: News digest content
+            title: Title for the notification. If None, uses default with current date
+            parse_mode: Parse mode for Telegram ('HTML', 'Markdown', or 'MarkdownV2')
+
+        Returns:
+            True if message sent successfully, False otherwise
+        """
+        if not self.bot_token or not self.chat_id:
+            logger.error("Telegram bot token or chat ID is not configured. Skipping Telegram send.")
+            return False
+
+        try:
+            # Create default title if not provided
+            if title is None:
+                today = datetime.now().strftime("%Y-%m-%d")
+                title = f"AI News Digest - {today}"
+
+            # Format message based on parse mode
+            if parse_mode == "HTML":
+                message = self._format_html(title, content)
+            elif parse_mode in ["Markdown", "MarkdownV2"]:
+                message = self._format_markdown(title, content)
+            else:
+                message = f"{title}\n\n{content}"
+
+            # Split message if it's too long (Telegram has 4096 character limit)
+            messages = self._split_message(message)
+
+            logger.info(f"Sending {len(messages)} Telegram message(s) to chat {self._mask_chat_id(self.chat_id)}")
+
+            # Send message(s)
+            success = True
+            for idx, msg in enumerate(messages):
+                if not self._send_single_message(msg, parse_mode):
+                    success = False
+                    logger.error(f"Failed to send message part {idx + 1}/{len(messages)}")
+                    break
+
+            if success:
+                logger.info("All Telegram messages sent successfully")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Unexpected error sending Telegram message: {str(e)}", exc_info=True)
+            return False
+
+    def _send_single_message(self, message: str, parse_mode: str) -> bool:
+        """
+        Send a single Telegram message.
+
+        Args:
+            message: Message content
+            parse_mode: Parse mode
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            payload = {
+                "chat_id": self.chat_id,
+                "text": message,
+                "parse_mode": parse_mode,
+                "disable_web_page_preview": True
+            }
+
+            response = requests.post(
+                f"{self.api_url}/sendMessage",
+                json=payload,
+                timeout=self.timeout
+            )
+
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("ok"):
+                return True
+            else:
+                logger.error(f"Telegram API returned error: {result.get('description', 'Unknown error')}")
+                return False
+
+        except requests.exceptions.Timeout:
+            logger.error(f"Telegram request timed out after {self.timeout} seconds")
+            return False
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to send Telegram message: {str(e)}", exc_info=True)
+            return False
+
+    def _format_html(self, title: str, content: str) -> str:
+        """
+        Format message in HTML format for Telegram.
+
+        Args:
+            title: Message title
+            content: Message content
+
+        Returns:
+            HTML formatted message
+        """
+        # Convert simple markdown to HTML
+        formatted_content = content
+
+        # Replace headers
+        lines = []
+        for line in formatted_content.split('\n'):
+            if line.startswith('# '):
+                lines.append(f"<b>{line[2:].strip()}</b>")
+            elif line.startswith('## '):
+                lines.append(f"<b>{line[3:].strip()}</b>")
+            elif line.startswith('**') and line.endswith('**'):
+                lines.append(f"<b>{line[2:-2]}</b>")
+            else:
+                lines.append(line)
+
+        formatted_content = '\n'.join(lines)
+
+        return f"<b>{title}</b>\n\n{formatted_content}"
+
+    def _format_markdown(self, title: str, content: str) -> str:
+        """
+        Format message in Markdown format for Telegram.
+
+        Args:
+            title: Message title
+            content: Message content
+
+        Returns:
+            Markdown formatted message
+        """
+        return f"*{title}*\n\n{content}"
+
+    def _split_message(self, message: str, max_length: int = 4096) -> list:
+        """
+        Split long message into chunks that fit Telegram's character limit.
+
+        Args:
+            message: Full message
+            max_length: Maximum length per message (default 4096 for Telegram)
+
+        Returns:
+            List of message chunks
+        """
+        if len(message) <= max_length:
+            return [message]
+
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for line in message.split('\n'):
+            line_length = len(line) + 1  # +1 for newline
+
+            if current_length + line_length > max_length:
+                # Save current chunk and start new one
+                chunks.append('\n'.join(current_chunk))
+                current_chunk = [line]
+                current_length = line_length
+            else:
+                current_chunk.append(line)
+                current_length += line_length
+
+        # Add remaining chunk
+        if current_chunk:
+            chunks.append('\n'.join(current_chunk))
+
+        return chunks
+
+    def _mask_chat_id(self, chat_id: str) -> str:
+        """
+        Mask chat ID for logging.
+
+        Args:
+            chat_id: Original chat ID
+
+        Returns:
+            Masked chat ID
+        """
+        if not chat_id:
+            return ""
+
+        chat_id_str = str(chat_id)
+        if len(chat_id_str) <= 4:
+            return "***"
+
+        return f"{chat_id_str[:2]}***{chat_id_str[-2:]}"
