@@ -1,24 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="AI News Bot - Your AI-Powered News Assistant. Stay informed with automated, personalized AI news digests delivered daily via email, Slack, or Telegram.">
-    <meta name="keywords" content="AI news, automation, Claude, DeepSeek, newsletter, RSS feeds, email digest, AI assistant">
+    <meta name="description" content="AI 新闻机器人 - 您的 AI 新闻助手。每日自动获取个性化 AI 新闻摘要，通过邮件、Slack 或 Telegram 接收。">
+    <meta name="keywords" content="AI新闻, 自动化, Claude, DeepSeek, 新闻通讯, RSS订阅, 邮件摘要, AI助手">
     <meta name="author" content="giftedunicorn">
+    <meta http-equiv="content-language" content="zh-CN">
 
     <!-- Open Graph Meta Tags -->
-    <meta property="og:title" content="AI News Bot - Your AI-Powered News Assistant">
-    <meta property="og:description" content="Automated daily AI news digests powered by Claude & DeepSeek. Stay informed without information overload.">
+    <meta property="og:title" content="AI 新闻机器人 - 您的 AI 新闻助手">
+    <meta property="og:description" content="由 Claude 和 DeepSeek 驱动的自动化每日 AI 新闻摘要。告别信息过载，保持信息灵通。">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://giftedunicorn.github.io/ai-news-bot/">
+    <meta property="og:url" content="https://giftedunicorn.github.io/ai-news-bot/zh/">
 
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="AI News Bot - Your AI-Powered News Assistant">
-    <meta name="twitter:description" content="Automated daily AI news digests powered by Claude & DeepSeek">
+    <meta name="twitter:title" content="AI 新闻机器人 - 您的 AI 新闻助手">
+    <meta name="twitter:description" content="由 Claude 和 DeepSeek 驱动的自动化每日 AI 新闻摘要">
 
-    <title>AI News Bot - Your AI-Powered News Assistant</title>
+    <!-- Alternate Languages -->
+    <link rel="alternate" hreflang="en" href="https://giftedunicorn.github.io/ai-news-bot/">
+    <link rel="alternate" hreflang="zh" href="https://giftedunicorn.github.io/ai-news-bot/zh/">
+
+    <title>AI 新闻机器人 - 您的 AI 新闻助手</title>
     <style>
         * {
             margin: 0;
@@ -27,7 +32,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
             line-height: 1.6;
             color: #333;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -39,7 +44,7 @@
             padding: 0 20px;
         }
 
-        /* Language Switcher */
+        /* 语言切换器 */
         .language-switcher {
             position: fixed;
             top: 20px;
@@ -461,12 +466,8 @@
 
         /* Animations */
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         @keyframes fadeInDown {
@@ -536,28 +537,28 @@
 <body>
     <!-- Language Switcher -->
     <div class="language-switcher">
-        <a href="index.html" class="active">🇬🇧 English</a>
-        <a href="zh/index.html">🇨🇳 中文</a>
-        <a href="es/index.html">🇪🇸 Español</a>
-        <a href="fr/index.html">🇫🇷 Français</a>
-        <a href="ja/index.html">🇯🇵 日本語</a>
-        <a href="de/index.html">🇩🇪 Deutsch</a>
-        <a href="ko/index.html">🇰🇷 한국어</a>
-        <a href="pt/index.html">🇵🇹 Português</a>
-        <a href="ru/index.html">🇷🇺 Русский</a>
-        <a href="it/index.html">🇮🇹 Italiano</a>
-        <a href="nl/index.html">🇳🇱 Nederlands</a>
-        <a href="ar/index.html">🇸🇦 العربية</a>
+        <a href="../index.html">🇬🇧 English</a>
+        <a href="index.html" class="active">🇨🇳 中文</a>
+        <a href="../es/index.html">🇪🇸 Español</a>
+        <a href="../fr/index.html">🇫🇷 Français</a>
+        <a href="../ja/index.html">🇯🇵 日本語</a>
+        <a href="../de/index.html">🇩🇪 Deutsch</a>
+        <a href="../ko/index.html">🇰🇷 한국어</a>
+        <a href="../pt/index.html">🇵🇹 Português</a>
+        <a href="../ru/index.html">🇷🇺 Русский</a>
+        <a href="../it/index.html">🇮🇹 Italiano</a>
+        <a href="../nl/index.html">🇳🇱 Nederlands</a>
+        <a href="../ar/index.html">🇸🇦 العربية</a>
     </div>
 
     <header>
         <div class="container">
-            <h1>AI News Bot</h1>
-            <p class="hero-subtitle">🤖 Your AI-Powered News Assistant</p>
-            <p class="hero-description">Stay informed with automated, personalized AI news digests delivered daily. No more information overload, just the news that matters to you.</p>
+            <h1>AI 新闻机器人</h1>
+            <p class="hero-subtitle">🤖 您的 AI 新闻助手</p>
+            <p class="hero-description">每日自动获取个性化 AI 新闻摘要。告别信息过载，只看真正重要的新闻。</p>
             <div class="cta-buttons">
-                <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">Get Started Free</a>
-                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" class="btn btn-secondary">View Documentation</a>
+                <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">免费开始使用</a>
+                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" class="btn btn-secondary">查看文档</a>
             </div>
         </div>
     </header>
@@ -566,26 +567,26 @@
         <div class="container">
             <!-- Problem-Solution Section -->
             <section class="problem-solution">
-                <h2 class="section-title">Stop Drowning in Information</h2>
+                <h2 class="section-title">停止在信息海洋中挣扎</h2>
                 <div class="problem-solution-grid">
                     <div class="problem-box">
-                        <h3>😫 The Problem</h3>
+                        <h3>😫 痛点问题</h3>
                         <ul>
-                            <li>Spending hours browsing news sites</li>
-                            <li>Missing important AI developments</li>
-                            <li>Information overload and fatigue</li>
-                            <li>No time to stay up-to-date</li>
-                            <li>Scattered news across platforms</li>
+                            <li>花费数小时浏览新闻网站</li>
+                            <li>错过重要的 AI 发展动态</li>
+                            <li>信息过载导致疲劳</li>
+                            <li>没时间保持信息更新</li>
+                            <li>新闻分散在各个平台</li>
                         </ul>
                     </div>
                     <div class="solution-box">
-                        <h3>✨ The Solution</h3>
+                        <h3>✨ 完美方案</h3>
                         <ul>
-                            <li>Automated daily digests delivered to you</li>
-                            <li>Curated AI news from trusted sources</li>
-                            <li>Personalized to your interests</li>
-                            <li>Set it once, stay informed forever</li>
-                            <li>All in one beautiful email</li>
+                            <li>自动化每日摘要直达您手</li>
+                            <li>来自可信来源的精选 AI 新闻</li>
+                            <li>根据您的兴趣个性化定制</li>
+                            <li>一次设置，永久保持信息灵通</li>
+                            <li>全部整合在一封精美邮件中</li>
                         </ul>
                     </div>
                 </div>
@@ -593,110 +594,110 @@
 
             <!-- Stats Section -->
             <section class="section">
-                <h2 class="section-title">Trusted by Developers Worldwide</h2>
+                <h2 class="section-title">全球开发者的信赖之选</h2>
                 <div class="stats">
                     <div class="stat-item">
-                        <span class="stat-number">5 min</span>
-                        <span class="stat-label">Setup Time</span>
+                        <span class="stat-number">5 分钟</span>
+                        <span class="stat-label">配置时间</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-number">13+</span>
-                        <span class="stat-label">Languages</span>
+                        <span class="stat-label">支持语言</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-number">100%</span>
-                        <span class="stat-label">Automated</span>
+                        <span class="stat-label">自动化</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-number">$0</span>
-                        <span class="stat-label">Open Source</span>
+                        <span class="stat-label">开源免费</span>
                     </div>
                 </div>
             </section>
 
             <!-- Features Section -->
             <section class="section">
-                <h2 class="section-title">Powerful Features</h2>
-                <p class="section-subtitle">Everything you need to stay informed about AI developments, automated and personalized.</p>
+                <h2 class="section-title">强大功能</h2>
+                <p class="section-subtitle">所有您需要的功能，让您轻松掌握 AI 发展动态，自动化且个性化。</p>
                 <div class="features">
                     <div class="feature-card">
                         <span class="feature-icon">🤖</span>
-                        <h3>Dual AI Power</h3>
-                        <p>Choose between Claude Sonnet 4.5 or DeepSeek based on your needs. Get the best quality or optimize for cost—you decide.</p>
+                        <h3>双 AI 引擎</h3>
+                        <p>在 Claude Sonnet 4.5 和 DeepSeek 之间自由选择。追求最佳质量还是成本优化——由您决定。</p>
                     </div>
                     <div class="feature-card">
                         <span class="feature-icon">📰</span>
-                        <h3>Real RSS Feeds</h3>
-                        <p>Pulls actual news from TechCrunch, Hacker News, MIT Tech Review, 36Kr, and more. Not fake data—real, timely information.</p>
+                        <h3>真实 RSS 源</h3>
+                        <p>从 TechCrunch、Hacker News、MIT Tech Review、36氪等获取真实新闻。不是假数据——真实及时的信息。</p>
                     </div>
                     <div class="feature-card">
                         <span class="feature-icon">💌</span>
-                        <h3>Beautiful Emails</h3>
-                        <p>Gorgeous HTML emails that work perfectly in Gmail, Outlook, Apple Mail. Professional design, zero markdown mess.</p>
+                        <h3>精美邮件</h3>
+                        <p>在 Gmail、Outlook、Apple Mail 中完美呈现的精美 HTML 邮件。专业设计，零 markdown 混乱。</p>
                     </div>
                     <div class="feature-card">
                         <span class="feature-icon">🌍</span>
-                        <h3>13+ Languages</h3>
-                        <p>Generate news in English, Chinese, Spanish, French, Japanese, German, Korean, and more. Your language, your choice.</p>
+                        <h3>13+ 种语言</h3>
+                        <p>支持中文、英文、西班牙语、法语、日语、德语、韩语等。您的语言，您的选择。</p>
                     </div>
                     <div class="feature-card">
                         <span class="feature-icon">⚙️</span>
-                        <h3>Fully Customizable</h3>
-                        <p>9 pre-built templates or create your own. Customize topics, sources, tone—make it yours in minutes.</p>
+                        <h3>完全可定制</h3>
+                        <p>9 个预设模板或创建您自己的模板。自定义主题、来源、语气——几分钟内打造专属您的风格。</p>
                     </div>
                     <div class="feature-card">
                         <span class="feature-icon">🔔</span>
-                        <h3>Multi-Channel Delivery</h3>
-                        <p>Receive via Email, Slack, Telegram, Discord, or Webhooks. Get your news wherever you work.</p>
+                        <h3>多渠道投递</h3>
+                        <p>通过邮件、Slack、Telegram、Discord 或 Webhooks 接收。在您工作的任何地方获取新闻。</p>
                     </div>
                 </div>
             </section>
 
             <!-- Use Cases -->
             <section class="section">
-                <h2 class="section-title">Perfect For</h2>
+                <h2 class="section-title">完美适用于</h2>
                 <div class="use-cases">
                     <div class="use-case-card">
-                        <h3>👨‍💻 Developers</h3>
-                        <p>Stay on top of the latest AI tools, frameworks, and techniques without the daily grind.</p>
+                        <h3>👨‍💻 开发者</h3>
+                        <p>掌握最新的 AI 工具、框架和技术，无需每日辛苦搜寻。</p>
                     </div>
                     <div class="use-case-card">
-                        <h3>📊 Researchers</h3>
-                        <p>Get curated updates on AI research papers, breakthroughs, and academic developments.</p>
+                        <h3>📊 研究人员</h3>
+                        <p>获取精选的 AI 研究论文、突破性进展和学术发展更新。</p>
                     </div>
                     <div class="use-case-card">
-                        <h3>🚀 Entrepreneurs</h3>
-                        <p>Monitor AI startup launches, funding news, and market trends in one daily digest.</p>
+                        <h3>🚀 创业者</h3>
+                        <p>在一份每日摘要中监控 AI 初创公司、融资新闻和市场趋势。</p>
                     </div>
                     <div class="use-case-card">
-                        <h3>📝 Content Creators</h3>
-                        <p>Never run out of AI topics to write about. Get inspiration delivered daily.</p>
+                        <h3>📝 内容创作者</h3>
+                        <p>永不缺少 AI 话题灵感。每日获取创作素材。</p>
                     </div>
                 </div>
             </section>
 
             <!-- LLM Providers -->
             <section class="section">
-                <h2 class="section-title">Choose Your AI Engine</h2>
-                <p class="section-subtitle">Switch between providers anytime based on your needs</p>
+                <h2 class="section-title">选择您的 AI 引擎</h2>
+                <p class="section-subtitle">随时根据您的需求切换提供商</p>
                 <div class="providers">
                     <div class="provider-card">
                         <h3>Claude Sonnet 4.5</h3>
-                        <p style="margin-bottom: 15px;">Premium Quality</p>
-                        <p style="font-size: 0.95rem;">Excellent comprehension, best for high-quality digests. $3/1M tokens input.</p>
+                        <p style="margin-bottom: 15px;">高端品质</p>
+                        <p style="font-size: 0.95rem;">出色的理解能力，最适合高质量摘要。$3/百万 tokens 输入。</p>
                     </div>
                     <div class="provider-card">
                         <h3>DeepSeek</h3>
-                        <p style="margin-bottom: 15px;">Cost-Effective</p>
-                        <p style="font-size: 0.95rem;">Great Chinese support, budget-friendly. Perfect for frequent updates.</p>
+                        <p style="margin-bottom: 15px;">高性价比</p>
+                        <p style="font-size: 0.95rem;">出色的中文支持，预算友好。适合频繁更新。</p>
                     </div>
                 </div>
             </section>
 
             <!-- Languages -->
             <section class="section">
-                <h2 class="section-title">Speak Your Language</h2>
-                <p class="section-subtitle">Generate news digests in 13+ languages with a single configuration change</p>
+                <h2 class="section-title">说您的语言</h2>
+                <p class="section-subtitle">通过简单配置即可生成 13+ 种语言的新闻摘要</p>
                 <div class="languages">
                     <span class="language-tag">🇬🇧 English</span>
                     <span class="language-tag">🇨🇳 中文</span>
@@ -716,33 +717,33 @@
 
             <!-- Quick Start -->
             <section class="section">
-                <h2 class="section-title">Get Started in 5 Minutes</h2>
-                <p class="section-subtitle">No complex setup. Fork, configure, and start receiving news.</p>
-                <div class="code-block"># 1. Clone the repository
+                <h2 class="section-title">5 分钟快速开始</h2>
+                <p class="section-subtitle">无需复杂设置。Fork、配置，然后开始接收新闻。</p>
+                <div class="code-block"># 1. 克隆仓库
 git clone https://github.com/giftedunicorn/ai-news-bot.git
 cd ai-news-bot
 
-# 2. Install dependencies
+# 2. 安装依赖
 pip install -r requirements.txt
 
-# 3. Configure your settings
+# 3. 配置您的设置
 cp .env.example .env
-# Add your API keys and notification preferences
+# 添加您的 API 密钥和通知偏好
 
-# 4. Run it!
+# 4. 运行！
 python main.py</div>
                 <div style="text-align: center; margin-top: 40px;">
-                    <a href="https://github.com/giftedunicorn/ai-news-bot#quick-start-local-development" class="btn btn-primary">View Complete Setup Guide →</a>
+                    <a href="https://github.com/giftedunicorn/ai-news-bot#quick-start-local-development" class="btn btn-primary">查看完整设置指南 →</a>
                 </div>
             </section>
 
             <!-- CTA Section -->
             <section class="cta-section">
-                <h2>Ready to Stay Informed?</h2>
-                <p>Join developers worldwide who never miss an AI development</p>
+                <h2>准备好保持信息灵通了吗？</h2>
+                <p>加入全球开发者行列，永不错过任何 AI 发展动态</p>
                 <div class="cta-buttons">
-                    <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">Start Free on GitHub</a>
-                    <a href="https://discord.gg/AtfQPh8T2T" class="btn btn-secondary">Join Discord Community</a>
+                    <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">在 GitHub 免费开始</a>
+                    <a href="https://discord.gg/AtfQPh8T2T" class="btn btn-secondary">加入 Discord 社区</a>
                 </div>
             </section>
         </div>
@@ -750,17 +751,17 @@ python main.py</div>
 
     <footer>
         <div class="container">
-            <p>&copy; 2025 AI News Bot. Open Source under MIT License.</p>
+            <p>&copy; 2025 AI 新闻机器人。基于 MIT 许可证开源。</p>
             <p style="margin-top: 15px;">
-                Powered by
+                技术支持：
                 <a href="https://www.anthropic.com" target="_blank">Anthropic Claude</a> &
                 <a href="https://www.deepseek.com" target="_blank">DeepSeek</a>
             </p>
             <p style="margin-top: 20px;">
                 <a href="https://github.com/giftedunicorn/ai-news-bot" target="_blank">GitHub</a> |
                 <a href="https://discord.gg/AtfQPh8T2T" target="_blank">Discord</a> |
-                <a href="https://github.com/giftedunicorn/ai-news-bot/issues" target="_blank">Issues</a> |
-                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" target="_blank">Documentation</a>
+                <a href="https://github.com/giftedunicorn/ai-news-bot/issues" target="_blank">问题反馈</a> |
+                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" target="_blank">文档</a>
             </p>
         </div>
     </footer>

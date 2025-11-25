@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI News Bot - Ваш AI-Помощник по Новостям. Будьте в курсе с автоматизированными персонализированными дайджестами новостей ИИ, доставляемыми ежедневно по электронной почте, Slack или Telegram.">
+    <meta name="keywords" content="AI news, automation, Claude, DeepSeek, newsletter, RSS feeds">
+    <meta name="author" content="giftedunicorn">
+    <meta property="og:title" content="AI News Bot - Ваш AI-Помощник по Новостям">
+    <meta property="og:description" content="AI News Bot - Ваш AI-Помощник по Новостям. Будьте в курсе с автоматизированными персонализированными дайджестами новостей ИИ, доставляемыми ежедневно по электронной почте, Slack или Telegram.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://giftedunicorn.github.io/ai-news-bot/ru/">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="AI News Bot - Ваш AI-Помощник по Новостям">
+    <meta name="twitter:description" content="AI News Bot - Ваш AI-Помощник по Новостям. Будьте в курсе с автоматизированными персонализированными дайджестами новостей ИИ, доставляемыми ежедневно по электронной почте, Slack или Telegram.">
+    <link rel="alternate" hreflang="en" href="https://giftedunicorn.github.io/ai-news-bot/">
+    <link rel="alternate" hreflang="zh" href="https://giftedunicorn.github.io/ai-news-bot/zh/">
+    <link rel="alternate" hreflang="es" href="https://giftedunicorn.github.io/ai-news-bot/es/">
+    <link rel="alternate" hreflang="fr" href="https://giftedunicorn.github.io/ai-news-bot/fr/">
+    <link rel="alternate" hreflang="ja" href="https://giftedunicorn.github.io/ai-news-bot/ja/">
+    <link rel="alternate" hreflang="de" href="https://giftedunicorn.github.io/ai-news-bot/de/">
+    <link rel="alternate" hreflang="ko" href="https://giftedunicorn.github.io/ai-news-bot/ko/">
+    <link rel="alternate" hreflang="pt" href="https://giftedunicorn.github.io/ai-news-bot/pt/">
+    <link rel="alternate" hreflang="ru" href="https://giftedunicorn.github.io/ai-news-bot/ru/">
+    <link rel="alternate" hreflang="it" href="https://giftedunicorn.github.io/ai-news-bot/it/">
+    <link rel="alternate" hreflang="nl" href="https://giftedunicorn.github.io/ai-news-bot/nl/">
+    <link rel="alternate" hreflang="ar" href="https://giftedunicorn.github.io/ai-news-bot/ar/">
+    <title>AI News Bot - Ваш AI-Помощник по Новостям</title>
+    <style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; line-height: 1.6; color: #333; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+.language-switcher { position: fixed; top: 20px; right: 20px; z-index: 1000; background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-height: 80vh; overflow-y: auto; }
+.language-switcher a { text-decoration: none; color: #667eea; font-weight: 600; margin: 0 8px; transition: color 0.3s ease; white-space: nowrap; }
+.language-switcher a:hover { color: #764ba2; }
+.language-switcher a.active { color: #764ba2; text-decoration: underline; }
+header { padding: 80px 0 60px; text-align: center; color: white; }
+header h1 { font-size: 4rem; margin-bottom: 20px; font-weight: 700; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); animation: fadeInDown 0.8s ease; }
+.hero-subtitle { font-size: 1.6rem; opacity: 0.95; margin-bottom: 15px; font-weight: 500; animation: fadeIn 1s ease; }
+.hero-description { font-size: 1.2rem; opacity: 0.9; margin-bottom: 40px; max-width: 700px; margin-left: auto; margin-right: auto; animation: fadeIn 1.2s ease; }
+.cta-buttons { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-top: 30px; animation: fadeInUp 1s ease; }
+.btn { display: inline-block; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 1.1rem; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+.btn-primary { background: white; color: #667eea; }
+.btn-primary:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+.btn-secondary { background: transparent; color: white; border: 2px solid white; }
+.btn-secondary:hover { background: white; color: #667eea; transform: translateY(-3px); }
+main { background: white; border-radius: 20px 20px 0 0; margin-top: 40px; padding: 80px 0; }
+.section { margin: 100px 0; }
+.section-title { text-align: center; font-size: 2.8rem; margin-bottom: 20px; color: #333; font-weight: 700; }
+.section-subtitle { text-align: center; font-size: 1.2rem; color: #666; margin-bottom: 60px; max-width: 600px; margin-left: auto; margin-right: auto; }
+.problem-solution { background: #f8f9fa; padding: 60px 40px; border-radius: 20px; margin-bottom: 80px; }
+.problem-solution-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 40px; }
+.problem-box, .solution-box { padding: 40px; border-radius: 15px; }
+.problem-box { background: #fff3cd; border-left: 5px solid #ffc107; }
+.solution-box { background: #d1f2eb; border-left: 5px solid #28a745; }
+.problem-box h3, .solution-box h3 { font-size: 1.8rem; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+.problem-box ul, .solution-box ul { list-style: none; padding: 0; }
+.problem-box li, .solution-box li { padding: 12px 0; padding-left: 30px; position: relative; font-size: 1.1rem; }
+.problem-box li:before { content: "❌"; position: absolute; left: 0; }
+.solution-box li:before { content: "✅"; position: absolute; left: 0; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 40px; margin: 60px 0; text-align: center; }
+.stat-item { padding: 30px; background: #f8f9fa; border-radius: 15px; transition: transform 0.3s ease; }
+.stat-item:hover { transform: translateY(-5px); }
+.stat-number { font-size: 3.5rem; font-weight: 700; color: #667eea; display: block; margin-bottom: 10px; }
+.stat-label { font-size: 1.1rem; color: #666; }
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 35px; margin: 60px 0; }
+.feature-card { background: #f8f9fa; padding: 35px; border-radius: 15px; transition: all 0.3s ease; border: 2px solid transparent; }
+.feature-card:hover { transform: translateY(-8px); box-shadow: 0 15px 35px rgba(0,0,0,0.1); border-color: #667eea; }
+.feature-icon { font-size: 3.5rem; margin-bottom: 20px; display: block; }
+.feature-card h3 { font-size: 1.6rem; margin-bottom: 15px; color: #667eea; font-weight: 600; }
+.feature-card p { color: #666; line-height: 1.8; font-size: 1.05rem; }
+.use-cases { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; margin: 50px 0; }
+.use-case-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 35px; border-radius: 15px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+.use-case-card h3 { font-size: 1.5rem; margin-bottom: 15px; }
+.use-case-card p { opacity: 0.95; line-height: 1.7; }
+.providers { display: flex; justify-content: center; gap: 50px; flex-wrap: wrap; margin: 40px 0; }
+.provider-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 50px; border-radius: 15px; text-align: center; min-width: 280px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.3s ease; }
+.provider-card:hover { transform: scale(1.05); }
+.provider-card h3 { font-size: 2rem; margin-bottom: 15px; }
+.provider-card p { font-size: 1.1rem; opacity: 0.95; }
+.languages { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin: 40px 0; }
+.language-tag { background: #e9ecef; padding: 12px 24px; border-radius: 25px; font-weight: 600; color: #667eea; transition: all 0.3s ease; font-size: 1rem; }
+.language-tag:hover { background: #667eea; color: white; transform: scale(1.08); }
+.code-block { background: #2d2d2d; color: #f8f8f2; padding: 30px; border-radius: 12px; overflow-x: auto; margin: 30px 0; font-family: 'Monaco', 'Menlo', 'Consolas', monospace; font-size: 0.95rem; line-height: 1.7; box-shadow: 0 10px 30px rgba(0,0,0,0.3); white-space: pre; }
+.cta-section { text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 80px 60px; border-radius: 20px; color: white; margin: 80px 0; }
+.cta-section h2 { font-size: 3rem; margin-bottom: 20px; }
+.cta-section p { font-size: 1.3rem; margin-bottom: 40px; opacity: 0.95; }
+footer { background: #2d2d2d; color: white; padding: 50px 0; text-align: center; }
+footer a { color: #667eea; text-decoration: none; transition: color 0.3s ease; }
+footer a:hover { color: #8b9aff; text-decoration: underline; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeInDown { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 768px) {
+    header h1 { font-size: 2.5rem; }
+    .hero-subtitle { font-size: 1.3rem; }
+    .hero-description { font-size: 1rem; }
+    .features { grid-template-columns: 1fr; }
+    .section-title { font-size: 2rem; }
+    .problem-solution-grid { grid-template-columns: 1fr; gap: 30px; }
+    .cta-buttons { flex-direction: column; align-items: stretch; }
+    .btn { width: 100%; }
+    .cta-section h2 { font-size: 2rem; }
+}</style>
+</head>
+<body>
+    <div class="language-switcher">
+        <a href="../index.html">🇬🇧 English</a>
+        <a href="../zh/index.html">🇨🇳 中文</a>
+        <a href="../es/index.html">🇪🇸 Español</a>
+        <a href="../fr/index.html">🇫🇷 Français</a>
+        <a href="../ja/index.html">🇯🇵 日本語</a>
+        <a href="../de/index.html">🇩🇪 Deutsch</a>
+        <a href="../ko/index.html">🇰🇷 한국어</a>
+        <a href="../pt/index.html">🇵🇹 Português</a>
+        <a href="../ru/index.html" class="active">🇷🇺 Русский</a>
+        <a href="../it/index.html">🇮🇹 Italiano</a>
+        <a href="../nl/index.html">🇳🇱 Nederlands</a>
+        <a href="../ar/index.html">🇸🇦 العربية</a>
+    </div>
+    <header>
+        <div class="container">
+            <h1>AI News Bot</h1>
+            <p class="hero-subtitle">🤖 Ваш AI-Помощник по Новостям</p>
+            <p class="hero-description">Будьте в курсе с автоматизированными персонализированными дайджестами новостей ИИ, доставляемыми ежедневно. Никакой информационной перегрузки, только важные новости.</p>
+            <div class="cta-buttons">
+                <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">Начать Бесплатно</a>
+                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" class="btn btn-secondary">Посмотреть Документацию</a>
+            </div>
+        </div>
+    </header>
+    <main>
+        <div class="container">
+            <section class="problem-solution">
+                <h2 class="section-title">Перестаньте Тонуть в Информации</h2>
+                <div class="problem-solution-grid">
+                    <div class="problem-box">
+                        <h3>😫 Проблема</h3>
+                        <ul>
+                            <li>Часы, потраченные на просмотр новостных сайтов</li>
+                            <li>Пропуск важных разработок в области ИИ</li>
+                            <li>Информационная перегрузка и усталость</li>
+                            <li>Нет времени оставаться в курсе</li>
+                            <li>Новости разбросаны по платформам</li>
+                        </ul>
+                    </div>
+                    <div class="solution-box">
+                        <h3>✨ Решение</h3>
+                        <ul>
+                            <li>Автоматизированные ежедневные дайджесты доставляются вам</li>
+                            <li>Отобранные новости ИИ из надежных источников</li>
+                            <li>Персонализированы под ваши интересы</li>
+                            <li>Настройте один раз, будьте информированы навсегда</li>
+                            <li>Всё в одном красивом письме</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            <section class="section">
+                <h2 class="section-title">Доверяют Разработчики по Всему Миру</h2>
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-number">5 min</span>
+                        <span class="stat-label">Время Настройки</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">13+</span>
+                        <span class="stat-label">Языков</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">100%</span>
+                        <span class="stat-label">Автоматизировано</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">$0</span>
+                        <span class="stat-label">Открытый Исходный Код</span>
+                    </div>
+                </div>
+            </section>
+            <section class="section">
+                <h2 class="section-title">Мощные Возможности</h2>
+                <p class="section-subtitle">Всё, что вам нужно, чтобы быть в курсе разработок ИИ, автоматизировано и персонализировано.</p>
+                <div class="features">
+                    <div class="feature-card">
+                        <span class="feature-icon">🤖</span>
+                        <h3>Двойная Мощь ИИ</h3>
+                        <p>Выбирайте между Claude Sonnet 4.5 или DeepSeek в зависимости от ваших потребностей. Получите лучшее качество или оптимизируйте затраты - решать вам.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">📰</span>
+                        <h3>Настоящие RSS-ленты</h3>
+                        <p>Извлекает реальные новости из TechCrunch, Hacker News, MIT Tech Review, 36Kr и других. Не поддельные данные - реальная своевременная информация.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">💌</span>
+                        <h3>Красивые Письма</h3>
+                        <p>Великолепные HTML-письма, которые отлично работают в Gmail, Outlook, Apple Mail. Профессиональный дизайн, никакого беспорядка с markdown.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">🌍</span>
+                        <h3>13+ Языков</h3>
+                        <p>Генерируйте новости на английском, китайском, испанском, французском, японском, немецком, корейском и других языках. Ваш язык, ваш выбор.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">⚙️</span>
+                        <h3>Полностью Настраиваемо</h3>
+                        <p>9 готовых шаблонов или создайте свой собственный. Настройте темы, источники, тон - сделайте его своим за минуты.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">🔔</span>
+                        <h3>Многоканальная Доставка</h3>
+                        <p>Получайте через Email, Slack, Telegram, Discord или Webhooks. Получайте новости где работаете.</p>
+                    </div>
+                </div>
+            </section>
+            <section class="section">
+                <h2 class="section-title">Идеально Для</h2>
+                <div class="use-cases">
+                    <div class="use-case-card">
+                        <h3>👨‍💻 Разработчиков</h3>
+                        <p>Будьте в курсе последних инструментов, фреймворков и техник ИИ без ежедневной рутины.</p>
+                    </div>
+                    <div class="use-case-card">
+                        <h3>📊 Исследователей</h3>
+                        <p>Получайте отобранные обновления по исследовательским работам ИИ, прорывам и академическим разработкам.</p>
+                    </div>
+                    <div class="use-case-card">
+                        <h3>🚀 Предпринимателей</h3>
+                        <p>Отслеживайте запуски AI-стартапов, новости о финансировании и рыночные тренды в одном ежедневном дайджесте.</p>
+                    </div>
+                    <div class="use-case-card">
+                        <h3>📝 Создателей Контента</h3>
+                        <p>Никогда не заканчивайтесь темы об ИИ для написания. Получайте вдохновение ежедневно.</p>
+                    </div>
+                </div>
+            </section>
+            <section class="section">
+                <h2 class="section-title">Выберите Ваш AI-Движок</h2>
+                <p class="section-subtitle">Переключайтесь между провайдерами в любое время в зависимости от ваших потребностей</p>
+                <div class="providers">
+                    <div class="provider-card">
+                        <h3>Claude Sonnet 4.5</h3>
+                        <p style="margin-bottom: 15px;">Премиум Качество</p>
+                        <p style="font-size: 0.95rem;">Отличное понимание, лучший для высококачественных дайджестов. $3/1М токенов на входе.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>DeepSeek</h3>
+                        <p style="margin-bottom: 15px;">Экономичный</p>
+                        <p style="font-size: 0.95rem;">Отличная поддержка китайского языка, бюджетный. Идеален для частых обновлений.</p>
+                    </div>
+                </div>
+            </section>
+            <section class="section">
+                <h2 class="section-title">Говорите на Вашем Языке</h2>
+                <p class="section-subtitle">Генерируйте дайджесты новостей на 13+ языках с одним изменением конфигурации</p>
+                <div class="languages">
+                    <span class="language-tag">🇬🇧 English</span>
+                    <span class="language-tag">🇨🇳 中文</span>
+                    <span class="language-tag">🇪🇸 Español</span>
+                    <span class="language-tag">🇫🇷 Français</span>
+                    <span class="language-tag">🇯🇵 日本語</span>
+                    <span class="language-tag">🇩🇪 Deutsch</span>
+                    <span class="language-tag">🇰🇷 한국어</span>
+                    <span class="language-tag">🇵🇹 Português</span>
+                    <span class="language-tag">🇷🇺 Русский</span>
+                    <span class="language-tag">🇸🇦 العربية</span>
+                    <span class="language-tag">🇮🇳 हिन्दी</span>
+                    <span class="language-tag">🇮🇹 Italiano</span>
+                    <span class="language-tag">🇳🇱 Nederlands</span>
+                </div>
+            </section>
+            <section class="section">
+                <h2 class="section-title">Начните за 5 Минут</h2>
+                <p class="section-subtitle">Никакой сложной настройки. Fork, настройте и начните получать новости.</p>
+                <div class="code-block"># 1. Клонировать репозиторий
+git clone https://github.com/giftedunicorn/ai-news-bot.git
+cd ai-news-bot
+
+# 2. Установить зависимости
+pip install -r requirements.txt
+
+# 3. Настроить параметры
+cp .env.example .env
+# Добавьте ваши API-ключи и настройки уведомлений
+
+# 4. Запустить!
+python main.py</div>
+                <div style="text-align: center; margin-top: 40px;">
+                    <a href="https://github.com/giftedunicorn/ai-news-bot#quick-start-local-development" class="btn btn-primary">Посмотреть Полное Руководство по Настройке →</a>
+                </div>
+            </section>
+            <section class="cta-section">
+                <h2>Готовы Оставаться Информированными?</h2>
+                <p>Присоединяйтесь к разработчикам по всему миру, которые никогда не пропускают разработки ИИ</p>
+                <div class="cta-buttons">
+                    <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">Начать Бесплатно на GitHub</a>
+                    <a href="https://discord.gg/AtfQPh8T2T" class="btn btn-secondary">Присоединиться к Сообществу Discord</a>
+                </div>
+            </section>
+        </div>
+    </main>
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 AI News Bot. Открытый исходный код под лицензией MIT.</p>
+            <p style="margin-top: 15px;">
+                Работает на
+                <a href="https://www.anthropic.com" target="_blank">Anthropic Claude</a> &
+                <a href="https://www.deepseek.com" target="_blank">DeepSeek</a>
+            </p>
+            <p style="margin-top: 20px;">
+                <a href="https://github.com/giftedunicorn/ai-news-bot" target="_blank">GitHub</a> |
+                <a href="https://discord.gg/AtfQPh8T2T" target="_blank">Discord</a> |
+                <a href="https://github.com/giftedunicorn/ai-news-bot/issues" target="_blank">Проблемы</a> |
+                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" target="_blank">Документация</a>
+            </p>
+        </div>
+    </footer>
+    <script>document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) { target.scrollIntoView({ behavior: 'smooth' }); }
+    });
+});
+const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -50px 0px' };
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+        }
+    });
+}, observerOptions);
+document.querySelectorAll('.feature-card, .provider-card, .stat-item, .use-case-card').forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(20px)';
+    el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+    observer.observe(el);
+});</script>
+</body>
+</html>
