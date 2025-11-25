@@ -1,6 +1,37 @@
+<div align="center">
+
 # AI News Bot
 
-An automated system that generates and distributes daily AI news digests using Anthropic's Claude API.
+🤖 **Your AI-Powered News Assistant** — Stay informed with automated, personalized AI news digests delivered daily
+
+[![GitHub Stars](https://img.shields.io/github/stars/giftedunicorn/ai-news-bot?style=flat-square&logo=github&color=yellow)](https://github.com/giftedunicorn/ai-news-bot/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/giftedunicorn/ai-news-bot?style=flat-square&logo=github&color=blue)](https://github.com/giftedunicorn/ai-news-bot/network/members)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+
+[![Email](https://img.shields.io/badge/Email-Notification-00D4AA?style=flat-square)](https://resend.com/)
+[![Webhook](https://img.shields.io/badge/Webhook-Support-00D4AA?style=flat-square)](#)
+[![Slack](https://img.shields.io/badge/Slack-Integration-00D4AA?style=flat-square)](https://slack.com/)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-00D4AA?style=flat-square)](https://telegram.org/)
+
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-Automation-2088FF?style=flat-square&logo=github-actions&logoColor=white)](https://github.com/giftedunicorn/ai-news-bot)
+[![Claude](https://img.shields.io/badge/Claude-Sonnet_4.5-FF6B6B?style=flat-square&logo=anthropic&logoColor=white)](https://www.anthropic.com)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-Supported-4285F4?style=flat-square&logo=ai&logoColor=white)](https://www.deepseek.com)
+
+</div>
+
+---
+
+## 📑 Quick Navigation
+
+<div align="center">
+
+| [✨ Features](#features) | [🚀 Quick Start](#quick-start-local-development) | [⚙️ Configuration](#configuration) | [🤖 LLM Providers](#llm-provider-configuration) |
+|:---:|:---:|:---:|:---:|
+| [🌍 Languages](#language-configuration) | [📧 Email Setup](#email-setup-guide-with-resendcom) | [🔗 Webhooks](#webhook-integration) | [🔧 Troubleshooting](#troubleshooting) |
+
+</div>
+
+---
 
 ## Features
 
@@ -689,3 +720,23 @@ For issues and feature requests, please use the GitHub issue tracker.
 Powered by:
 - [Anthropic Claude](https://www.anthropic.com)
 - [DeepSeek](https://www.deepseek.com)
+
+---
+
+## ⭐ Star History
+
+<div align="center">
+
+[![Star History Chart](https://api.star-history.com/svg?repos=giftedunicorn/ai-news-bot&type=Date)](https://star-history.com/#giftedunicorn/ai-news-bot&Date)
+
+</div>
+
+---
+
+<div align="center">
+
+**[⬆ Back to Top](#ai-news-bot)**
+
+Made with ❤️ by the open source community
+
+</div>

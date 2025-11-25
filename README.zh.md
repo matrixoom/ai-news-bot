@@ -1,6 +1,37 @@
+<div align="center">
+
 # AI 新闻机器人
 
-一个自动化系统，使用 Anthropic 的 Claude API 生成并分发每日 AI 新闻摘要。
+🤖 **您的 AI 新闻助手** — 每日自动获取个性化 AI 新闻摘要，保持信息灵通
+
+[![GitHub Stars](https://img.shields.io/github/stars/giftedunicorn/ai-news-bot?style=flat-square&logo=github&color=yellow)](https://github.com/giftedunicorn/ai-news-bot/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/giftedunicorn/ai-news-bot?style=flat-square&logo=github&color=blue)](https://github.com/giftedunicorn/ai-news-bot/network/members)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+
+[![邮件](https://img.shields.io/badge/邮件-通知-00D4AA?style=flat-square)](https://resend.com/)
+[![Webhook](https://img.shields.io/badge/Webhook-支持-00D4AA?style=flat-square)](#)
+[![Slack](https://img.shields.io/badge/Slack-集成-00D4AA?style=flat-square)](https://slack.com/)
+[![Telegram](https://img.shields.io/badge/Telegram-机器人-00D4AA?style=flat-square)](https://telegram.org/)
+
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-自动化-2088FF?style=flat-square&logo=github-actions&logoColor=white)](https://github.com/giftedunicorn/ai-news-bot)
+[![Claude](https://img.shields.io/badge/Claude-Sonnet_4.5-FF6B6B?style=flat-square&logo=anthropic&logoColor=white)](https://www.anthropic.com)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-支持-4285F4?style=flat-square&logo=ai&logoColor=white)](https://www.deepseek.com)
+
+</div>
+
+---
+
+## 📑 快速导航
+
+<div align="center">
+
+| [✨ 功能特点](#功能特点) | [🚀 快速开始](#快速开始本地开发) | [⚙️ 配置](#配置) | [🤖 LLM 提供商](#llm-提供商配置) |
+|:---:|:---:|:---:|:---:|
+| [🌍 语言配置](#语言配置) | [📧 邮件设置](#resendcom-邮件设置指南) | [🔗 Webhook](#webhook-集成) | [🔧 故障排除](#故障排除) |
+
+</div>
+
+---
 
 ## 功能特点
 
@@ -552,3 +583,23 @@ MIT 许可证 - 详见 LICENSE 文件
 由以下技术提供支持：
 - [Anthropic Claude](https://www.anthropic.com)
 - [DeepSeek](https://www.deepseek.com)
+
+---
+
+## ⭐ Star 历史
+
+<div align="center">
+
+[![Star History Chart](https://api.star-history.com/svg?repos=giftedunicorn/ai-news-bot&type=Date)](https://star-history.com/#giftedunicorn/ai-news-bot&Date)
+
+</div>
+
+---
+
+<div align="center">
+
+**[⬆ 返回顶部](#ai-新闻机器人)**
+
+用 ❤️ 由开源社区打造
+
+</div>
