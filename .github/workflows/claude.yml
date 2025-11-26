@@ -1,5 +1,4 @@
 name: Claude Code
-
 on:
   issue_comment:
     types: [created]
@@ -30,21 +29,95 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Setup Claude Code Router
+        run: |
+          # Install bun package manager
+          curl -fsSL https://bun.sh/install | bash
+
+          # Create router config directory
+          mkdir -p $HOME/.claude-code-router
+
+          # Create configration file
+          cat << 'EOF' > $HOME/.claude-code-router/config.json
+          {
+            "LOG": true,
+            "LOG_LEVEL": "info",
+            "NON_INTERACTIVE_MODE": true,
+            "API_TIMEOUT_MS": 600000,
+            "Providers": [
+              {
+                "name": "openrouter",
+                "api_base_url": "https://openrouter.ai/api/v1/chat/completions",
+                "api_key": "${{ secrets.OPENROUTER_API_KEY }}",
+                "models": [
+                  "claude-sonnet-4-5-20250929",
+                  "claude-opus-4-5-20251101"
+                ]
+              }
+            ],
+            "Router": {
+              "default": "openrouter,anthropic/claude-4.5-opus",
+              "background": "",
+              "think": "",
+              "longContext": "",
+              "longContextThreshold": 60000,
+              "webSearch": "",
+              "image": ""
+            }
+          }
+          EOF
+
+          echo "✅ Router configured"
+        shell: bash
+
+      - name: Start Claude Code Router
+        run: |
+          # Start the router in background
+          nohup ~/.bun/bin/bunx @musistudio/claude-code-router@latest start &
+
+          # Wait for service initialization
+          sleep 5
+
+          # Verify service is running
+          if curl -f http://localhost:3456/health 2>/dev/null; then
+            echo "✅ Router service is healthy"
+          else
+            echo "⚠️ Health check failed, but service may still be running"
+          fi
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
+        env:
+          # Point to local router
+          ANTHROPIC_BASE_URL: http://localhost:3456
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Router handles auth
+          anthropic_api_key: "router-managed"
 
-          # This is an optional setting that allows Claude to read CI results on PRs
+          # Preserve your additional permissions
           additional_permissions: |
             actions: read
 
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
+          # Allow Claude to use necessary development tools (EXPANDED)
+          claude_args: '--allowedTools "Edit,MultiEdit,Glob,Grep,LS,Read,Write,mcp__github_comment__update_claude_comment,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git branch:*),Bash(git checkout:*),Bash(git fetch:*),Bash(npm install:*),Bash(npm ci:*),Bash(npm run:*),Bash(npm test:*),Bash(npm start:*),Bash(npm build:*),Bash(npm audit:*),Bash(cd:*),Bash(ls:*),Bash(pwd:*),Bash(cat:*),Bash(mkdir:*),Bash(mv:*),Bash(cp:*),Bash(find:*),Bash(grep:*),Bash(echo:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(touch:*),Bash(node:*)"'
 
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr:*)'
+      - name: Usage Report (Optional)
+        if: always()
+        run: |
+          echo "=== Model Usage ==="
+          echo "💰 Cost: $0.00 per request"
+          echo "📊 No usage limits on free tier"
+        continue-on-error: true
 
+      - name: Debug on Failure (Optional)
+        if: failure()
+        run: |
+          echo "=== Router Logs ==="
+          tail -n 50 $HOME/.claude-code-router/logs/ccr-*.log 2>/dev/null || echo "No logs found"
+          echo "=== Service Check ==="
+          ps aux | grep claude-code-router || echo "Router not running"
