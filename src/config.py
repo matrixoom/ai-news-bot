@@ -202,6 +202,12 @@ Format your response as a structured news digest with clear sections."""
             return os.getenv("DEEPSEEK_API_KEY")
         elif provider == "claude":
             return os.getenv("ANTHROPIC_API_KEY")
+        elif provider == "gemini":
+            return os.getenv("GOOGLE_API_KEY")
+        elif provider == "grok":
+            return os.getenv("XAI_API_KEY")
+        elif provider == "openai":
+            return os.getenv("OPENAI_API_KEY")
         return None
 
     def get(self, key: str, default: Any = None) -> Any:

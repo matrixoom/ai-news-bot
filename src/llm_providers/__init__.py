@@ -4,6 +4,9 @@ LLM Providers Module - Abstracts different LLM API providers
 from .base_provider import BaseLLMProvider
 from .claude_provider import ClaudeProvider
 from .deepseek_provider import DeepSeekProvider
+from .gemini_provider import GeminiProvider
+from .grok_provider import GrokProvider
+from .openai_provider import OpenAIProvider
 
 
 def get_llm_provider(provider_name: str, **kwargs) -> BaseLLMProvider:
@@ -11,7 +14,7 @@ def get_llm_provider(provider_name: str, **kwargs) -> BaseLLMProvider:
     Factory function to get the appropriate LLM provider.
     
     Args:
-        provider_name: Name of the provider ('claude' or 'deepseek')
+        provider_name: Name of the provider ('claude', 'deepseek', 'gemini', 'grok', or 'openai')
         **kwargs: Additional arguments passed to the provider constructor
         
     Returns:
@@ -23,6 +26,9 @@ def get_llm_provider(provider_name: str, **kwargs) -> BaseLLMProvider:
     providers = {
         'claude': ClaudeProvider,
         'deepseek': DeepSeekProvider,
+        'gemini': GeminiProvider,
+        'grok': GrokProvider,
+        'openai': OpenAIProvider,
     }
     
     provider_class = providers.get(provider_name.lower())
@@ -39,5 +45,8 @@ __all__ = [
     'BaseLLMProvider',
     'ClaudeProvider',
     'DeepSeekProvider',
+    'GeminiProvider',
+    'GrokProvider',
+    'OpenAIProvider',
     'get_llm_provider',
 ]

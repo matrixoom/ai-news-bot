@@ -36,9 +36,9 @@
 
 ## Features
 
-- **Multi-Provider LLM Support**: Choose between Claude (Anthropic) or DeepSeek for news generation
+- **Multi-Provider LLM Support**: Choose between Claude, DeepSeek, Gemini, Grok, or OpenAI for news generation
 - **Real-Time News Fetching**: Fetches actual news from RSS feeds for accurate, up-to-date content
-- **AI-Powered News Generation**: Uses Claude Sonnet 4.5 or DeepSeek to generate comprehensive AI news digests
+- **AI-Powered News Generation**: Generate comprehensive AI news digests using your preferred LLM provider
 - **Web Search Integration**: Optional DuckDuckGo web search for additional news sources
 - **Beautiful Email Formatting**: Automatically converts AI content to stunning HTML emails - no markdown, just clean professional design
 - **Customizable Prompts**: 9 pre-built templates (comprehensive, research, business, technical, etc.) or create your own
@@ -87,12 +87,15 @@ Add the following secrets:
 
 #### ✅ Required Secrets
 
-| Secret Name            | Example Value          | Description                               |
-| ---------------------- | ---------------------- | ----------------------------------------- |
-| `LLM_PROVIDER`         | `claude` or `deepseek` | LLM provider to use (default: `claude`)   |
-| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`  | Your Anthropic API key (if using Claude)  |
-| `DEEPSEEK_API_KEY`     | `sk-xxx...`            | Your DeepSeek API key (if using DeepSeek) |
-| `NOTIFICATION_METHODS` | `email`                | Notification channels (comma-separated)   |
+| Secret Name            | Example Value                                      | Description                                 |
+| ---------------------- | -------------------------------------------------- | ------------------------------------------- |
+| `LLM_PROVIDER`         | `claude`, `deepseek`, `gemini`, `grok`, or `openai` | LLM provider to use (default: `claude`)     |
+| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`                              | Your Anthropic API key (if using Claude)    |
+| `DEEPSEEK_API_KEY`     | `sk-xxx...`                                        | Your DeepSeek API key (if using DeepSeek)   |
+| `GOOGLE_API_KEY`       | `AIza...`                                          | Your Google API key (if using Gemini)       |
+| `XAI_API_KEY`          | `xai-...`                                          | Your xAI API key (if using Grok)            |
+| `OPENAI_API_KEY`       | `sk-...`                                           | Your OpenAI API key (if using OpenAI)       |
+| `NOTIFICATION_METHODS` | `email`                                            | Notification channels (comma-separated)     |
 
 #### 📧 Email Secrets (if using email notifications)
 
@@ -274,9 +277,12 @@ The bot requires the following configuration. How you set them depends on your d
 
 | Variable               | Required          | Description                                                                                                                      |
 | ---------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `LLM_PROVIDER`         | Optional          | LLM provider to use: `claude` or `deepseek` (default: `claude`)                                                                  |
-| `ANTHROPIC_API_KEY`    | If using Claude   | Your Anthropic API key                                                                                                           |
-| `DEEPSEEK_API_KEY`     | If using DeepSeek | Your DeepSeek API key                                                                                                            |
+| `LLM_PROVIDER`         | Optional          | LLM provider: `claude`, `deepseek`, `gemini`, `grok`, or `openai` (default: `claude`)                                            |
+| `ANTHROPIC_API_KEY`    | If using Claude   | Your Anthropic API key ([Get it here](https://console.anthropic.com/))                                                           |
+| `DEEPSEEK_API_KEY`     | If using DeepSeek | Your DeepSeek API key ([Get it here](https://platform.deepseek.com/))                                                            |
+| `GOOGLE_API_KEY`       | If using Gemini   | Your Google API key ([Get it here](https://makersuite.google.com/app/apikey))                                                    |
+| `XAI_API_KEY`          | If using Grok     | Your xAI API key ([Get it here](https://x.ai/))                                                                                  |
+| `OPENAI_API_KEY`       | If using OpenAI   | Your OpenAI API key ([Get it here](https://platform.openai.com/api-keys))                                                        |
 | `NOTIFICATION_METHODS` | ✅ Required       | Comma-separated list: `email`, `webhook`, `slack`, `telegram`, `discord`, or any combination (e.g., `email,slack,telegram`)      |
 | `AI_RESPONSE_LANGUAGE` | Optional          | Language code for AI responses (default: `en`). Supports: `zh`, `es`, `fr`, `ja`, `de`, `ko`, `pt`, `ru`, `ar`, `hi`, `it`, `nl` |
 | `ENABLE_WEB_SEARCH`    | Optional          | Enable web search for news (default: `false`)                                                                                    |
@@ -299,7 +305,7 @@ The `config.yaml` file allows you to customize the news digest behavior:
 
 **LLM Configuration**:
 
-- **Provider**: Choose between `claude` or `deepseek`
+- **Provider**: Choose between `claude`, `deepseek`, `gemini`, `grok`, or `openai`
 - **Model**: Optionally specify a specific model version
 
 **News Configuration**:
@@ -320,7 +326,7 @@ The `config.yaml` file allows you to customize the news digest behavior:
 
 ```yaml
 llm:
-  provider: claude # or 'deepseek'
+  provider: claude # options: 'claude', 'deepseek', 'gemini', 'grok', 'openai'
   # model: claude-sonnet-4-5-20250929  # optional
 
 news:
@@ -345,7 +351,7 @@ logging:
 
 ### LLM Provider Configuration
 
-The bot supports multiple LLM providers. Configure in `config.yaml` or via environment variables:
+The bot supports **5 LLM providers**. Configure in `config.yaml` or via environment variables:
 
 #### Claude (Anthropic) - Default
 
@@ -355,14 +361,11 @@ llm:
   model: claude-sonnet-4-5-20250929 # optional, uses default if not set
 ```
 
-**Available Claude Models:**
-
+**Available Models:**
 - `claude-sonnet-4-5-20250929` - Latest Sonnet (default) - Best for most tasks
 - `claude-3-5-sonnet-20241022` - Previous Sonnet version
 
-**Claude Pricing (per million tokens):**
-
-- Claude Sonnet 4.5: $3 input / $15 output
+**Pricing:** $3 input / $15 output per million tokens
 
 #### DeepSeek - Cost-Effective Alternative
 
@@ -372,23 +375,63 @@ llm:
   model: deepseek-chat # optional, uses default if not set
 ```
 
-**Available DeepSeek Models:**
-
+**Available Models:**
 - `deepseek-chat` - General chat model (default)
 - `deepseek-reasoner` - Enhanced reasoning model
 
-**DeepSeek Pricing:**
+**Pricing:** Much lower cost than Claude, excellent for budget-conscious users
 
-- Much lower cost than Claude
-- Better Chinese language support
-- Good quality for news summarization
+#### Google Gemini - Fast & Efficient
+
+```yaml
+llm:
+  provider: gemini
+  model: gemini-2.0-flash-exp # optional, uses default if not set
+```
+
+**Available Models:**
+- `gemini-2.0-flash-exp` - Latest Gemini 2.0 Flash (default)
+- `gemini-pro` - Gemini Pro model
+
+**Pricing:** Free tier available, very cost-effective for production
+
+#### xAI Grok - Advanced Reasoning
+
+```yaml
+llm:
+  provider: grok
+  model: grok-beta # optional, uses default if not set
+```
+
+**Available Models:**
+- `grok-beta` - Latest Grok model (default)
+
+**Pricing:** Competitive pricing with advanced reasoning capabilities
+
+#### OpenAI - Industry Standard
+
+```yaml
+llm:
+  provider: openai
+  model: gpt-4o # optional, uses default if not set
+```
+
+**Available Models:**
+- `gpt-4o` - GPT-4 Optimized (default) - Fast and capable
+- `gpt-4-turbo` - GPT-4 Turbo - More powerful
+- `gpt-3.5-turbo` - GPT-3.5 - Most cost-effective
+
+**Pricing:** $2.50 input / $10 output per million tokens (GPT-4o)
 
 #### Choosing a Provider
 
-| Provider     | Pros                        | Cons                   | Best For                          |
-| ------------ | --------------------------- | ---------------------- | --------------------------------- |
-| **Claude**   | Excellent quality, reliable | Higher cost            | Production, high-quality output   |
-| **DeepSeek** | Low cost, good Chinese      | Slightly lower quality | Budget-conscious, Chinese content |
+| Provider     | Pros                            | Best For                          |
+| ------------ | ------------------------------- | --------------------------------- |
+| **Claude**   | Excellent quality, reliable     | Production, high-quality output   |
+| **DeepSeek** | Very low cost, good Chinese     | Budget-conscious, Chinese content |
+| **Gemini**   | Fast, free tier available       | High-volume, cost optimization    |
+| **Grok**     | Advanced reasoning, real-time   | Complex analysis, up-to-date info |
+| **OpenAI**   | Industry standard, well-tested  | General purpose, proven quality   |
 
 ### Language Configuration
 

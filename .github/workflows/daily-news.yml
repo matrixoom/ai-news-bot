@@ -33,24 +33,20 @@ jobs:
           # Configure at: Settings → Secrets and variables → Actions → Repository secrets
 
           # ============================================
-          # LLM Provider Configuration (Choose One)
+          # LLM Provider Configuration
           # ============================================
 
-          # Option 1: Use DeepSeek (Recommended - 90% cheaper, good quality)
-          # Set these secrets:
-          #   LLM_PROVIDER = deepseek
-          #   DEEPSEEK_API_KEY = sk-your-deepseek-key
-
-          # Option 2: Use Claude (Default - highest quality)
-          # Set these secrets:
-          #   LLM_PROVIDER = claude (or leave unset for backward compatibility)
-          #   ANTHROPIC_API_KEY = sk-ant-your-claude-key
-
+          # Choose your provider: claude, deepseek, gemini, grok, or openai
+          # Set LLM_PROVIDER secret to your choice (default: claude)
+          
           LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
 
           # API Keys (provide the one you're using)
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
           # Optional: Specify a model (if not set, uses provider's default)
           # Examples: claude-sonnet-4-5-20250929, deepseek-chat, deepseek-reasoner

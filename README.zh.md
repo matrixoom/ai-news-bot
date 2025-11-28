@@ -36,9 +36,9 @@
 
 ## 功能特点
 
-- **多 LLM 提供商支持**：可选择 Claude (Anthropic) 或 DeepSeek 进行新闻生成
+- **多 LLM 提供商支持**：可选择 Claude、DeepSeek、Gemini、Grok 或 OpenAI 进行新闻生成
 - **实时新闻获取**：从 RSS 源获取真实新闻，确保内容准确、及时
-- **AI 驱动的新闻生成**：使用 Claude Sonnet 4.5 或 DeepSeek 生成全面的 AI 新闻摘要
+- **AI 驱动的新闻生成**：使用您偏好的 LLM 提供商生成全面的 AI 新闻摘要
 - **网络搜索集成**：可选的 DuckDuckGo 网络搜索，获取更多新闻来源
 - **精美的邮件格式**：自动将 AI 内容转换为精美的 HTML 邮件 - 无 markdown，只有简洁专业的设计
 - **可定制的提示词**：9 个预设模板（综合、研究、商业、技术等）或创建自定义模板
@@ -87,12 +87,15 @@ cd ai-news-bot
 
 #### ✅ 必需的 Secrets
 
-| Secret 名称            | 示例值                 | 描述                                       |
-| ---------------------- | ---------------------- | ------------------------------------------ |
-| `LLM_PROVIDER`         | `claude` 或 `deepseek` | LLM 提供商（默认：`claude`）               |
-| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`  | 您的 Anthropic API 密钥（使用 Claude 时）  |
-| `DEEPSEEK_API_KEY`     | `sk-xxx...`            | 您的 DeepSeek API 密钥（使用 DeepSeek 时） |
-| `NOTIFICATION_METHODS` | `email`                | 通知渠道（逗号分隔）                       |
+| Secret 名称            | 示例值                                               | 描述                                       |
+| ---------------------- | ---------------------------------------------------- | ------------------------------------------ |
+| `LLM_PROVIDER`         | `claude`、`deepseek`、`gemini`、`grok` 或 `openai`   | LLM 提供商（默认：`claude`）               |
+| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`                                | 您的 Anthropic API 密钥（使用 Claude 时）  |
+| `DEEPSEEK_API_KEY`     | `sk-xxx...`                                          | 您的 DeepSeek API 密钥（使用 DeepSeek 时） |
+| `GOOGLE_API_KEY`       | `AIza...`                                            | 您的 Google API 密钥（使用 Gemini 时）     |
+| `XAI_API_KEY`          | `xai-...`                                            | 您的 xAI API 密钥（使用 Grok 时）          |
+| `OPENAI_API_KEY`       | `sk-...`                                             | 您的 OpenAI API 密钥（使用 OpenAI 时）     |
+| `NOTIFICATION_METHODS` | `email`                                              | 通知渠道（逗号分隔）                       |
 
 #### 📧 邮件 Secrets（如果使用邮件通知）
 
@@ -273,9 +276,12 @@ python main.py
 
 | 变量                   | 是否必需             | 描述                                                                                                          |
 | ---------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `LLM_PROVIDER`         | 可选                 | LLM 提供商：`claude` 或 `deepseek`（默认：`claude`）                                                          |
-| `ANTHROPIC_API_KEY`    | 使用 Claude 时需要   | 您的 Anthropic API 密钥                                                                                       |
-| `DEEPSEEK_API_KEY`     | 使用 DeepSeek 时需要 | 您的 DeepSeek API 密钥                                                                                        |
+| `LLM_PROVIDER`         | 可选                 | LLM 提供商：`claude`、`deepseek`、`gemini`、`grok` 或 `openai`（默认：`claude`）                             |
+| `ANTHROPIC_API_KEY`    | 使用 Claude 时需要   | 您的 Anthropic API 密钥（[获取](https://console.anthropic.com/)）                                             |
+| `DEEPSEEK_API_KEY`     | 使用 DeepSeek 时需要 | 您的 DeepSeek API 密钥（[获取](https://platform.deepseek.com/)）                                              |
+| `GOOGLE_API_KEY`       | 使用 Gemini 时需要   | 您的 Google API 密钥（[获取](https://makersuite.google.com/app/apikey)）                                      |
+| `XAI_API_KEY`          | 使用 Grok 时需要     | 您的 xAI API 密钥（[获取](https://x.ai/)）                                                                    |
+| `OPENAI_API_KEY`       | 使用 OpenAI 时需要   | 您的 OpenAI API 密钥（[获取](https://platform.openai.com/api-keys)）                                          |
 | `NOTIFICATION_METHODS` | ✅ 必需              | 逗号分隔的列表：`email`、`webhook` 或 `email,webhook`                                                         |
 | `AI_RESPONSE_LANGUAGE` | 可选                 | AI 响应的语言代码（默认：`en`）。支持：`zh`、`es`、`fr`、`ja`、`de`、`ko`、`pt`、`ru`、`ar`、`hi`、`it`、`nl` |
 | `ENABLE_WEB_SEARCH`    | 可选                 | 启用网络搜索获取新闻（默认：`false`）                                                                         |
@@ -290,7 +296,7 @@ python main.py
 
 **LLM 配置**：
 
-- **Provider（提供商）**：选择 `claude` 或 `deepseek`
+- **Provider（提供商）**：选择 `claude`、`deepseek`、`gemini`、`grok` 或 `openai`
 - **Model（模型）**：可选指定特定模型版本
 
 **新闻配置**：
@@ -311,7 +317,7 @@ python main.py
 
 ```yaml
 llm:
-  provider: claude # 或 'deepseek'
+  provider: claude # 选项：'claude'、'deepseek'、'gemini'、'grok'、'openai'
   # model: claude-sonnet-4-5-20250929  # 可选
 
 news:
@@ -336,7 +342,7 @@ logging:
 
 ### LLM 提供商配置
 
-机器人支持多个 LLM 提供商。在 `config.yaml` 或环境变量中配置：
+机器人支持 **5 个 LLM 提供商**。在 `config.yaml` 或环境变量中配置：
 
 #### Claude (Anthropic) - 默认
 
@@ -346,14 +352,11 @@ llm:
   model: claude-sonnet-4-5-20250929 # 可选，未设置则使用默认值
 ```
 
-**可用的 Claude 模型：**
-
+**可用模型：**
 - `claude-sonnet-4-5-20250929` - 最新 Sonnet（默认）- 最适合大多数任务
 - `claude-3-5-sonnet-20241022` - 上一版本 Sonnet
 
-**Claude 定价（每百万 token）：**
-
-- Claude Sonnet 4.5：$3 输入 / $15 输出
+**定价：** $3 输入 / $15 输出 每百万 token
 
 #### DeepSeek - 高性价比替代方案
 
@@ -363,23 +366,63 @@ llm:
   model: deepseek-chat # 可选，未设置则使用默认值
 ```
 
-**可用的 DeepSeek 模型：**
-
+**可用模型：**
 - `deepseek-chat` - 通用聊天模型（默认）
 - `deepseek-reasoner` - 增强推理模型
 
-**DeepSeek 定价：**
+**定价：** 成本远低于 Claude，预算友好的优选
 
-- 成本远低于 Claude
-- 更好的中文语言支持
-- 新闻摘要质量良好
+#### Google Gemini - 快速高效
+
+```yaml
+llm:
+  provider: gemini
+  model: gemini-2.0-flash-exp # 可选，未设置则使用默认值
+```
+
+**可用模型：**
+- `gemini-2.0-flash-exp` - 最新 Gemini 2.0 Flash（默认）
+- `gemini-pro` - Gemini Pro 模型
+
+**定价：** 提供免费额度，生产环境性价比高
+
+#### xAI Grok - 高级推理
+
+```yaml
+llm:
+  provider: grok
+  model: grok-beta # 可选，未设置则使用默认值
+```
+
+**可用模型：**
+- `grok-beta` - 最新 Grok 模型（默认）
+
+**定价：** 价格有竞争力，具有高级推理能力
+
+#### OpenAI - 行业标准
+
+```yaml
+llm:
+  provider: openai
+  model: gpt-4o # 可选，未设置则使用默认值
+```
+
+**可用模型：**
+- `gpt-4o` - GPT-4 优化版（默认）- 快速且强大
+- `gpt-4-turbo` - GPT-4 Turbo - 更强大
+- `gpt-3.5-turbo` - GPT-3.5 - 最具性价比
+
+**定价：** $2.50 输入 / $10 输出 每百万 token（GPT-4o）
 
 #### 选择提供商
 
-| 提供商       | 优点           | 缺点     | 最适合               |
-| ------------ | -------------- | -------- | -------------------- |
-| **Claude**   | 质量优秀，可靠 | 成本较高 | 生产环境，高质量输出 |
-| **DeepSeek** | 成本低，中文好 | 质量略低 | 预算有限，中文内容   |
+| 提供商       | 优点                    | 最适合               |
+| ------------ | ----------------------- | -------------------- |
+| **Claude**   | 质量优秀，可靠          | 生产环境，高质量输出 |
+| **DeepSeek** | 成本极低，中文支持好    | 预算有限，中文内容   |
+| **Gemini**   | 快速，有免费额度        | 大批量，成本优化     |
+| **Grok**     | 高级推理，实时数据      | 复杂分析，最新信息   |
+| **OpenAI**   | 行业标准，经过验证      | 通用目的，可靠质量   |
 
 ### 语言配置
 
