@@ -4,7 +4,7 @@ Web Search Tool for fetching real-time news
 import os
 import requests
 from typing import List, Dict, Optional
-from .logger import setup_logger
+from ..logger import setup_logger
 
 
 logger = setup_logger(__name__)

@@ -5,7 +5,7 @@ import requests
 from typing import List, Dict, Optional
 from datetime import datetime
 import xml.etree.ElementTree as ET
-from .logger import setup_logger
+from ..logger import setup_logger
 
 
 logger = setup_logger(__name__)

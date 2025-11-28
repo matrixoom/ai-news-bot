@@ -3,11 +3,11 @@ AI News Generator using configurable LLM providers
 """
 import os
 from typing import Dict, List, Optional
-from .logger import setup_logger
-from .config import LANGUAGE_NAMES
+from ..logger import setup_logger
+from ..config import LANGUAGE_NAMES
 from .web_search import WebSearchTool, get_search_tool_definition
-from .news_fetcher import NewsFetcher
-from .llm_providers import get_llm_provider, BaseLLMProvider
+from .fetcher import NewsFetcher
+from ..llm_providers import get_llm_provider, BaseLLMProvider
 
 
 logger = setup_logger(__name__)
@@ -138,7 +138,7 @@ class NewsGenerator:
             
             # Convert tools to appropriate format if using DeepSeek
             if self.provider.provider_name == "deepseek":
-                from .llm_providers.deepseek_provider import DeepSeekProvider
+                from ..llm_providers.deepseek_provider import DeepSeekProvider
                 if isinstance(self.provider, DeepSeekProvider):
                     tools = self.provider.convert_claude_tools_to_openai_format(tools)
             

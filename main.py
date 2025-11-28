@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from src.config import Config
 from src.logger import setup_logger
-from src.news_generator import NewsGenerator
+from src.news import NewsGenerator
 from src.notifiers import (
     EmailNotifier,
     WebhookNotifier,
