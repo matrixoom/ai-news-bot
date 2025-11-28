@@ -1,776 +1,976 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="AI News Bot - Your AI-Powered News Assistant. Stay informed with automated, personalized AI news digests delivered daily via email, Slack, or Telegram.">
-    <meta name="keywords" content="AI news, automation, Claude, DeepSeek, Gemini, Grok, OpenAI, GPT-4, newsletter, RSS feeds, email digest, AI assistant">
-    <meta name="author" content="giftedunicorn">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="AI News Bot - Your AI-Powered News Assistant. Stay informed with automated, personalized AI news digests delivered daily via email, Slack, or Telegram."
+    />
+    <meta
+      name="keywords"
+      content="AI news, automation, Claude, DeepSeek, Gemini, Grok, OpenAI, GPT-4, newsletter, RSS feeds, email digest, AI assistant"
+    />
+    <meta name="author" content="giftedunicorn" />
 
     <!-- Open Graph Meta Tags -->
-    <meta property="og:title" content="AI News Bot - Your AI-Powered News Assistant">
-    <meta property="og:description" content="Automated daily AI news digests. Choose from 5 LLM providers: Claude, DeepSeek, Gemini, Grok, or OpenAI. Stay informed without information overload.">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://giftedunicorn.github.io/ai-news-bot/">
+    <meta
+      property="og:title"
+      content="AI News Bot - Your AI-Powered News Assistant"
+    />
+    <meta
+      property="og:description"
+      content="Automated daily AI news digests. Choose from 5 LLM providers: Claude, DeepSeek, Gemini, Grok, or OpenAI. Stay informed without information overload."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:url"
+      content="https://giftedunicorn.github.io/ai-news-bot/"
+    />
 
     <!-- Twitter Card Meta Tags -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="AI News Bot - Your AI-Powered News Assistant">
-    <meta name="twitter:description" content="Automated daily AI news digests. Choose from 5 LLM providers: Claude, DeepSeek, Gemini, Grok, or OpenAI">
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="AI News Bot - Your AI-Powered News Assistant"
+    />
+    <meta
+      name="twitter:description"
+      content="Automated daily AI news digests. Choose from 5 LLM providers: Claude, DeepSeek, Gemini, Grok, or OpenAI"
+    />
 
     <title>AI News Bot - Your AI-Powered News Assistant</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+      }
 
-        /* Language Switcher */
-        .language-switcher {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            max-height: 80vh;
-            overflow-y: auto;
-        }
+      /* Language Switcher */
+      .language-switcher {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        background: white;
+        padding: 10px 15px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        max-height: 80vh;
+        overflow-y: auto;
+      }
 
-        .language-switcher a {
-            text-decoration: none;
-            color: #667eea;
-            font-weight: 600;
-            margin: 0 8px;
-            transition: color 0.3s ease;
-            white-space: nowrap;
-        }
+      .language-switcher a {
+        text-decoration: none;
+        color: #667eea;
+        font-weight: 600;
+        margin: 0 8px;
+        transition: color 0.3s ease;
+        white-space: nowrap;
+      }
 
-        .language-switcher a:hover {
-            color: #764ba2;
-        }
+      .language-switcher a:hover {
+        color: #764ba2;
+      }
 
-        .language-switcher a.active {
-            color: #764ba2;
-            text-decoration: underline;
-        }
+      .language-switcher a.active {
+        color: #764ba2;
+        text-decoration: underline;
+      }
 
-        /* Hero Section */
-        header {
-            padding: 80px 0 60px;
-            text-align: center;
-            color: white;
-        }
+      /* Hero Section */
+      header {
+        padding: 80px 0 60px;
+        text-align: center;
+        color: white;
+      }
 
+      header h1 {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        font-weight: 700;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        animation: fadeInDown 0.8s ease;
+      }
+
+      .hero-subtitle {
+        font-size: 1.6rem;
+        opacity: 0.95;
+        margin-bottom: 15px;
+        font-weight: 500;
+        animation: fadeIn 1s ease;
+      }
+
+      .hero-description {
+        font-size: 1.2rem;
+        opacity: 0.9;
+        margin-bottom: 40px;
+        max-width: 700px;
+        margin-left: auto;
+        margin-right: auto;
+        animation: fadeIn 1.2s ease;
+      }
+
+      .cta-buttons {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 30px;
+        animation: fadeInUp 1s ease;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 16px 40px;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      }
+
+      .btn-primary {
+        background: white;
+        color: #667eea;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+      }
+
+      .btn-secondary {
+        background: transparent;
+        color: white;
+        border: 2px solid white;
+      }
+
+      .btn-secondary:hover {
+        background: white;
+        color: #667eea;
+        transform: translateY(-3px);
+      }
+
+      /* Main Content */
+      main {
+        background: white;
+        border-radius: 20px 20px 0 0;
+        margin-top: 40px;
+        padding: 80px 0;
+      }
+
+      .section {
+        margin: 100px 0;
+      }
+
+      .section-title {
+        text-align: center;
+        font-size: 2.8rem;
+        margin-bottom: 20px;
+        color: #333;
+        font-weight: 700;
+      }
+
+      .section-subtitle {
+        text-align: center;
+        font-size: 1.2rem;
+        color: #666;
+        margin-bottom: 60px;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      /* Problem-Solution Section */
+      .problem-solution {
+        background: #f8f9fa;
+        padding: 60px 40px;
+        border-radius: 20px;
+        margin-bottom: 80px;
+      }
+
+      .problem-solution-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 60px;
+        margin-top: 40px;
+      }
+
+      .problem-box,
+      .solution-box {
+        padding: 40px;
+        border-radius: 15px;
+      }
+
+      .problem-box {
+        background: #fff3cd;
+        border-left: 5px solid #ffc107;
+      }
+
+      .solution-box {
+        background: #d1f2eb;
+        border-left: 5px solid #28a745;
+      }
+
+      .problem-box h3,
+      .solution-box h3 {
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .problem-box ul,
+      .solution-box ul {
+        list-style: none;
+        padding: 0;
+      }
+
+      .problem-box li,
+      .solution-box li {
+        padding: 12px 0;
+        padding-left: 30px;
+        position: relative;
+        font-size: 1.1rem;
+      }
+
+      .problem-box li:before {
+        content: "❌";
+        position: absolute;
+        left: 0;
+      }
+
+      .solution-box li:before {
+        content: "✅";
+        position: absolute;
+        left: 0;
+      }
+
+      /* Stats Section */
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 40px;
+        margin: 60px 0;
+        text-align: center;
+      }
+
+      .stat-item {
+        padding: 30px;
+        background: #f8f9fa;
+        border-radius: 15px;
+        transition: transform 0.3s ease;
+      }
+
+      .stat-item:hover {
+        transform: translateY(-5px);
+      }
+
+      .stat-number {
+        font-size: 3.5rem;
+        font-weight: 700;
+        color: #667eea;
+        display: block;
+        margin-bottom: 10px;
+      }
+
+      .stat-label {
+        font-size: 1.1rem;
+        color: #666;
+      }
+
+      /* Features Grid */
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 35px;
+        margin: 60px 0;
+      }
+
+      .feature-card {
+        background: #f8f9fa;
+        padding: 35px;
+        border-radius: 15px;
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+      }
+
+      .feature-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+        border-color: #667eea;
+      }
+
+      .feature-icon {
+        font-size: 3.5rem;
+        margin-bottom: 20px;
+        display: block;
+      }
+
+      .feature-card h3 {
+        font-size: 1.6rem;
+        margin-bottom: 15px;
+        color: #667eea;
+        font-weight: 600;
+      }
+
+      .feature-card p {
+        color: #666;
+        line-height: 1.8;
+        font-size: 1.05rem;
+      }
+
+      /* Use Cases */
+      .use-cases {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 30px;
+        margin: 50px 0;
+      }
+
+      .use-case-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 35px;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+
+      .use-case-card h3 {
+        font-size: 1.5rem;
+        margin-bottom: 15px;
+      }
+
+      .use-case-card p {
+        opacity: 0.95;
+        line-height: 1.7;
+      }
+
+      /* Providers */
+      .providers {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 25px;
+        margin: 40px auto;
+        max-width: 1200px;
+      }
+
+      @media (min-width: 768px) {
+        .providers {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .providers {
+          grid-template-columns: repeat(5, 1fr);
+        }
+      }
+
+      .provider-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 35px 20px;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .provider-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+      }
+
+      .provider-card h3 {
+        font-size: 1.3rem;
+        margin-bottom: 10px;
+        font-weight: 700;
+      }
+
+      .provider-card p {
+        font-size: 0.95rem;
+        opacity: 0.95;
+        line-height: 1.5;
+      }
+
+      /* Languages */
+      .languages {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+        margin: 40px 0;
+      }
+
+      .language-tag {
+        background: #e9ecef;
+        padding: 12px 24px;
+        border-radius: 25px;
+        font-weight: 600;
+        color: #667eea;
+        transition: all 0.3s ease;
+        font-size: 1rem;
+      }
+
+      .language-tag:hover {
+        background: #667eea;
+        color: white;
+        transform: scale(1.08);
+      }
+
+      /* Code Block */
+      .code-block {
+        background: #2d2d2d;
+        color: #f8f8f2;
+        padding: 30px;
+        border-radius: 12px;
+        overflow-x: auto;
+        margin: 30px 0;
+        font-family: "Monaco", "Menlo", "Consolas", monospace;
+        font-size: 0.95rem;
+        line-height: 1.7;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      }
+
+      /* CTA Section */
+      .cta-section {
+        text-align: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 80px 60px;
+        border-radius: 20px;
+        color: white;
+        margin: 80px 0;
+      }
+
+      .cta-section h2 {
+        font-size: 3rem;
+        margin-bottom: 20px;
+      }
+
+      .cta-section p {
+        font-size: 1.3rem;
+        margin-bottom: 40px;
+        opacity: 0.95;
+      }
+
+      /* Footer */
+      footer {
+        background: #2d2d2d;
+        color: white;
+        padding: 50px 0;
+        text-align: center;
+      }
+
+      footer a {
+        color: #667eea;
+        text-decoration: none;
+        transition: color 0.3s ease;
+      }
+
+      footer a:hover {
+        color: #8b9aff;
+        text-decoration: underline;
+      }
+
+      .highlight {
+        background: linear-gradient(120deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      /* Animations */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes fadeInDown {
+        from {
+          opacity: 0;
+          transform: translateY(-30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Responsive Design */
+      @media (max-width: 768px) {
         header h1 {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            font-weight: 700;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-            animation: fadeInDown 0.8s ease;
+          font-size: 2.5rem;
         }
 
         .hero-subtitle {
-            font-size: 1.6rem;
-            opacity: 0.95;
-            margin-bottom: 15px;
-            font-weight: 500;
-            animation: fadeIn 1s ease;
+          font-size: 1.3rem;
         }
 
         .hero-description {
-            font-size: 1.2rem;
-            opacity: 0.9;
-            margin-bottom: 40px;
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
-            animation: fadeIn 1.2s ease;
+          font-size: 1rem;
         }
 
-        .cta-buttons {
-            display: flex;
-            gap: 20px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 30px;
-            animation: fadeInUp 1s ease;
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 16px 40px;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        }
-
-        .btn-primary {
-            background: white;
-            color: #667eea;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-        }
-
-        .btn-secondary {
-            background: transparent;
-            color: white;
-            border: 2px solid white;
-        }
-
-        .btn-secondary:hover {
-            background: white;
-            color: #667eea;
-            transform: translateY(-3px);
-        }
-
-        /* Main Content */
-        main {
-            background: white;
-            border-radius: 20px 20px 0 0;
-            margin-top: 40px;
-            padding: 80px 0;
-        }
-
-        .section {
-            margin: 100px 0;
+        .features {
+          grid-template-columns: 1fr;
         }
 
         .section-title {
-            text-align: center;
-            font-size: 2.8rem;
-            margin-bottom: 20px;
-            color: #333;
-            font-weight: 700;
-        }
-
-        .section-subtitle {
-            text-align: center;
-            font-size: 1.2rem;
-            color: #666;
-            margin-bottom: 60px;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        /* Problem-Solution Section */
-        .problem-solution {
-            background: #f8f9fa;
-            padding: 60px 40px;
-            border-radius: 20px;
-            margin-bottom: 80px;
+          font-size: 2rem;
         }
 
         .problem-solution-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 60px;
-            margin-top: 40px;
+          grid-template-columns: 1fr;
+          gap: 30px;
         }
 
-        .problem-box, .solution-box {
-            padding: 40px;
-            border-radius: 15px;
+        .cta-buttons {
+          flex-direction: column;
+          align-items: stretch;
         }
 
-        .problem-box {
-            background: #fff3cd;
-            border-left: 5px solid #ffc107;
-        }
-
-        .solution-box {
-            background: #d1f2eb;
-            border-left: 5px solid #28a745;
-        }
-
-        .problem-box h3, .solution-box h3 {
-            font-size: 1.8rem;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .problem-box ul, .solution-box ul {
-            list-style: none;
-            padding: 0;
-        }
-
-        .problem-box li, .solution-box li {
-            padding: 12px 0;
-            padding-left: 30px;
-            position: relative;
-            font-size: 1.1rem;
-        }
-
-        .problem-box li:before {
-            content: "❌";
-            position: absolute;
-            left: 0;
-        }
-
-        .solution-box li:before {
-            content: "✅";
-            position: absolute;
-            left: 0;
-        }
-
-        /* Stats Section */
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 40px;
-            margin: 60px 0;
-            text-align: center;
-        }
-
-        .stat-item {
-            padding: 30px;
-            background: #f8f9fa;
-            border-radius: 15px;
-            transition: transform 0.3s ease;
-        }
-
-        .stat-item:hover {
-            transform: translateY(-5px);
-        }
-
-        .stat-number {
-            font-size: 3.5rem;
-            font-weight: 700;
-            color: #667eea;
-            display: block;
-            margin-bottom: 10px;
-        }
-
-        .stat-label {
-            font-size: 1.1rem;
-            color: #666;
-        }
-
-        /* Features Grid */
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 35px;
-            margin: 60px 0;
-        }
-
-        .feature-card {
-            background: #f8f9fa;
-            padding: 35px;
-            border-radius: 15px;
-            transition: all 0.3s ease;
-            border: 2px solid transparent;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
-            border-color: #667eea;
-        }
-
-        .feature-icon {
-            font-size: 3.5rem;
-            margin-bottom: 20px;
-            display: block;
-        }
-
-        .feature-card h3 {
-            font-size: 1.6rem;
-            margin-bottom: 15px;
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        .feature-card p {
-            color: #666;
-            line-height: 1.8;
-            font-size: 1.05rem;
-        }
-
-        /* Use Cases */
-        .use-cases {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 30px;
-            margin: 50px 0;
-        }
-
-        .use-case-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 35px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-
-        .use-case-card h3 {
-            font-size: 1.5rem;
-            margin-bottom: 15px;
-        }
-
-        .use-case-card p {
-            opacity: 0.95;
-            line-height: 1.7;
-        }
-
-        /* Providers */
-        .providers {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 25px;
-            margin: 40px auto;
-            max-width: 1200px;
-        }
-
-        @media (min-width: 768px) {
-            .providers {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-
-        @media (min-width: 1024px) {
-            .providers {
-                grid-template-columns: repeat(5, 1fr);
-            }
-        }
-
-        .provider-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 35px 20px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .provider-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
-        }
-
-        .provider-card h3 {
-            font-size: 1.3rem;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-
-        .provider-card p {
-            font-size: 0.95rem;
-            opacity: 0.95;
-            line-height: 1.5;
-        }
-
-        /* Languages */
-        .languages {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            justify-content: center;
-            margin: 40px 0;
-        }
-
-        .language-tag {
-            background: #e9ecef;
-            padding: 12px 24px;
-            border-radius: 25px;
-            font-weight: 600;
-            color: #667eea;
-            transition: all 0.3s ease;
-            font-size: 1rem;
-        }
-
-        .language-tag:hover {
-            background: #667eea;
-            color: white;
-            transform: scale(1.08);
-        }
-
-        /* Code Block */
-        .code-block {
-            background: #2d2d2d;
-            color: #f8f8f2;
-            padding: 30px;
-            border-radius: 12px;
-            overflow-x: auto;
-            margin: 30px 0;
-            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-            font-size: 0.95rem;
-            line-height: 1.7;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-
-        /* CTA Section */
-        .cta-section {
-            text-align: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 80px 60px;
-            border-radius: 20px;
-            color: white;
-            margin: 80px 0;
+        .btn {
+          width: 100%;
         }
 
         .cta-section h2 {
-            font-size: 3rem;
-            margin-bottom: 20px;
+          font-size: 2rem;
         }
-
-        .cta-section p {
-            font-size: 1.3rem;
-            margin-bottom: 40px;
-            opacity: 0.95;
-        }
-
-        /* Footer */
-        footer {
-            background: #2d2d2d;
-            color: white;
-            padding: 50px 0;
-            text-align: center;
-        }
-
-        footer a {
-            color: #667eea;
-            text-decoration: none;
-            transition: color 0.3s ease;
-        }
-
-        footer a:hover {
-            color: #8b9aff;
-            text-decoration: underline;
-        }
-
-        .highlight {
-            background: linear-gradient(120deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        /* Animations */
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            header h1 {
-                font-size: 2.5rem;
-            }
-
-            .hero-subtitle {
-                font-size: 1.3rem;
-            }
-
-            .hero-description {
-                font-size: 1rem;
-            }
-
-            .features {
-                grid-template-columns: 1fr;
-            }
-
-            .section-title {
-                font-size: 2rem;
-            }
-
-            .problem-solution-grid {
-                grid-template-columns: 1fr;
-                gap: 30px;
-            }
-
-            .cta-buttons {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .btn {
-                width: 100%;
-            }
-
-            .cta-section h2 {
-                font-size: 2rem;
-            }
-        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <!-- Language Switcher -->
     <div class="language-switcher">
-        <a href="index.html" class="active">🇬🇧 English</a>
-        <a href="zh/index.html">🇨🇳 中文</a>
-        <a href="es/index.html">🇪🇸 Español</a>
-        <a href="fr/index.html">🇫🇷 Français</a>
-        <a href="ja/index.html">🇯🇵 日本語</a>
-        <a href="de/index.html">🇩🇪 Deutsch</a>
-        <a href="ko/index.html">🇰🇷 한국어</a>
-        <a href="pt/index.html">🇵🇹 Português</a>
-        <a href="ru/index.html">🇷🇺 Русский</a>
-        <a href="it/index.html">🇮🇹 Italiano</a>
-        <a href="nl/index.html">🇳🇱 Nederlands</a>
-        <a href="ar/index.html">🇸🇦 العربية</a>
+      <a href="index.html" class="active">🇬🇧 English</a>
+      <a href="zh/index.html">🇨🇳 中文</a>
+      <a href="es/index.html">🇪🇸 Español</a>
+      <a href="fr/index.html">🇫🇷 Français</a>
+      <a href="ja/index.html">🇯🇵 日本語</a>
+      <a href="de/index.html">🇩🇪 Deutsch</a>
+      <a href="ko/index.html">🇰🇷 한국어</a>
+      <a href="pt/index.html">🇵🇹 Português</a>
+      <a href="ru/index.html">🇷🇺 Русский</a>
+      <a href="it/index.html">🇮🇹 Italiano</a>
+      <a href="nl/index.html">🇳🇱 Nederlands</a>
+      <a href="ar/index.html">🇸🇦 العربية</a>
     </div>
 
     <header>
-        <div class="container">
-            <h1>AI News Bot</h1>
-            <p class="hero-subtitle">🤖 Your AI-Powered News Assistant</p>
-            <p class="hero-description">Stay informed with automated, personalized AI news digests delivered daily. No more information overload, just the news that matters to you.</p>
-            <div class="cta-buttons">
-                <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">Get Started Free</a>
-                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" class="btn btn-secondary">View Documentation</a>
-            </div>
+      <div class="container">
+        <h1>AI News Bot</h1>
+        <p class="hero-subtitle">🤖 Your AI-Powered News Assistant</p>
+        <p class="hero-description">
+          Stay informed with automated, personalized AI news digests delivered
+          daily. No more information overload, just the news that matters to
+          you.
+        </p>
+        <div class="cta-buttons">
+          <a
+            href="https://github.com/giftedunicorn/ai-news-bot"
+            class="btn btn-primary"
+            >Get Started Free</a
+          >
+          <a
+            href="https://github.com/giftedunicorn/ai-news-bot#readme"
+            class="btn btn-secondary"
+            >View Documentation</a
+          >
         </div>
+      </div>
     </header>
 
     <main>
-        <div class="container">
-            <!-- Problem-Solution Section -->
-            <section class="problem-solution">
-                <h2 class="section-title">Stop Drowning in Information</h2>
-                <div class="problem-solution-grid">
-                    <div class="problem-box">
-                        <h3>😫 The Problem</h3>
-                        <ul>
-                            <li>Spending hours browsing news sites</li>
-                            <li>Missing important AI developments</li>
-                            <li>Information overload and fatigue</li>
-                            <li>No time to stay up-to-date</li>
-                            <li>Scattered news across platforms</li>
-                        </ul>
-                    </div>
-                    <div class="solution-box">
-                        <h3>✨ The Solution</h3>
-                        <ul>
-                            <li>Automated daily digests delivered to you</li>
-                            <li>Curated AI news from trusted sources</li>
-                            <li>Personalized to your interests</li>
-                            <li>Set it once, stay informed forever</li>
-                            <li>All in one beautiful email</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
+      <div class="container">
+        <!-- Problem-Solution Section -->
+        <section class="problem-solution">
+          <h2 class="section-title">Stop Drowning in Information</h2>
+          <div class="problem-solution-grid">
+            <div class="problem-box">
+              <h3>😫 The Problem</h3>
+              <ul>
+                <li>Spending hours browsing news sites</li>
+                <li>Missing important AI developments</li>
+                <li>Information overload and fatigue</li>
+                <li>No time to stay up-to-date</li>
+                <li>Scattered news across platforms</li>
+              </ul>
+            </div>
+            <div class="solution-box">
+              <h3>✨ The Solution</h3>
+              <ul>
+                <li>Automated daily digests delivered to you</li>
+                <li>Curated AI news from trusted sources</li>
+                <li>Personalized to your interests</li>
+                <li>Set it once, stay informed forever</li>
+                <li>All in one beautiful email</li>
+              </ul>
+            </div>
+          </div>
+        </section>
 
-            <!-- Stats Section -->
-            <section class="section">
-                <h2 class="section-title">Trusted by Developers Worldwide</h2>
-                <div class="stats">
-                    <div class="stat-item">
-                        <span class="stat-number">5 min</span>
-                        <span class="stat-label">Setup Time</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">13+</span>
-                        <span class="stat-label">Languages</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">100%</span>
-                        <span class="stat-label">Automated</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">$0</span>
-                        <span class="stat-label">Open Source</span>
-                    </div>
-                </div>
-            </section>
+        <!-- Stats Section -->
+        <section class="section">
+          <h2 class="section-title">Trusted by Developers Worldwide</h2>
+          <div class="stats">
+            <div class="stat-item">
+              <span class="stat-number">5 min</span>
+              <span class="stat-label">Setup Time</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">13+</span>
+              <span class="stat-label">Languages</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">100%</span>
+              <span class="stat-label">Automated</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">$0</span>
+              <span class="stat-label">Open Source</span>
+            </div>
+          </div>
+        </section>
 
-            <!-- Features Section -->
-            <section class="section">
-                <h2 class="section-title">Powerful Features</h2>
-                <p class="section-subtitle">Everything you need to stay informed about AI developments, automated and personalized.</p>
-                <div class="features">
-                    <div class="feature-card">
-                        <span class="feature-icon">🤖</span>
-                        <h3>5 AI Providers</h3>
-                        <p>Choose from Claude, DeepSeek, Gemini, Grok, or OpenAI. Best quality, lowest cost, or fastest speed—you decide.</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">📰</span>
-                        <h3>Real RSS Feeds</h3>
-                        <p>Pulls actual news from TechCrunch, Hacker News, MIT Tech Review, 36Kr, and more. Not fake data—real, timely information.</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">💌</span>
-                        <h3>Beautiful Emails</h3>
-                        <p>Gorgeous HTML emails that work perfectly in Gmail, Outlook, Apple Mail. Professional design, zero markdown mess.</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">🌍</span>
-                        <h3>13+ Languages</h3>
-                        <p>Generate news in English, Chinese, Spanish, French, Japanese, German, Korean, and more. Your language, your choice.</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">⚙️</span>
-                        <h3>Fully Customizable</h3>
-                        <p>9 pre-built templates or create your own. Customize topics, sources, tone—make it yours in minutes.</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">🔔</span>
-                        <h3>Multi-Channel Delivery</h3>
-                        <p>Receive via Email, Slack, Telegram, Discord, or Webhooks. Get your news wherever you work.</p>
-                    </div>
-                </div>
-            </section>
+        <!-- Features Section -->
+        <section class="section">
+          <h2 class="section-title">Powerful Features</h2>
+          <p class="section-subtitle">
+            Everything you need to stay informed about AI developments,
+            automated and personalized.
+          </p>
+          <div class="features">
+            <div class="feature-card">
+              <span class="feature-icon">🤖</span>
+              <h3>5 AI Providers</h3>
+              <p>
+                Choose from Claude, DeepSeek, Gemini, Grok, or OpenAI. Best
+                quality, lowest cost, or fastest speed—you decide.
+              </p>
+            </div>
+            <div class="feature-card">
+              <span class="feature-icon">📰</span>
+              <h3>Real RSS Feeds</h3>
+              <p>
+                Pulls actual news from TechCrunch, Hacker News, MIT Tech Review,
+                36Kr, and more. Not fake data—real, timely information.
+              </p>
+            </div>
+            <div class="feature-card">
+              <span class="feature-icon">💌</span>
+              <h3>Beautiful Emails</h3>
+              <p>
+                Gorgeous HTML emails that work perfectly in Gmail, Outlook,
+                Apple Mail. Professional design, zero markdown mess.
+              </p>
+            </div>
+            <div class="feature-card">
+              <span class="feature-icon">🌍</span>
+              <h3>13+ Languages</h3>
+              <p>
+                Generate news in English, Chinese, Spanish, French, Japanese,
+                German, Korean, and more. Your language, your choice.
+              </p>
+            </div>
+            <div class="feature-card">
+              <span class="feature-icon">⚙️</span>
+              <h3>Fully Customizable</h3>
+              <p>
+                9 pre-built templates or create your own. Customize topics,
+                sources, tone—make it yours in minutes.
+              </p>
+            </div>
+            <div class="feature-card">
+              <span class="feature-icon">🔔</span>
+              <h3>Multi-Channel Delivery</h3>
+              <p>
+                Receive via Email, Slack, Telegram, Discord, or Webhooks. Get
+                your news wherever you work.
+              </p>
+            </div>
+          </div>
+        </section>
 
-            <!-- Use Cases -->
-            <section class="section">
-                <h2 class="section-title">Perfect For</h2>
-                <div class="use-cases">
-                    <div class="use-case-card">
-                        <h3>👨‍💻 Developers</h3>
-                        <p>Stay on top of the latest AI tools, frameworks, and techniques without the daily grind.</p>
-                    </div>
-                    <div class="use-case-card">
-                        <h3>📊 Researchers</h3>
-                        <p>Get curated updates on AI research papers, breakthroughs, and academic developments.</p>
-                    </div>
-                    <div class="use-case-card">
-                        <h3>🚀 Entrepreneurs</h3>
-                        <p>Monitor AI startup launches, funding news, and market trends in one daily digest.</p>
-                    </div>
-                    <div class="use-case-card">
-                        <h3>📝 Content Creators</h3>
-                        <p>Never run out of AI topics to write about. Get inspiration delivered daily.</p>
-                    </div>
-                </div>
-            </section>
+        <!-- Use Cases -->
+        <section class="section">
+          <h2 class="section-title">Perfect For</h2>
+          <div class="use-cases">
+            <div class="use-case-card">
+              <h3>👨‍💻 Developers</h3>
+              <p>
+                Stay on top of the latest AI tools, frameworks, and techniques
+                without the daily grind.
+              </p>
+            </div>
+            <div class="use-case-card">
+              <h3>📊 Researchers</h3>
+              <p>
+                Get curated updates on AI research papers, breakthroughs, and
+                academic developments.
+              </p>
+            </div>
+            <div class="use-case-card">
+              <h3>🚀 Entrepreneurs</h3>
+              <p>
+                Monitor AI startup launches, funding news, and market trends in
+                one daily digest.
+              </p>
+            </div>
+            <div class="use-case-card">
+              <h3>📝 Content Creators</h3>
+              <p>
+                Never run out of AI topics to write about. Get inspiration
+                delivered daily.
+              </p>
+            </div>
+          </div>
+        </section>
 
-            <!-- LLM Providers -->
-            <section class="section">
-                <h2 class="section-title">Choose Your AI Engine</h2>
-                <p class="section-subtitle">5 powerful LLM providers - switch anytime based on your needs</p>
-                <div class="providers">
-                    <div class="provider-card">
-                        <h3>🔵 Claude Sonnet 4.5</h3>
-                        <p style="margin-bottom: 15px;">Premium Quality</p>
-                        <p style="font-size: 0.95rem;">Excellent comprehension, best for high-quality digests. $3/1M input tokens.</p>
-                    </div>
-                    <div class="provider-card">
-                        <h3>💎 DeepSeek</h3>
-                        <p style="margin-bottom: 15px;">Budget-Friendly</p>
-                        <p style="font-size: 0.95rem;">90% cheaper than Claude, great Chinese support. Perfect for high volume.</p>
-                    </div>
-                    <div class="provider-card">
-                        <h3>⚡ Gemini 2.0</h3>
-                        <p style="margin-bottom: 15px;">Fast & Free Tier</p>
-                        <p style="font-size: 0.95rem;">Google's latest model. Free tier available, excellent for cost optimization.</p>
-                    </div>
-                    <div class="provider-card">
-                        <h3>🚀 Grok Beta</h3>
-                        <p style="margin-bottom: 15px;">Advanced Reasoning</p>
-                        <p style="font-size: 0.95rem;">xAI's model with real-time data access. Great for complex analysis.</p>
-                    </div>
-                    <div class="provider-card">
-                        <h3>🤖 OpenAI GPT-4o</h3>
-                        <p style="margin-bottom: 15px;">Industry Standard</p>
-                        <p style="font-size: 0.95rem;">Proven reliability, fast responses. GPT-3.5/4-turbo also supported.</p>
-                    </div>
-                </div>
-            </section>
+        <!-- LLM Providers -->
+        <section class="section">
+          <h2 class="section-title">Choose Your AI Engine</h2>
+          <p class="section-subtitle">
+            5 latest LLM providers with advanced reasoning - switch anytime
+            based on your needs
+          </p>
+          <div class="providers">
+            <div class="provider-card">
+              <h3>🔵 Claude Sonnet 4.5</h3>
+              <p style="margin-bottom: 15px">Premium Reasoning</p>
+              <p style="font-size: 0.9rem">
+                Latest Sonnet 4.5 with advanced reasoning capabilities. Best for
+                complex analysis & high-quality output.
+              </p>
+            </div>
+            <div class="provider-card">
+              <h3>💎 DeepSeek V3.1</h3>
+              <p style="margin-bottom: 15px">Extended Thinking</p>
+              <p style="font-size: 0.9rem">
+                DeepSeek-R1 reasoning model. Ultra low cost with extended
+                thinking capabilities for deep analysis.
+              </p>
+            </div>
+            <div class="provider-card">
+              <h3>⚡ Gemini 3 Pro</h3>
+              <p style="margin-bottom: 15px">Next-Gen Multimodal</p>
+              <p style="font-size: 0.9rem">
+                Latest Gemini 3 Pro preview. Next-generation AI with multimodal
+                capabilities & free tier.
+              </p>
+            </div>
+            <div class="provider-card">
+              <h3>🚀 Grok 4.1</h3>
+              <p style="margin-bottom: 15px">Fast Reasoning</p>
+              <p style="font-size: 0.9rem">
+                Grok 4.1 with fast reasoning mode. Real-time data access for
+                up-to-date information.
+              </p>
+            </div>
+            <div class="provider-card">
+              <h3>🤖 GPT-5.1</h3>
+              <p style="margin-bottom: 15px">Latest Flagship</p>
+              <p style="font-size: 0.9rem">
+                OpenAI's GPT-5.1 flagship model. Cutting-edge performance with
+                enhanced capabilities.
+              </p>
+            </div>
+          </div>
+        </section>
 
-            <!-- Languages -->
-            <section class="section">
-                <h2 class="section-title">Speak Your Language</h2>
-                <p class="section-subtitle">Generate news digests in 13+ languages with a single configuration change</p>
-                <div class="languages">
-                    <span class="language-tag">🇬🇧 English</span>
-                    <span class="language-tag">🇨🇳 中文</span>
-                    <span class="language-tag">🇪🇸 Español</span>
-                    <span class="language-tag">🇫🇷 Français</span>
-                    <span class="language-tag">🇯🇵 日本語</span>
-                    <span class="language-tag">🇩🇪 Deutsch</span>
-                    <span class="language-tag">🇰🇷 한국어</span>
-                    <span class="language-tag">🇵🇹 Português</span>
-                    <span class="language-tag">🇷🇺 Русский</span>
-                    <span class="language-tag">🇸🇦 العربية</span>
-                    <span class="language-tag">🇮🇳 हिन्दी</span>
-                    <span class="language-tag">🇮🇹 Italiano</span>
-                    <span class="language-tag">🇳🇱 Nederlands</span>
-                </div>
-            </section>
+        <!-- Languages -->
+        <section class="section">
+          <h2 class="section-title">Speak Your Language</h2>
+          <p class="section-subtitle">
+            Generate news digests in 13+ languages with a single configuration
+            change
+          </p>
+          <div class="languages">
+            <span class="language-tag">🇬🇧 English</span>
+            <span class="language-tag">🇨🇳 中文</span>
+            <span class="language-tag">🇪🇸 Español</span>
+            <span class="language-tag">🇫🇷 Français</span>
+            <span class="language-tag">🇯🇵 日本語</span>
+            <span class="language-tag">🇩🇪 Deutsch</span>
+            <span class="language-tag">🇰🇷 한국어</span>
+            <span class="language-tag">🇵🇹 Português</span>
+            <span class="language-tag">🇷🇺 Русский</span>
+            <span class="language-tag">🇸🇦 العربية</span>
+            <span class="language-tag">🇮🇳 हिन्दी</span>
+            <span class="language-tag">🇮🇹 Italiano</span>
+            <span class="language-tag">🇳🇱 Nederlands</span>
+          </div>
+        </section>
 
-            <!-- Quick Start -->
-            <section class="section">
-                <h2 class="section-title">Get Started in 5 Minutes</h2>
-                <p class="section-subtitle">🚀 <strong>Recommended:</strong> Deploy with GitHub Actions for zero-maintenance automated daily news</p>
-                
-                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; border-radius: 15px; margin: 40px auto; max-width: 900px; color: white;">
-                    <h3 style="margin: 0 0 25px 0; font-size: 1.8rem; text-align: center;">✨ GitHub Actions (Recommended)</h3>
-                    <ol style="text-align: left; line-height: 2.2; font-size: 1.1rem; padding-left: 20px;">
-                        <li><strong>Fork</strong> the repository to your GitHub account</li>
-                        <li><strong>Add Secrets</strong> in Repository → Settings → Secrets and variables → Actions:
-                            <ul style="margin: 15px 0; padding-left: 25px; line-height: 1.8;">
-                                <li><code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">LLM_PROVIDER</code> → claude / deepseek / gemini / grok / openai</li>
-                                <li><code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">ANTHROPIC_API_KEY</code> (or your chosen provider's key)</li>
-                                <li><code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">GMAIL_ADDRESS</code>, <code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">GMAIL_APP_PASSWORD</code>, <code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">EMAIL_TO</code></li>
-                                <li><code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">NOTIFICATION_METHODS</code> → email</li>
-                            </ul>
-                        </li>
-                        <li><strong>Enable Actions:</strong> Actions tab → "I understand my workflows, go ahead and enable them"</li>
-                        <li><strong>That's it!</strong> Your bot runs automatically daily at midnight UTC 🎉</li>
-                    </ol>
-                </div>
+        <!-- Quick Start -->
+        <section class="section">
+          <h2 class="section-title">Get Started in 5 Minutes</h2>
+          <p class="section-subtitle">
+            🚀 <strong>Recommended:</strong> Deploy with GitHub Actions for
+            zero-maintenance automated daily news
+          </p>
 
-                <details style="max-width: 900px; margin: 30px auto; padding: 20px; background: #f8f9fa; border-radius: 10px;">
-                    <summary style="cursor: pointer; font-size: 1.3rem; font-weight: 600; color: #667eea; padding: 10px;">
-                        💻 Optional: Local Development (for testing)
-                    </summary>
-                    <div class="code-block" style="margin-top: 20px;">
-<pre style="margin: 0; white-space: pre; overflow-x: auto;"><code># 1. Clone the repository
+          <div
+            style="
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              padding: 40px;
+              border-radius: 15px;
+              margin: 40px auto;
+              max-width: 900px;
+              color: white;
+            "
+          >
+            <h3
+              style="margin: 0 0 25px 0; font-size: 1.8rem; text-align: center"
+            >
+              ✨ GitHub Actions (Recommended)
+            </h3>
+            <ol
+              style="
+                text-align: left;
+                line-height: 2.2;
+                font-size: 1.1rem;
+                padding-left: 20px;
+              "
+            >
+              <li>
+                <strong>Fork</strong> the repository to your GitHub account
+              </li>
+              <li>
+                <strong>Add Secrets</strong> in Repository → Settings → Secrets
+                and variables → Actions:
+                <ul
+                  style="margin: 15px 0; padding-left: 25px; line-height: 1.8"
+                >
+                  <li>
+                    <code
+                      style="
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 3px 8px;
+                        border-radius: 4px;
+                      "
+                      >LLM_PROVIDER</code
+                    >
+                    → claude / deepseek / gemini / grok / openai
+                  </li>
+                  <li>
+                    <code
+                      style="
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 3px 8px;
+                        border-radius: 4px;
+                      "
+                      >ANTHROPIC_API_KEY</code
+                    >
+                    (or your chosen provider's key)
+                  </li>
+                  <li>
+                    <code
+                      style="
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 3px 8px;
+                        border-radius: 4px;
+                      "
+                      >GMAIL_ADDRESS</code
+                    >,
+                    <code
+                      style="
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 3px 8px;
+                        border-radius: 4px;
+                      "
+                      >GMAIL_APP_PASSWORD</code
+                    >,
+                    <code
+                      style="
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 3px 8px;
+                        border-radius: 4px;
+                      "
+                      >EMAIL_TO</code
+                    >
+                  </li>
+                  <li>
+                    <code
+                      style="
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 3px 8px;
+                        border-radius: 4px;
+                      "
+                      >NOTIFICATION_METHODS</code
+                    >
+                    → email
+                  </li>
+                </ul>
+              </li>
+              <li>
+                <strong>Enable Actions:</strong> Actions tab → "I understand my
+                workflows, go ahead and enable them"
+              </li>
+              <li>
+                <strong>That's it!</strong> Your bot runs automatically daily at
+                midnight UTC 🎉
+              </li>
+            </ol>
+          </div>
+
+          <details
+            style="
+              max-width: 900px;
+              margin: 30px auto;
+              padding: 20px;
+              background: #f8f9fa;
+              border-radius: 10px;
+            "
+          >
+            <summary
+              style="
+                cursor: pointer;
+                font-size: 1.3rem;
+                font-weight: 600;
+                color: #667eea;
+                padding: 10px;
+              "
+            >
+              💻 Optional: Local Development (for testing)
+            </summary>
+            <div class="code-block" style="margin-top: 20px">
+              <pre
+                style="margin: 0; white-space: pre; overflow-x: auto"
+              ><code># 1. Clone the repository
 git clone https://github.com/giftedunicorn/ai-news-bot.git
 cd ai-news-bot
 
@@ -783,76 +983,106 @@ cp .env.example .env
 
 # 4. Run it!
 python main.py</code></pre>
-                    </div>
-                </details>
-                
-                <div style="text-align: center; margin-top: 50px;">
-                    <a href="https://github.com/giftedunicorn/ai-news-bot#quick-start-github-actions-recommended" class="btn btn-primary" style="font-size: 1.2rem; padding: 18px 40px;">📚 View Complete Setup Guide →</a>
-                </div>
-            </section>
+            </div>
+          </details>
 
-            <!-- CTA Section -->
-            <section class="cta-section">
-                <h2>Ready to Stay Informed?</h2>
-                <p>Join developers worldwide who never miss an AI development</p>
-                <div class="cta-buttons">
-                    <a href="https://github.com/giftedunicorn/ai-news-bot" class="btn btn-primary">Start Free on GitHub</a>
-                    <a href="https://discord.gg/AtfQPh8T2T" class="btn btn-secondary">Join Discord Community</a>
-                </div>
-            </section>
-        </div>
+          <div style="text-align: center; margin-top: 50px">
+            <a
+              href="https://github.com/giftedunicorn/ai-news-bot#quick-start-github-actions-recommended"
+              class="btn btn-primary"
+              style="font-size: 1.2rem; padding: 18px 40px"
+              >📚 View Complete Setup Guide →</a
+            >
+          </div>
+        </section>
+
+        <!-- CTA Section -->
+        <section class="cta-section">
+          <h2>Ready to Stay Informed?</h2>
+          <p>Join developers worldwide who never miss an AI development</p>
+          <div class="cta-buttons">
+            <a
+              href="https://github.com/giftedunicorn/ai-news-bot"
+              class="btn btn-primary"
+              >Start Free on GitHub</a
+            >
+            <a href="https://discord.gg/AtfQPh8T2T" class="btn btn-secondary"
+              >Join Discord Community</a
+            >
+          </div>
+        </section>
+      </div>
     </main>
 
     <footer>
-        <div class="container">
-            <p>&copy; 2025 AI News Bot. Open Source under GPL-3.0 License.</p>
-            <p style="margin-top: 15px;">
-                Powered by
-                <a href="https://www.anthropic.com" target="_blank">Anthropic Claude</a> &
-                <a href="https://www.deepseek.com" target="_blank">DeepSeek</a>
-            </p>
-            <p style="margin-top: 20px;">
-                <a href="https://github.com/giftedunicorn/ai-news-bot" target="_blank">GitHub</a> |
-                <a href="https://discord.gg/AtfQPh8T2T" target="_blank">Discord</a> |
-                <a href="https://github.com/giftedunicorn/ai-news-bot/issues" target="_blank">Issues</a> |
-                <a href="https://github.com/giftedunicorn/ai-news-bot#readme" target="_blank">Documentation</a>
-            </p>
-        </div>
+      <div class="container">
+        <p>&copy; 2025 AI News Bot. Open Source under GPL-3.0 License.</p>
+        <p style="margin-top: 15px">
+          Powered by
+          <a href="https://www.anthropic.com" target="_blank"
+            >Anthropic Claude</a
+          >
+          &
+          <a href="https://www.deepseek.com" target="_blank">DeepSeek</a>
+        </p>
+        <p style="margin-top: 20px">
+          <a href="https://github.com/giftedunicorn/ai-news-bot" target="_blank"
+            >GitHub</a
+          >
+          |
+          <a href="https://discord.gg/AtfQPh8T2T" target="_blank">Discord</a> |
+          <a
+            href="https://github.com/giftedunicorn/ai-news-bot/issues"
+            target="_blank"
+            >Issues</a
+          >
+          |
+          <a
+            href="https://github.com/giftedunicorn/ai-news-bot#readme"
+            target="_blank"
+            >Documentation</a
+          >
+        </p>
+      </div>
     </footer>
 
     <script>
-        // Smooth scrolling
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth' });
-                }
-            });
+      // Smooth scrolling
+      document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+        anchor.addEventListener("click", function (e) {
+          e.preventDefault();
+          const target = document.querySelector(this.getAttribute("href"));
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth" });
+          }
         });
+      });
 
-        // Scroll animations
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
+      // Scroll animations
+      const observerOptions = {
+        threshold: 0.1,
+        rootMargin: "0px 0px -50px 0px",
+      };
 
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                }
-            });
-        }, observerOptions);
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.style.opacity = "1";
+            entry.target.style.transform = "translateY(0)";
+          }
+        });
+      }, observerOptions);
 
-        document.querySelectorAll('.feature-card, .provider-card, .stat-item, .use-case-card').forEach(el => {
-            el.style.opacity = '0';
-            el.style.transform = 'translateY(20px)';
-            el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-            observer.observe(el);
+      document
+        .querySelectorAll(
+          ".feature-card, .provider-card, .stat-item, .use-case-card"
+        )
+        .forEach((el) => {
+          el.style.opacity = "0";
+          el.style.transform = "translateY(20px)";
+          el.style.transition = "opacity 0.6s ease, transform 0.6s ease";
+          observer.observe(el);
         });
     </script>
-</body>
+  </body>
 </html>

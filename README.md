@@ -353,7 +353,7 @@ logging:
 
 The bot supports **5 LLM providers**. Configure in `config.yaml` or via environment variables:
 
-#### Claude (Anthropic) - Default
+#### Claude (Anthropic) - Latest Sonnet 4.5
 
 ```yaml
 llm:
@@ -363,80 +363,81 @@ llm:
 
 **Available Models:**
 
-- `claude-sonnet-4-5-20250929` - Latest Sonnet (default) - Best for most tasks
-- `claude-3-5-sonnet-20241022` - Previous Sonnet version
+- `claude-sonnet-4-5-20250929` - Claude Sonnet 4.5 (default) - Most capable model with advanced reasoning
+- `claude-3-5-sonnet-20241022` - Previous Sonnet 3.5 version
 
 **Pricing:** $3 input / $15 output per million tokens
 
-#### DeepSeek - Cost-Effective Alternative
+#### DeepSeek - Advanced Reasoning Model
 
 ```yaml
 llm:
   provider: deepseek
-  model: deepseek-chat # optional, uses default if not set
+  model: deepseek-reasoner # optional, uses default if not set
 ```
 
 **Available Models:**
 
-- `deepseek-chat` - General chat model (default)
-- `deepseek-reasoner` - Enhanced reasoning model
+- `deepseek-reasoner` - DeepSeek-R1 reasoning model (default) - Extended thinking capabilities
+- `deepseek-chat` - General chat model
 
-**Pricing:** Much lower cost than Claude, excellent for budget-conscious users
+**Pricing:** Extremely cost-effective with reasoning capabilities
 
-#### Google Gemini - Fast & Efficient
+#### Google Gemini - Gemini 3 Pro
 
 ```yaml
 llm:
   provider: gemini
-  model: gemini-2.0-flash-exp # optional, uses default if not set
+  model: gemini-3-pro-preview # optional, uses default if not set
 ```
 
 **Available Models:**
 
-- `gemini-2.0-flash-exp` - Latest Gemini 2.0 Flash (default)
-- `gemini-pro` - Gemini Pro model
+- `gemini-3-pro-preview` - Latest Gemini 3 Pro (default) - Next-gen multimodal AI
+- `gemini-2.0-flash-thinking-exp-01-21` - Gemini 2.0 with thinking mode
 
 **Pricing:** Free tier available, very cost-effective for production
 
-#### xAI Grok - Advanced Reasoning
+#### xAI Grok - Fast Reasoning Model
 
 ```yaml
 llm:
   provider: grok
-  model: grok-beta # optional, uses default if not set
+  model: grok-4-1-fast-reasoning # optional, uses default if not set
 ```
 
 **Available Models:**
 
-- `grok-beta` - Latest Grok model (default)
+- `grok-4-1-fast-reasoning` - Grok 4.1 with fast reasoning (default) - Real-time updates & deep thinking
+- `grok-2-latest` - Previous Grok 2 version
 
-**Pricing:** Competitive pricing with advanced reasoning capabilities
+**Pricing:** Competitive pricing with real-time data access
 
-#### OpenAI - Industry Standard
+#### OpenAI - GPT-5.1
 
 ```yaml
 llm:
   provider: openai
-  model: gpt-4o # optional, uses default if not set
+  model: gpt-5.1 # optional, uses default if not set
 ```
 
 **Available Models:**
 
-- `gpt-4o` - GPT-4 Optimized (default) - Fast and capable
-- `gpt-4-turbo` - GPT-4 Turbo - More powerful
-- `gpt-3.5-turbo` - GPT-3.5 - Most cost-effective
+- `gpt-5.1` - GPT-5.1 (default) - Latest flagship model with enhanced capabilities
+- `o1` - O1 reasoning model
+- `gpt-4o` - GPT-4 Optimized
 
-**Pricing:** $2.50 input / $10 output per million tokens (GPT-4o)
+**Pricing:** Premium pricing for state-of-the-art performance
 
 #### Choosing a Provider
 
-| Provider     | Pros                           | Best For                          |
-| ------------ | ------------------------------ | --------------------------------- |
-| **Claude**   | Excellent quality, reliable    | Production, high-quality output   |
-| **DeepSeek** | Very low cost, good Chinese    | Budget-conscious, Chinese content |
-| **Gemini**   | Fast, free tier available      | High-volume, cost optimization    |
-| **Grok**     | Advanced reasoning, real-time  | Complex analysis, up-to-date info |
-| **OpenAI**   | Industry standard, well-tested | General purpose, proven quality   |
+| Provider     | Pros                                  | Best For                               |
+| ------------ | ------------------------------------- | -------------------------------------- |
+| **Claude**   | Sonnet 4.5 - Top reasoning & quality  | Production, complex analysis           |
+| **DeepSeek** | R1 reasoning model - Ultra low cost   | Budget-conscious, extended reasoning   |
+| **Gemini**   | Gemini 3 Pro - Fast & multimodal      | High-volume, multimodal tasks          |
+| **Grok**     | 4.1 Fast Reasoning - Real-time data   | Up-to-date info, quick reasoning       |
+| **OpenAI**   | GPT-5.1 - Latest flagship model       | Cutting-edge performance, general use  |
 
 ### Language Configuration
 
