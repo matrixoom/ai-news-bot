@@ -55,9 +55,9 @@
 
 Choose your deployment method:
 
-| Method                | Configuration      | When to Use                                  |
-| --------------------- | ------------------ | -------------------------------------------- |
-| **GitHub Actions**    | Repository Secrets | Automated daily runs (recommended)           |
+| Method                | Configuration      | When to Use                                     |
+| --------------------- | ------------------ | ----------------------------------------------- |
+| **GitHub Actions**    | Repository Secrets | Automated daily runs (recommended)              |
 | **Local Development** | `.env` file        | Testing locally or manual runs on your computer |
 
 > 💡 **Recommended**: Use GitHub Actions for automated daily news delivery. Use local development for testing or customization.
@@ -87,15 +87,15 @@ Add the following secrets:
 
 #### ✅ Required Secrets
 
-| Secret Name            | Example Value                                      | Description                                 |
-| ---------------------- | -------------------------------------------------- | ------------------------------------------- |
-| `LLM_PROVIDER`         | `claude`, `deepseek`, `gemini`, `grok`, or `openai` | LLM provider to use (default: `claude`)     |
-| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`                              | Your Anthropic API key (if using Claude)    |
-| `DEEPSEEK_API_KEY`     | `sk-xxx...`                                        | Your DeepSeek API key (if using DeepSeek)   |
-| `GOOGLE_API_KEY`       | `AIza...`                                          | Your Google API key (if using Gemini)       |
-| `XAI_API_KEY`          | `xai-...`                                          | Your xAI API key (if using Grok)            |
-| `OPENAI_API_KEY`       | `sk-...`                                           | Your OpenAI API key (if using OpenAI)       |
-| `NOTIFICATION_METHODS` | `email`                                            | Notification channels (comma-separated)     |
+| Secret Name            | Example Value                                       | Description                               |
+| ---------------------- | --------------------------------------------------- | ----------------------------------------- |
+| `LLM_PROVIDER`         | `claude`, `deepseek`, `gemini`, `grok`, or `openai` | LLM provider to use (default: `claude`)   |
+| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`                               | Your Anthropic API key (if using Claude)  |
+| `DEEPSEEK_API_KEY`     | `sk-xxx...`                                         | Your DeepSeek API key (if using DeepSeek) |
+| `GOOGLE_API_KEY`       | `AIza...`                                           | Your Google API key (if using Gemini)     |
+| `XAI_API_KEY`          | `xai-...`                                           | Your xAI API key (if using Grok)          |
+| `OPENAI_API_KEY`       | `sk-...`                                            | Your OpenAI API key (if using OpenAI)     |
+| `NOTIFICATION_METHODS` | `email`                                             | Notification channels (comma-separated)   |
 
 #### 📧 Email Secrets (if using email notifications)
 
@@ -138,8 +138,8 @@ The workflow runs automatically every day at midnight UTC (8:00 AM Beijing time)
 
 ```yaml
 schedule:
-  - cron: "0 0 * * *"   # Midnight UTC (current)
-  - cron: "0 9 * * *"   # 9:00 AM UTC
+  - cron: "0 0 * * *" # Midnight UTC (current)
+  - cron: "0 9 * * *" # 9:00 AM UTC
   - cron: "0 */12 * * *" # Every 12 hours
 ```
 
@@ -362,6 +362,7 @@ llm:
 ```
 
 **Available Models:**
+
 - `claude-sonnet-4-5-20250929` - Latest Sonnet (default) - Best for most tasks
 - `claude-3-5-sonnet-20241022` - Previous Sonnet version
 
@@ -376,6 +377,7 @@ llm:
 ```
 
 **Available Models:**
+
 - `deepseek-chat` - General chat model (default)
 - `deepseek-reasoner` - Enhanced reasoning model
 
@@ -390,6 +392,7 @@ llm:
 ```
 
 **Available Models:**
+
 - `gemini-2.0-flash-exp` - Latest Gemini 2.0 Flash (default)
 - `gemini-pro` - Gemini Pro model
 
@@ -404,6 +407,7 @@ llm:
 ```
 
 **Available Models:**
+
 - `grok-beta` - Latest Grok model (default)
 
 **Pricing:** Competitive pricing with advanced reasoning capabilities
@@ -417,6 +421,7 @@ llm:
 ```
 
 **Available Models:**
+
 - `gpt-4o` - GPT-4 Optimized (default) - Fast and capable
 - `gpt-4-turbo` - GPT-4 Turbo - More powerful
 - `gpt-3.5-turbo` - GPT-3.5 - Most cost-effective
@@ -425,13 +430,13 @@ llm:
 
 #### Choosing a Provider
 
-| Provider     | Pros                            | Best For                          |
-| ------------ | ------------------------------- | --------------------------------- |
-| **Claude**   | Excellent quality, reliable     | Production, high-quality output   |
-| **DeepSeek** | Very low cost, good Chinese     | Budget-conscious, Chinese content |
-| **Gemini**   | Fast, free tier available       | High-volume, cost optimization    |
-| **Grok**     | Advanced reasoning, real-time   | Complex analysis, up-to-date info |
-| **OpenAI**   | Industry standard, well-tested  | General purpose, proven quality   |
+| Provider     | Pros                           | Best For                          |
+| ------------ | ------------------------------ | --------------------------------- |
+| **Claude**   | Excellent quality, reliable    | Production, high-quality output   |
+| **DeepSeek** | Very low cost, good Chinese    | Budget-conscious, Chinese content |
+| **Gemini**   | Fast, free tier available      | High-volume, cost optimization    |
+| **Grok**     | Advanced reasoning, real-time  | Complex analysis, up-to-date info |
+| **OpenAI**   | Industry standard, well-tested | General purpose, proven quality   |
 
 ### Language Configuration
 

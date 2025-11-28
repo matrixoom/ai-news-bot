@@ -4,19 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="AI News Bot - Your AI-Powered News Assistant. Stay informed with automated, personalized AI news digests delivered daily via email, Slack, or Telegram.">
-    <meta name="keywords" content="AI news, automation, Claude, DeepSeek, newsletter, RSS feeds, email digest, AI assistant">
+    <meta name="keywords" content="AI news, automation, Claude, DeepSeek, Gemini, Grok, OpenAI, GPT-4, newsletter, RSS feeds, email digest, AI assistant">
     <meta name="author" content="giftedunicorn">
 
     <!-- Open Graph Meta Tags -->
     <meta property="og:title" content="AI News Bot - Your AI-Powered News Assistant">
-    <meta property="og:description" content="Automated daily AI news digests powered by Claude & DeepSeek. Stay informed without information overload.">
+    <meta property="og:description" content="Automated daily AI news digests. Choose from 5 LLM providers: Claude, DeepSeek, Gemini, Grok, or OpenAI. Stay informed without information overload.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://giftedunicorn.github.io/ai-news-bot/">
 
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="AI News Bot - Your AI-Powered News Assistant">
-    <meta name="twitter:description" content="Automated daily AI news digests powered by Claude & DeepSeek">
+    <meta name="twitter:description" content="Automated daily AI news digests. Choose from 5 LLM providers: Claude, DeepSeek, Gemini, Grok, or OpenAI">
 
     <title>AI News Bot - Your AI-Powered News Assistant</title>
     <style>
@@ -341,36 +341,50 @@
 
         /* Providers */
         .providers {
-            display: flex;
-            justify-content: center;
-            gap: 50px;
-            flex-wrap: wrap;
-            margin: 40px 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 25px;
+            margin: 40px auto;
+            max-width: 1200px;
+        }
+
+        @media (min-width: 768px) {
+            .providers {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .providers {
+                grid-template-columns: repeat(5, 1fr);
+            }
         }
 
         .provider-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 50px;
+            padding: 35px 20px;
             border-radius: 15px;
             text-align: center;
-            min-width: 280px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
         .provider-card:hover {
-            transform: scale(1.05);
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
         }
 
         .provider-card h3 {
-            font-size: 2rem;
-            margin-bottom: 15px;
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+            font-weight: 700;
         }
 
         .provider-card p {
-            font-size: 1.1rem;
+            font-size: 0.95rem;
             opacity: 0.95;
+            line-height: 1.5;
         }
 
         /* Languages */
@@ -621,8 +635,8 @@
                 <div class="features">
                     <div class="feature-card">
                         <span class="feature-icon">🤖</span>
-                        <h3>Dual AI Power</h3>
-                        <p>Choose between Claude Sonnet 4.5 or DeepSeek based on your needs. Get the best quality or optimize for cost—you decide.</p>
+                        <h3>5 AI Providers</h3>
+                        <p>Choose from Claude, DeepSeek, Gemini, Grok, or OpenAI. Best quality, lowest cost, or fastest speed—you decide.</p>
                     </div>
                     <div class="feature-card">
                         <span class="feature-icon">📰</span>
@@ -678,17 +692,32 @@
             <!-- LLM Providers -->
             <section class="section">
                 <h2 class="section-title">Choose Your AI Engine</h2>
-                <p class="section-subtitle">Switch between providers anytime based on your needs</p>
+                <p class="section-subtitle">5 powerful LLM providers - switch anytime based on your needs</p>
                 <div class="providers">
                     <div class="provider-card">
-                        <h3>Claude Sonnet 4.5</h3>
+                        <h3>🔵 Claude Sonnet 4.5</h3>
                         <p style="margin-bottom: 15px;">Premium Quality</p>
-                        <p style="font-size: 0.95rem;">Excellent comprehension, best for high-quality digests. $3/1M tokens input.</p>
+                        <p style="font-size: 0.95rem;">Excellent comprehension, best for high-quality digests. $3/1M input tokens.</p>
                     </div>
                     <div class="provider-card">
-                        <h3>DeepSeek</h3>
-                        <p style="margin-bottom: 15px;">Cost-Effective</p>
-                        <p style="font-size: 0.95rem;">Great Chinese support, budget-friendly. Perfect for frequent updates.</p>
+                        <h3>💎 DeepSeek</h3>
+                        <p style="margin-bottom: 15px;">Budget-Friendly</p>
+                        <p style="font-size: 0.95rem;">90% cheaper than Claude, great Chinese support. Perfect for high volume.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>⚡ Gemini 2.0</h3>
+                        <p style="margin-bottom: 15px;">Fast & Free Tier</p>
+                        <p style="font-size: 0.95rem;">Google's latest model. Free tier available, excellent for cost optimization.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>🚀 Grok Beta</h3>
+                        <p style="margin-bottom: 15px;">Advanced Reasoning</p>
+                        <p style="font-size: 0.95rem;">xAI's model with real-time data access. Great for complex analysis.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>🤖 OpenAI GPT-4o</h3>
+                        <p style="margin-bottom: 15px;">Industry Standard</p>
+                        <p style="font-size: 0.95rem;">Proven reliability, fast responses. GPT-3.5/4-turbo also supported.</p>
                     </div>
                 </div>
             </section>
@@ -717,8 +746,31 @@
             <!-- Quick Start -->
             <section class="section">
                 <h2 class="section-title">Get Started in 5 Minutes</h2>
-                <p class="section-subtitle">No complex setup. Fork, configure, and start receiving news.</p>
-                <div class="code-block"># 1. Clone the repository
+                <p class="section-subtitle">🚀 <strong>Recommended:</strong> Deploy with GitHub Actions for zero-maintenance automated daily news</p>
+                
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; border-radius: 15px; margin: 40px auto; max-width: 900px; color: white;">
+                    <h3 style="margin: 0 0 25px 0; font-size: 1.8rem; text-align: center;">✨ GitHub Actions (Recommended)</h3>
+                    <ol style="text-align: left; line-height: 2.2; font-size: 1.1rem; padding-left: 20px;">
+                        <li><strong>Fork</strong> the repository to your GitHub account</li>
+                        <li><strong>Add Secrets</strong> in Repository → Settings → Secrets and variables → Actions:
+                            <ul style="margin: 15px 0; padding-left: 25px; line-height: 1.8;">
+                                <li><code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">LLM_PROVIDER</code> → claude / deepseek / gemini / grok / openai</li>
+                                <li><code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">ANTHROPIC_API_KEY</code> (or your chosen provider's key)</li>
+                                <li><code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">GMAIL_ADDRESS</code>, <code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">GMAIL_APP_PASSWORD</code>, <code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">EMAIL_TO</code></li>
+                                <li><code style="background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 4px;">NOTIFICATION_METHODS</code> → email</li>
+                            </ul>
+                        </li>
+                        <li><strong>Enable Actions:</strong> Actions tab → "I understand my workflows, go ahead and enable them"</li>
+                        <li><strong>That's it!</strong> Your bot runs automatically daily at midnight UTC 🎉</li>
+                    </ol>
+                </div>
+
+                <details style="max-width: 900px; margin: 30px auto; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                    <summary style="cursor: pointer; font-size: 1.3rem; font-weight: 600; color: #667eea; padding: 10px;">
+                        💻 Optional: Local Development (for testing)
+                    </summary>
+                    <div class="code-block" style="margin-top: 20px;">
+<pre style="margin: 0; white-space: pre; overflow-x: auto;"><code># 1. Clone the repository
 git clone https://github.com/giftedunicorn/ai-news-bot.git
 cd ai-news-bot
 
@@ -727,12 +779,15 @@ pip install -r requirements.txt
 
 # 3. Configure your settings
 cp .env.example .env
-# Add your API keys and notification preferences
+# Edit .env with your API keys and notification preferences
 
 # 4. Run it!
-python main.py</div>
-                <div style="text-align: center; margin-top: 40px;">
-                    <a href="https://github.com/giftedunicorn/ai-news-bot#quick-start-local-development" class="btn btn-primary">View Complete Setup Guide →</a>
+python main.py</code></pre>
+                    </div>
+                </details>
+                
+                <div style="text-align: center; margin-top: 50px;">
+                    <a href="https://github.com/giftedunicorn/ai-news-bot#quick-start-github-actions-recommended" class="btn btn-primary" style="font-size: 1.2rem; padding: 18px 40px;">📚 View Complete Setup Guide →</a>
                 </div>
             </section>
 
@@ -750,7 +805,7 @@ python main.py</div>
 
     <footer>
         <div class="container">
-            <p>&copy; 2025 AI News Bot. Open Source under MIT License.</p>
+            <p>&copy; 2025 AI News Bot. Open Source under GPL-3.0 License.</p>
             <p style="margin-top: 15px;">
                 Powered by
                 <a href="https://www.anthropic.com" target="_blank">Anthropic Claude</a> &
