@@ -55,14 +55,98 @@
 
 Choose your deployment method:
 
-| Method                | Configuration      | When to Use                        |
-| --------------------- | ------------------ | ---------------------------------- |
-| **Local Development** | `.env` file        | Testing locally on your computer   |
-| **GitHub Actions**    | Repository Secrets | Automated daily runs (recommended) |
+| Method                | Configuration      | When to Use                                  |
+| --------------------- | ------------------ | -------------------------------------------- |
+| **GitHub Actions**    | Repository Secrets | Automated daily runs (recommended)           |
+| **Local Development** | `.env` file        | Testing locally or manual runs on your computer |
 
-> 💡 **Tip**: Start with local development to test, then deploy to GitHub Actions for automation.
+> 💡 **Recommended**: Use GitHub Actions for automated daily news delivery. Use local development for testing or customization.
 
-## Quick Start (Local Development)
+## Quick Start (GitHub Actions - Recommended)
+
+GitHub Actions provides automated daily news delivery without any server setup. Configure once and receive news digests automatically.
+
+### Step 1: Fork or Clone the Repository
+
+Fork this repository to your GitHub account, or clone it:
+
+```bash
+git clone <your-repo-url>
+cd ai-news-bot
+```
+
+### Step 2: Add GitHub Repository Secrets
+
+Navigate to your GitHub repository:
+
+```
+Repository → Settings → Secrets and variables → Actions → Repository secrets → New repository secret
+```
+
+Add the following secrets:
+
+#### ✅ Required Secrets
+
+| Secret Name            | Example Value          | Description                               |
+| ---------------------- | ---------------------- | ----------------------------------------- |
+| `LLM_PROVIDER`         | `claude` or `deepseek` | LLM provider to use (default: `claude`)   |
+| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`  | Your Anthropic API key (if using Claude)  |
+| `DEEPSEEK_API_KEY`     | `sk-xxx...`            | Your DeepSeek API key (if using DeepSeek) |
+| `NOTIFICATION_METHODS` | `email`                | Notification channels (comma-separated)   |
+
+#### 📧 Email Secrets (if using email notifications)
+
+| Secret Name          | Example Value           | Description                                                                    |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| `GMAIL_ADDRESS`      | `you@gmail.com`         | Your Gmail address                                                             |
+| `GMAIL_APP_PASSWORD` | `xxxx xxxx xxxx xxxx`   | Gmail App Password ([Get one here](https://myaccount.google.com/apppasswords)) |
+| `EMAIL_TO`           | `recipient@example.com` | Recipient email address                                                        |
+
+See [Email Setup Guide](#email-setup-guide) for detailed Gmail configuration instructions.
+
+#### 🌍 Optional Secrets
+
+| Secret Name            | Example Value        | Description                                      |
+| ---------------------- | -------------------- | ------------------------------------------------ |
+| `AI_RESPONSE_LANGUAGE` | `zh` or `es` or `ja` | Language code (defaults to `en` if not set)      |
+| `ENABLE_WEB_SEARCH`    | `true` or `false`    | Enable web search for news (defaults to `false`) |
+
+For other notification channels (Webhook, Slack, Telegram, Discord), see the [full configuration table](#github-actions-setup).
+
+### Step 3: Enable GitHub Actions
+
+Ensure GitHub Actions are enabled:
+
+```
+Repository → Settings → Actions → General → Allow all actions and reusable workflows
+```
+
+### Step 4: Test Your Setup
+
+Manually trigger the workflow to verify everything works:
+
+```
+Repository → Actions tab → Daily AI News Digest → Run workflow button
+```
+
+### Step 5: Automated Daily Delivery
+
+The workflow runs automatically every day at midnight UTC (8:00 AM Beijing time). To customize the schedule, edit `.github/workflows/daily-news.yml`:
+
+```yaml
+schedule:
+  - cron: "0 0 * * *"   # Midnight UTC (current)
+  - cron: "0 9 * * *"   # 9:00 AM UTC
+  - cron: "0 */12 * * *" # Every 12 hours
+```
+
+🎉 **Done!** You'll now receive automated AI news digests daily.
+
+---
+
+## Local Development (Optional)
+
+For testing or running manually on your computer:
 
 ### 1. Clone the Repository
 
@@ -77,9 +161,9 @@ cd ai-news-bot
 pip install -r requirements.txt
 ```
 
-### 3. Configure Settings (For Local Development)
+### 3. Configure Environment Variables
 
-For **local development**, copy the example file and fill in your credentials:
+Copy the example file and fill in your credentials:
 
 ```bash
 cp .env.example .env
@@ -176,6 +260,8 @@ AI_RESPONSE_LANGUAGE=ja  # Japanese output
 ```bash
 python main.py
 ```
+
+---
 
 ## Configuration
 

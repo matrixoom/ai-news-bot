@@ -55,14 +55,98 @@
 
 选择您的部署方式：
 
-| 方式               | 配置方法     | 使用场景               |
-| ------------------ | ------------ | ---------------------- |
-| **本地开发**       | `.env` 文件  | 在本地计算机上测试     |
-| **GitHub Actions** | 仓库 Secrets | 自动化每日运行（推荐） |
+| 方式               | 配置方法     | 使用场景                   |
+| ------------------ | ------------ | -------------------------- |
+| **GitHub Actions** | 仓库 Secrets | 自动化每日运行（推荐）     |
+| **本地开发**       | `.env` 文件  | 本地测试或手动运行         |
 
-> 💡 **提示**：先在本地开发环境测试，然后部署到 GitHub Actions 实现自动化。
+> 💡 **推荐**：使用 GitHub Actions 实现自动化每日新闻推送。使用本地开发进行测试或自定义。
 
-## 快速开始（本地开发）
+## 快速开始（GitHub Actions - 推荐）
+
+GitHub Actions 提供自动化的每日新闻推送，无需任何服务器设置。配置一次，自动接收新闻摘要。
+
+### 步骤 1：Fork 或克隆仓库
+
+将此仓库 Fork 到您的 GitHub 账户，或克隆它：
+
+```bash
+git clone <your-repo-url>
+cd ai-news-bot
+```
+
+### 步骤 2：添加 GitHub 仓库 Secrets
+
+导航到您的 GitHub 仓库：
+
+```
+仓库 → Settings → Secrets and variables → Actions → Repository secrets → New repository secret
+```
+
+添加以下 secrets：
+
+#### ✅ 必需的 Secrets
+
+| Secret 名称            | 示例值                 | 描述                                       |
+| ---------------------- | ---------------------- | ------------------------------------------ |
+| `LLM_PROVIDER`         | `claude` 或 `deepseek` | LLM 提供商（默认：`claude`）               |
+| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`  | 您的 Anthropic API 密钥（使用 Claude 时）  |
+| `DEEPSEEK_API_KEY`     | `sk-xxx...`            | 您的 DeepSeek API 密钥（使用 DeepSeek 时） |
+| `NOTIFICATION_METHODS` | `email`                | 通知渠道（逗号分隔）                       |
+
+#### 📧 邮件 Secrets（如果使用邮件通知）
+
+| Secret 名称          | 示例值                  | 描述                                                                             |
+| -------------------- | ----------------------- | -------------------------------------------------------------------------------- |
+| `GMAIL_ADDRESS`      | `you@gmail.com`         | 您的 Gmail 邮箱地址                                                              |
+| `GMAIL_APP_PASSWORD` | `xxxx xxxx xxxx xxxx`   | Gmail 应用专用密码（[点击获取](https://myaccount.google.com/apppasswords)）      |
+| `EMAIL_TO`           | `recipient@example.com` | 收件人邮箱地址                                                                   |
+
+详细的 Gmail 配置说明请参见[邮件设置指南](#邮件设置指南)。
+
+#### 🌍 可选的 Secrets
+
+| Secret 名称            | 示例值               | 描述                                   |
+| ---------------------- | -------------------- | -------------------------------------- |
+| `AI_RESPONSE_LANGUAGE` | `zh` 或 `es` 或 `ja` | 语言代码（未设置时默认为 `en`）        |
+| `ENABLE_WEB_SEARCH`    | `true` 或 `false`    | 启用网络搜索获取新闻（默认为 `false`） |
+
+其他通知渠道（Webhook、Slack、Telegram、Discord）配置请参见[完整配置表](#github-actions-设置)。
+
+### 步骤 3：启用 GitHub Actions
+
+确保 GitHub Actions 已启用：
+
+```
+仓库 → Settings → Actions → General → Allow all actions and reusable workflows
+```
+
+### 步骤 4：测试您的设置
+
+手动触发工作流以验证一切正常：
+
+```
+仓库 → Actions 标签 → Daily AI News Digest → Run workflow 按钮
+```
+
+### 步骤 5：自动化每日推送
+
+工作流将在每天 UTC 时间午夜（北京时间上午 8:00）自动运行。要自定义调度时间，编辑 `.github/workflows/daily-news.yml`：
+
+```yaml
+schedule:
+  - cron: "0 0 * * *"   # UTC 午夜（当前设置）
+  - cron: "0 9 * * *"   # UTC 上午 9:00
+  - cron: "0 */12 * * *" # 每 12 小时
+```
+
+🎉 **完成！** 您现在将自动接收每日 AI 新闻摘要。
+
+---
+
+## 本地开发（可选）
+
+用于测试或在您的计算机上手动运行：
 
 ### 1. 克隆仓库
 
@@ -77,9 +161,9 @@ cd ai-news-bot
 pip install -r requirements.txt
 ```
 
-### 3. 配置设置（本地开发）
+### 3. 配置环境变量
 
-对于**本地开发**，复制示例文件并填入您的凭证：
+复制示例文件并填入您的凭证：
 
 ```bash
 cp .env.example .env
@@ -175,6 +259,8 @@ AI_RESPONSE_LANGUAGE=ja  # 日语输出
 ```bash
 python main.py
 ```
+
+---
 
 ## 配置
 
