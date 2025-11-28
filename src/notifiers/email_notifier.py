@@ -1,8 +1,10 @@
 """
-Email notification module using Resend.com service
+Email notification module using Gmail SMTP
 """
 import os
-import resend
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from typing import Optional
 from datetime import datetime
 from ..logger import setup_logger
@@ -12,46 +14,44 @@ logger = setup_logger(__name__)
 
 
 class EmailNotifier:
-    """Send email notifications with AI news digest using Resend.com"""
+    """Send email notifications with AI news digest using Gmail SMTP"""
 
     def __init__(
         self,
-        resend_api_key: Optional[str] = None,
-        email_from: Optional[str] = None,
-        email_to: Optional[str] = None
+        gmail_address: Optional[str] = None,
+        gmail_app_password: Optional[str] = None,
+        email_to: Optional[str] = None,
     ):
         """
-        Initialize EmailNotifier with Resend.com.
+        Initialize EmailNotifier with Gmail SMTP.
 
         Args:
-            resend_api_key: Resend API key
-            email_from: Sender email address (must be verified in Resend)
+            gmail_address: Your Gmail address
+            gmail_app_password: App Password from Google Account settings
+              (NOT your regular Gmail password - see README for setup instructions)
             email_to: Recipient email address
 
         All parameters default to environment variables if not provided.
         """
-        self.resend_api_key = resend_api_key or os.getenv("RESEND_API_KEY")
-        self.email_from = email_from or os.getenv("EMAIL_FROM")
+        self.gmail_address = gmail_address or os.getenv("GMAIL_ADDRESS")
+        self.gmail_app_password = gmail_app_password or os.getenv("GMAIL_APP_PASSWORD")
         self.email_to = email_to or os.getenv("EMAIL_TO")
 
-        # Set the Resend API key
-        if self.resend_api_key:
-            resend.api_key = self.resend_api_key
-        else:
-            logger.warning("Resend API key not configured")
+        # Gmail SMTP settings
+        self.smtp_server = "smtp.gmail.com"
+        self.smtp_port = 587
 
-        # Validate required fields
-        if not all([self.resend_api_key, self.email_from, self.email_to]):
+        if not all([self.gmail_address, self.gmail_app_password, self.email_to]):
             logger.warning(
-                "Email notifier not fully configured. "
-                "Required: RESEND_API_KEY, EMAIL_FROM, EMAIL_TO"
+                "Gmail notifier not fully configured. "
+                "Required: GMAIL_ADDRESS, GMAIL_APP_PASSWORD, EMAIL_TO"
             )
-
-        logger.info(f"EmailNotifier initialized with Resend.com (from: {self.email_from})")
+        else:
+            logger.info(f"EmailNotifier initialized with Gmail SMTP (from: {self.gmail_address})")
 
     def send(self, content: str, subject: Optional[str] = None) -> bool:
         """
-        Send email notification with news digest using Resend.
+        Send email notification with news digest.
 
         Args:
             content: Email body content (news digest)
@@ -60,37 +60,51 @@ class EmailNotifier:
         Returns:
             True if email sent successfully, False otherwise
         """
-        if not all([self.resend_api_key, self.email_from, self.email_to]):
-            logger.error("Email notifier is not fully configured. Skipping email send.")
+        # Create default subject if not provided
+        if subject is None:
+            today = datetime.now().strftime("%Y-%m-%d")
+            subject = f"AI News Digest - {today}"
+
+        if not all([self.gmail_address, self.gmail_app_password, self.email_to]):
+            logger.error("Gmail notifier is not fully configured. Skipping email send.")
             return False
 
         try:
-            # Create default subject if not provided
-            if subject is None:
-                today = datetime.now().strftime("%Y-%m-%d")
-                subject = f"AI News Digest - {today}"
-
             # Create HTML email content
             html_content = self._create_html_email(content, subject)
 
-            logger.info(f"Sending email via Resend to {self.email_to}")
+            # Create message
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = self.gmail_address
+            msg["To"] = self.email_to
 
-            # Send email using Resend
-            params = {
-                "from": self.email_from,
-                "to": [self.email_to],
-                "subject": subject,
-                "html": html_content,
-                "text": content,  # Plain text fallback
-            }
+            # Attach plain text and HTML versions
+            part1 = MIMEText(content, "plain", "utf-8")
+            part2 = MIMEText(html_content, "html", "utf-8")
+            msg.attach(part1)
+            msg.attach(part2)
 
-            response = resend.Emails.send(params)
+            logger.info(f"Sending email via Gmail SMTP to {self.email_to}")
 
-            logger.info(f"Email sent successfully via Resend (ID: {response.get('id', 'N/A')})")
+            # Connect and send
+            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.gmail_address, self.gmail_app_password)
+                server.sendmail(self.gmail_address, self.email_to, msg.as_string())
+
+            logger.info("Email sent successfully via Gmail SMTP")
             return True
 
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(
+                f"Gmail authentication failed: {str(e)}. "
+                "Make sure you're using an App Password, not your regular Gmail password. "
+                "See README for setup instructions."
+            )
+            return False
         except Exception as e:
-            logger.error(f"Failed to send email via Resend: {str(e)}", exc_info=True)
+            logger.error(f"Failed to send email via Gmail: {str(e)}", exc_info=True)
             return False
 
     def _create_html_email(self, content: str, subject: str) -> str:

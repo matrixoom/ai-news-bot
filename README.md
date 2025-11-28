@@ -6,10 +6,10 @@
 
 [![GitHub Stars](https://img.shields.io/github/stars/giftedunicorn/ai-news-bot?style=flat-square&logo=github&color=yellow)](https://github.com/giftedunicorn/ai-news-bot/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/giftedunicorn/ai-news-bot?style=flat-square&logo=github&color=blue)](https://github.com/giftedunicorn/ai-news-bot/network/members)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=flat-square)](LICENSE)
 
 [![Discord](https://img.shields.io/badge/Discord-Join_Community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/AtfQPh8T2T)
-[![Email](https://img.shields.io/badge/Email-Notification-00D4AA?style=flat-square)](https://resend.com/)
+[![Email](https://img.shields.io/badge/Email-Gmail_SMTP-00D4AA?style=flat-square)](https://gmail.com/)
 [![Webhook](https://img.shields.io/badge/Webhook-Support-00D4AA?style=flat-square)](#)
 [![Slack](https://img.shields.io/badge/Slack-Integration-00D4AA?style=flat-square)](https://slack.com/)
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-00D4AA?style=flat-square)](https://telegram.org/)
@@ -26,9 +26,9 @@
 
 <div align="center">
 
-| [✨ Features](#features) | [🚀 Quick Start](#quick-start-local-development) | [⚙️ Configuration](#configuration) | [🤖 LLM Providers](#llm-provider-configuration) |
-|:---:|:---:|:---:|:---:|
-| [🌍 Languages](#language-configuration) | [📧 Email Setup](#email-setup-guide-with-resendcom) | [🔗 Webhooks](#webhook-integration) | [🔧 Troubleshooting](#troubleshooting) |
+|        [✨ Features](#features)         | [🚀 Quick Start](#quick-start-local-development) | [⚙️ Configuration](#configuration)  | [🤖 LLM Providers](#llm-provider-configuration) |
+| :-------------------------------------: | :----------------------------------------------: | :---------------------------------: | :---------------------------------------------: |
+| [🌍 Languages](#language-configuration) |       [📧 Email Setup](#email-setup-guide)       | [🔗 Webhooks](#webhook-integration) |     [🔧 Troubleshooting](#troubleshooting)      |
 
 </div>
 
@@ -44,21 +44,21 @@
 - **Customizable Prompts**: 9 pre-built templates (comprehensive, research, business, technical, etc.) or create your own
 - **Multilingual Support**: Generate news in 13+ languages including English, Chinese, Spanish, French, Japanese, and more
 - **Chinese News Sources**: Built-in support for Chinese AI news sources (36Kr, JiQiZhiXin, etc.)
-- **Multiple Notification Channels**: Supports email (via Resend.com), webhook, Slack, Telegram, and Discord notifications
+- **Multiple Notification Channels**: Supports email (Gmail SMTP), webhook, Slack, Telegram, and Discord notifications
 - **Flexible Configuration**: Easy-to-customize topics and notification settings via YAML config
 - **Automated Scheduling**: GitHub Actions workflow for daily automated execution
 - **Robust Error Handling**: Comprehensive logging and retry logic
 - **Email Client Compatible**: Works perfectly in Gmail, Outlook, Apple Mail, and mobile email apps
-- **Modern Email Delivery**: Uses Resend.com for reliable, developer-friendly email delivery
+- **Simple Email Setup**: Just use your Gmail account with App Password - no third-party email service needed
 
 ## 🚀 Deployment Options
 
 Choose your deployment method:
 
-| Method | Configuration | When to Use |
-|--------|--------------|-------------|
-| **Local Development** | `.env` file | Testing locally on your computer |
-| **GitHub Actions** | Repository Secrets | Automated daily runs (recommended) |
+| Method                | Configuration      | When to Use                        |
+| --------------------- | ------------------ | ---------------------------------- |
+| **Local Development** | `.env` file        | Testing locally on your computer   |
+| **GitHub Actions**    | Repository Secrets | Automated daily runs (recommended) |
 
 > 💡 **Tip**: Start with local development to test, then deploy to GitHub Actions for automation.
 
@@ -95,9 +95,9 @@ LLM_PROVIDER=claude  # Options: 'claude' or 'deepseek'
 ANTHROPIC_API_KEY=your_api_key_here      # For Claude
 DEEPSEEK_API_KEY=your_deepseek_api_key   # For DeepSeek
 
-# Optional: Email Configuration with Resend.com
-RESEND_API_KEY=re_your_api_key_here
-EMAIL_FROM=your_email@yourdomain.com
+# Gmail Configuration (easy setup!)
+GMAIL_ADDRESS=your_email@gmail.com
+GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx   # 16-char App Password (NOT your Gmail password)
 EMAIL_TO=recipient@example.com
 
 # Optional: Webhook Configuration
@@ -121,6 +121,7 @@ ENABLE_WEB_SEARCH=false
 The bot uses an **optimized, concise prompt** (15 lines vs 50+ in typical systems) that generates high-quality news digests.
 
 **Default Prompt** (in config.yaml):
+
 ```yaml
 Summarize 10 recent AI news items (5 international + 5 domestic) covering: {topics}
 
@@ -138,6 +139,7 @@ Rules: Recent news, no markdown, clear language
 ```
 
 **Why it's concise:**
+
 - ✅ Faster processing
 - ✅ Lower cost
 - ✅ Easier to maintain
@@ -146,6 +148,7 @@ Rules: Recent news, no markdown, clear language
 **Multi-Language Support:**
 
 Prompts are in English (best for Claude), but output can be in **13+ languages**:
+
 ```bash
 # In .env file
 AI_RESPONSE_LANGUAGE=zh  # Chinese output
@@ -155,6 +158,7 @@ AI_RESPONSE_LANGUAGE=ja  # Japanese output
 ```
 
 **Pre-built Templates** (config.examples.yaml):
+
 1. Comprehensive (default) - Balanced coverage
 2. Research - Academic focus
 3. Business - Industry & funding
@@ -182,36 +186,38 @@ The bot requires the following configuration. How you set them depends on your d
 - **Local Development**: Use `.env` file (see [Quick Start](#quick-start))
 - **GitHub Actions**: Use GitHub Repository Secrets (see [GitHub Actions Setup](#github-actions-setup))
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `LLM_PROVIDER` | Optional | LLM provider to use: `claude` or `deepseek` (default: `claude`) |
-| `ANTHROPIC_API_KEY` | If using Claude | Your Anthropic API key |
-| `DEEPSEEK_API_KEY` | If using DeepSeek | Your DeepSeek API key |
-| `NOTIFICATION_METHODS` | ✅ Required | Comma-separated list: `email`, `webhook`, `slack`, `telegram`, `discord`, or any combination (e.g., `email,slack,telegram`) |
-| `AI_RESPONSE_LANGUAGE` | Optional | Language code for AI responses (default: `en`). Supports: `zh`, `es`, `fr`, `ja`, `de`, `ko`, `pt`, `ru`, `ar`, `hi`, `it`, `nl` |
-| `ENABLE_WEB_SEARCH` | Optional | Enable web search for news (default: `false`) |
-| `RESEND_API_KEY` | If using email | Your Resend.com API key |
-| `EMAIL_FROM` | If using email | Sender email address (must be verified in Resend) |
-| `EMAIL_TO` | If using email | Recipient email address |
-| `WEBHOOK_URL` | If using webhook | Webhook endpoint URL |
-| `SLACK_WEBHOOK_URL` | If using Slack | Slack Incoming Webhook URL |
-| `SLACK_CHANNEL` | Optional | Override default Slack channel (e.g., `#general`) |
-| `SLACK_USERNAME` | Optional | Override bot username for Slack (default: `AI News Bot`) |
-| `TELEGRAM_BOT_TOKEN` | If using Telegram | Telegram Bot API token from @BotFather |
-| `TELEGRAM_CHAT_ID` | If using Telegram | Telegram chat ID (user, group, or channel ID) |
-| `DISCORD_WEBHOOK_URL` | If using Discord | Discord Webhook URL |
-| `DISCORD_USERNAME` | Optional | Override bot username for Discord (default: `AI News Bot`) |
-| `DISCORD_AVATAR_URL` | Optional | Custom avatar URL for Discord bot |
+| Variable               | Required          | Description                                                                                                                      |
+| ---------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `LLM_PROVIDER`         | Optional          | LLM provider to use: `claude` or `deepseek` (default: `claude`)                                                                  |
+| `ANTHROPIC_API_KEY`    | If using Claude   | Your Anthropic API key                                                                                                           |
+| `DEEPSEEK_API_KEY`     | If using DeepSeek | Your DeepSeek API key                                                                                                            |
+| `NOTIFICATION_METHODS` | ✅ Required       | Comma-separated list: `email`, `webhook`, `slack`, `telegram`, `discord`, or any combination (e.g., `email,slack,telegram`)      |
+| `AI_RESPONSE_LANGUAGE` | Optional          | Language code for AI responses (default: `en`). Supports: `zh`, `es`, `fr`, `ja`, `de`, `ko`, `pt`, `ru`, `ar`, `hi`, `it`, `nl` |
+| `ENABLE_WEB_SEARCH`    | Optional          | Enable web search for news (default: `false`)                                                                                    |
+| `GMAIL_ADDRESS`        | If using Gmail    | Your Gmail address                                                                                                               |
+| `GMAIL_APP_PASSWORD`   | If using Gmail    | Gmail App Password (16 characters, NOT regular password)                                                                         |
+| `EMAIL_TO`             | If using email    | Recipient email address                                                                                                          |
+| `WEBHOOK_URL`          | If using webhook  | Webhook endpoint URL                                                                                                             |
+| `SLACK_WEBHOOK_URL`    | If using Slack    | Slack Incoming Webhook URL                                                                                                       |
+| `SLACK_CHANNEL`        | Optional          | Override default Slack channel (e.g., `#general`)                                                                                |
+| `SLACK_USERNAME`       | Optional          | Override bot username for Slack (default: `AI News Bot`)                                                                         |
+| `TELEGRAM_BOT_TOKEN`   | If using Telegram | Telegram Bot API token from @BotFather                                                                                           |
+| `TELEGRAM_CHAT_ID`     | If using Telegram | Telegram chat ID (user, group, or channel ID)                                                                                    |
+| `DISCORD_WEBHOOK_URL`  | If using Discord  | Discord Webhook URL                                                                                                              |
+| `DISCORD_USERNAME`     | Optional          | Override bot username for Discord (default: `AI News Bot`)                                                                       |
+| `DISCORD_AVATAR_URL`   | Optional          | Custom avatar URL for Discord bot                                                                                                |
 
 ### Configuration File (config.yaml)
 
 The `config.yaml` file allows you to customize the news digest behavior:
 
 **LLM Configuration**:
+
 - **Provider**: Choose between `claude` or `deepseek`
 - **Model**: Optionally specify a specific model version
 
 **News Configuration**:
+
 - **use_real_sources**: Enable fetching news from RSS feeds (recommended, default: true)
 - **enable_web_search**: Enable DuckDuckGo web search (default: false)
 - **include_chinese_sources**: Include Chinese news sources (default: true)
@@ -225,9 +231,10 @@ The `config.yaml` file allows you to customize the news digest behavior:
 **Logging Settings**: Control log verbosity and format
 
 **Example Structure**:
+
 ```yaml
 llm:
-  provider: claude  # or 'deepseek'
+  provider: claude # or 'deepseek'
   # model: claude-sonnet-4-5-20250929  # optional
 
 news:
@@ -255,45 +262,52 @@ logging:
 The bot supports multiple LLM providers. Configure in `config.yaml` or via environment variables:
 
 #### Claude (Anthropic) - Default
+
 ```yaml
 llm:
   provider: claude
-  model: claude-sonnet-4-5-20250929  # optional, uses default if not set
+  model: claude-sonnet-4-5-20250929 # optional, uses default if not set
 ```
 
 **Available Claude Models:**
+
 - `claude-sonnet-4-5-20250929` - Latest Sonnet (default) - Best for most tasks
 - `claude-3-5-sonnet-20241022` - Previous Sonnet version
 
 **Claude Pricing (per million tokens):**
+
 - Claude Sonnet 4.5: $3 input / $15 output
 
 #### DeepSeek - Cost-Effective Alternative
+
 ```yaml
 llm:
   provider: deepseek
-  model: deepseek-chat  # optional, uses default if not set
+  model: deepseek-chat # optional, uses default if not set
 ```
 
 **Available DeepSeek Models:**
+
 - `deepseek-chat` - General chat model (default)
 - `deepseek-reasoner` - Enhanced reasoning model
 
 **DeepSeek Pricing:**
+
 - Much lower cost than Claude
 - Better Chinese language support
 - Good quality for news summarization
 
 #### Choosing a Provider
 
-| Provider | Pros | Cons | Best For |
-|----------|------|------|----------|
-| **Claude** | Excellent quality, reliable | Higher cost | Production, high-quality output |
-| **DeepSeek** | Low cost, good Chinese | Slightly lower quality | Budget-conscious, Chinese content |
+| Provider     | Pros                        | Cons                   | Best For                          |
+| ------------ | --------------------------- | ---------------------- | --------------------------------- |
+| **Claude**   | Excellent quality, reliable | Higher cost            | Production, high-quality output   |
+| **DeepSeek** | Low cost, good Chinese      | Slightly lower quality | Budget-conscious, Chinese content |
 
 ### Language Configuration
 
 **How It Works:**
+
 - Prompts are always in **English** (best for Claude understanding)
 - Output can be in **13+ languages** (automatic translation)
 - Set `AI_RESPONSE_LANGUAGE` in `.env` or GitHub Secrets
@@ -313,6 +327,7 @@ AI_RESPONSE_LANGUAGE=zh  # Full Chinese output
 ```
 
 **Example Output (Chinese):**
+
 ```
 国际新闻：
 
@@ -341,56 +356,56 @@ Add the following secrets one by one:
 
 #### ✅ Required Secrets
 
-| Secret Name | Example Value | Description |
-|-------------|---------------|-------------|
-| `LLM_PROVIDER` | `claude` or `deepseek` | LLM provider to use (default: `claude`) |
-| `ANTHROPIC_API_KEY` | `sk-ant-api03-xxx...` | Your Anthropic API key (if using Claude) |
-| `DEEPSEEK_API_KEY` | `sk-xxx...` | Your DeepSeek API key (if using DeepSeek) |
-| `NOTIFICATION_METHODS` | `email,slack,telegram` | Notification channels (comma-separated) |
+| Secret Name            | Example Value          | Description                               |
+| ---------------------- | ---------------------- | ----------------------------------------- |
+| `LLM_PROVIDER`         | `claude` or `deepseek` | LLM provider to use (default: `claude`)   |
+| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`  | Your Anthropic API key (if using Claude)  |
+| `DEEPSEEK_API_KEY`     | `sk-xxx...`            | Your DeepSeek API key (if using DeepSeek) |
+| `NOTIFICATION_METHODS` | `email,slack,telegram` | Notification channels (comma-separated)   |
 
 #### 📧 Email Secrets (if using email notifications)
 
-| Secret Name | Example Value | Description |
-|-------------|---------------|-------------|
-| `RESEND_API_KEY` | `re_123abc...` | Your Resend.com API key |
-| `EMAIL_FROM` | `news@yourdomain.com` | Sender email (must be verified in Resend) |
-| `EMAIL_TO` | `you@example.com` | Recipient email address |
+| Secret Name          | Example Value           | Description                                                                    |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| `GMAIL_ADDRESS`      | `you@gmail.com`         | Your Gmail address                                                             |
+| `GMAIL_APP_PASSWORD` | `xxxx xxxx xxxx xxxx`   | Gmail App Password ([Get one here](https://myaccount.google.com/apppasswords)) |
+| `EMAIL_TO`           | `recipient@example.com` | Recipient email address                                                        |
 
 #### 🔗 Webhook Secrets (if using webhook notifications)
 
-| Secret Name | Example Value | Description |
-|-------------|---------------|-------------|
+| Secret Name   | Example Value                 | Description               |
+| ------------- | ----------------------------- | ------------------------- |
 | `WEBHOOK_URL` | `https://example.com/webhook` | Your webhook endpoint URL |
 
 #### 💬 Slack Secrets (if using Slack notifications)
 
-| Secret Name | Example Value | Description |
-|-------------|---------------|-------------|
-| `SLACK_WEBHOOK_URL` | `https://hooks.slack.com/services/...` | Slack Incoming Webhook URL |
-| `SLACK_CHANNEL` | `#ai-news` | (Optional) Override default channel |
-| `SLACK_USERNAME` | `AI News Bot` | (Optional) Override bot username |
+| Secret Name         | Example Value                          | Description                         |
+| ------------------- | -------------------------------------- | ----------------------------------- |
+| `SLACK_WEBHOOK_URL` | `https://hooks.slack.com/services/...` | Slack Incoming Webhook URL          |
+| `SLACK_CHANNEL`     | `#ai-news`                             | (Optional) Override default channel |
+| `SLACK_USERNAME`    | `AI News Bot`                          | (Optional) Override bot username    |
 
 #### 📱 Telegram Secrets (if using Telegram notifications)
 
-| Secret Name | Example Value | Description |
-|-------------|---------------|-------------|
-| `TELEGRAM_BOT_TOKEN` | `123456:ABC-DEF...` | Telegram Bot API token from @BotFather |
-| `TELEGRAM_CHAT_ID` | `123456789` | Chat ID (use @userinfobot to get your ID) |
+| Secret Name          | Example Value       | Description                               |
+| -------------------- | ------------------- | ----------------------------------------- |
+| `TELEGRAM_BOT_TOKEN` | `123456:ABC-DEF...` | Telegram Bot API token from @BotFather    |
+| `TELEGRAM_CHAT_ID`   | `123456789`         | Chat ID (use @userinfobot to get your ID) |
 
 #### 🎮 Discord Secrets (if using Discord notifications)
 
-| Secret Name | Example Value | Description |
-|-------------|---------------|-------------|
-| `DISCORD_WEBHOOK_URL` | `https://discord.com/api/webhooks/...` | Discord Webhook URL |
-| `DISCORD_USERNAME` | `AI News Bot` | (Optional) Override bot username |
-| `DISCORD_AVATAR_URL` | `https://example.com/avatar.png` | (Optional) Custom avatar URL |
+| Secret Name           | Example Value                          | Description                      |
+| --------------------- | -------------------------------------- | -------------------------------- |
+| `DISCORD_WEBHOOK_URL` | `https://discord.com/api/webhooks/...` | Discord Webhook URL              |
+| `DISCORD_USERNAME`    | `AI News Bot`                          | (Optional) Override bot username |
+| `DISCORD_AVATAR_URL`  | `https://example.com/avatar.png`       | (Optional) Custom avatar URL     |
 
 #### 🌍 Optional Secrets
 
-| Secret Name | Example Value | Description |
-|-------------|---------------|-------------|
-| `AI_RESPONSE_LANGUAGE` | `zh` or `es` or `ja` | Language code (defaults to `en` if not set) |
-| `ENABLE_WEB_SEARCH` | `true` or `false` | Enable web search for news (defaults to `false`) |
+| Secret Name            | Example Value        | Description                                      |
+| ---------------------- | -------------------- | ------------------------------------------------ |
+| `AI_RESPONSE_LANGUAGE` | `zh` or `es` or `ja` | Language code (defaults to `en` if not set)      |
+| `ENABLE_WEB_SEARCH`    | `true` or `false`    | Enable web search for news (defaults to `false`) |
 
 ### Step 2: Enable GitHub Actions
 
@@ -416,9 +431,9 @@ The workflow runs daily at midnight UTC by default. To change the schedule, edit
 
 ```yaml
 schedule:
-  - cron: '0 0 * * *'  # Midnight UTC daily (current)
-  - cron: '0 9 * * *'  # 9:00 AM UTC daily
-  - cron: '0 */6 * * *'  # Every 6 hours
+  - cron: "0 0 * * *" # Midnight UTC daily (current)
+  - cron: "0 9 * * *" # 9:00 AM UTC daily
+  - cron: "0 */6 * * *" # Every 6 hours
 ```
 
 Use [crontab.guru](https://crontab.guru/) to create custom schedules.
@@ -498,6 +513,7 @@ NOTIFICATION_METHODS=email,slack,telegram,discord
 The bot generates **email-optimized content** that looks stunning across all email clients:
 
 **Features:**
+
 - ✅ No markdown formatting (clean, professional appearance)
 - ✅ Automatic HTML conversion with beautiful styling
 - ✅ Numbered news cards with visual badges
@@ -506,6 +522,7 @@ The bot generates **email-optimized content** that looks stunning across all ema
 - ✅ Works in Gmail, Outlook, Apple Mail, and all mobile apps
 
 **What recipients see:**
+
 - Clean white container with professional styling
 - Blue section headers with subtle borders
 - Numbered news items in styled cards
@@ -515,36 +532,44 @@ The bot generates **email-optimized content** that looks stunning across all ema
 **Preview your emails:**
 Run the bot locally and check the generated HTML email content.
 
-## Email Setup Guide with Resend.com
+## Email Setup Guide
 
-### Setting Up Resend
+Gmail SMTP is the easiest way to send emails - just use your existing Gmail account!
 
-1. **Sign up for Resend**
-   - Go to [resend.com](https://resend.com) and create an account
-   - Resend offers a generous free tier (100 emails/day, 3,000 emails/month)
+### Step 1: Enable 2-Step Verification
 
-2. **Get Your API Key**
-   - Navigate to API Keys in your Resend dashboard
-   - Create a new API key
-   - Copy the API key (starts with `re_`) and set it as `RESEND_API_KEY`
+1. Go to your [Google Account Security](https://myaccount.google.com/security)
+2. Click on **2-Step Verification**
+3. Follow the prompts to enable it (required for App Passwords)
 
-3. **Verify Your Domain** (Recommended for production)
-   - Go to Domains in your Resend dashboard
-   - Add and verify your domain by adding DNS records
-   - Once verified, you can send from any address at your domain
+### Step 2: Create an App Password
 
-4. **For Testing** (No domain verification needed)
-   - You can use `onboarding@resend.dev` as the `EMAIL_FROM` address
-   - This is only for testing and has sending limits
-   - For production use, verify your own domain
+1. Go to [Google App Passwords](https://myaccount.google.com/apppasswords)
+   - Or: Google Account → Security → 2-Step Verification → App passwords
+2. Select app: **Mail**
+3. Select device: **Other** (enter "AI News Bot")
+4. Click **Generate**
+5. Copy the 16-character password (looks like: `xxxx xxxx xxxx xxxx`)
 
-### Why Resend?
+> ⚠️ **Important**: This is NOT your regular Gmail password. Keep this App Password safe!
 
-- **Simple API**: Easy-to-use REST API, much simpler than SMTP
-- **Better Deliverability**: Higher inbox placement rates
-- **No SMTP Configuration**: No need to manage SMTP credentials
-- **Modern**: Built for developers with excellent documentation
-- **Analytics**: Track email delivery and engagement
+### Step 3: Configure Environment
+
+```env
+# Gmail Configuration
+GMAIL_ADDRESS=your_email@gmail.com
+GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
+EMAIL_TO=recipient@example.com
+NOTIFICATION_METHODS=email
+```
+
+That's it! Your Gmail is ready to send news digests.
+
+### Troubleshooting Gmail
+
+- **"Authentication failed"**: Make sure you're using the App Password, not your regular password
+- **"Less secure apps"**: This is outdated. Use App Passwords instead
+- **Can't find App Passwords**: You must enable 2-Step Verification first
 
 ## Notification Channels Setup
 
@@ -562,6 +587,7 @@ The webhook sends a JSON payload:
 ```
 
 Compatible with:
+
 - Microsoft Teams
 - Custom webhook endpoints
 - Any service that accepts JSON webhooks
@@ -569,11 +595,13 @@ Compatible with:
 ### Slack Setup
 
 1. **Create a Slack App**
+
    - Go to [https://api.slack.com/apps](https://api.slack.com/apps)
    - Click "Create New App" → "From scratch"
    - Name your app (e.g., "AI News Bot") and select your workspace
 
 2. **Enable Incoming Webhooks**
+
    - In your app settings, go to "Incoming Webhooks"
    - Toggle "Activate Incoming Webhooks" to On
    - Click "Add New Webhook to Workspace"
@@ -588,6 +616,7 @@ Compatible with:
    ```
 
 **Features:**
+
 - Rich message formatting with blocks
 - Color-coded attachments
 - Mobile-friendly notifications
@@ -596,12 +625,14 @@ Compatible with:
 ### Telegram Setup
 
 1. **Create a Telegram Bot**
+
    - Open Telegram and search for [@BotFather](https://t.me/botfather)
    - Send `/newbot` command
    - Follow the prompts to name your bot
    - Copy the API token provided
 
 2. **Get Your Chat ID**
+
    - Start a chat with your new bot
    - Send any message to the bot
    - Search for [@userinfobot](https://t.me/userinfobot) and send it any message
@@ -616,12 +647,14 @@ Compatible with:
    ```
 
 **Features:**
+
 - HTML and Markdown formatting support
 - Automatic message splitting for long content
 - Works with users, groups, and channels
 - Mobile and desktop notifications
 
 **For Channel/Group:**
+
 - Add your bot to the channel/group as an administrator
 - Use the channel/group ID as TELEGRAM_CHAT_ID
 - Channel IDs start with `-100` (e.g., `-1001234567890`)
@@ -629,6 +662,7 @@ Compatible with:
 ### Discord Setup
 
 1. **Create a Webhook**
+
    - Open your Discord server
    - Go to Server Settings → Integrations → Webhooks
    - Click "New Webhook"
@@ -644,12 +678,14 @@ Compatible with:
    ```
 
 **Features:**
+
 - Rich embed formatting with colors
 - Automatic content splitting for long messages
 - Custom bot name and avatar
 - Works on desktop and mobile
 
 **Advanced Options:**
+
 - Set custom avatar: `DISCORD_AVATAR_URL=https://example.com/avatar.png`
 - Multiple embeds for better organization
 - Color-coded sections (default: blue #0366d6)
@@ -669,10 +705,10 @@ Ensure `config.yaml` exists in the project root.
 
 ### Email Not Sending
 
-- Verify `RESEND_API_KEY` is correct and active
-- Ensure `EMAIL_FROM` is verified in Resend (or use `onboarding@resend.dev` for testing)
-- Check Resend dashboard for delivery logs and errors
-- Verify you haven't exceeded Resend's sending limits
+- Make sure you're using an **App Password**, not your regular Gmail password
+- Verify 2-Step Verification is enabled on your Google account
+- Check that `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD` are set correctly
+- App Password should be 16 characters (with or without spaces)
 
 ### Webhook Failing
 
@@ -710,7 +746,7 @@ python main.py
 
 ## License
 
-MIT License - See LICENSE file for details
+GPL-3.0 License - See LICENSE file for details
 
 ## Support
 
@@ -720,6 +756,7 @@ MIT License - See LICENSE file for details
 ## Credits
 
 Powered by:
+
 - [Anthropic Claude](https://www.anthropic.com)
 - [DeepSeek](https://www.deepseek.com)
 
