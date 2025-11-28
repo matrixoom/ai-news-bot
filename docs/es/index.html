@@ -355,36 +355,54 @@
 
         /* Providers */
         .providers {
-            display: flex;
-            justify-content: center;
-            gap: 50px;
-            flex-wrap: wrap;
-            margin: 40px 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 25px;
+            margin: 40px auto;
+            max-width: 1200px;
+        }
+
+        @media (min-width: 768px) {
+            .providers {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .providers {
+                grid-template-columns: repeat(5, 1fr);
+            }
         }
 
         .provider-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #1a1a1a;
             color: white;
-            padding: 50px;
+            padding: 35px 20px;
             border-radius: 15px;
             text-align: center;
-            min-width: 280px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+            border: 2px solid #2a2a2a;
         }
 
         .provider-card:hover {
-            transform: scale(1.05);
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+            border-color: #667eea;
         }
 
         .provider-card h3 {
-            font-size: 2rem;
-            margin-bottom: 15px;
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+            color: #667eea;
         }
 
         .provider-card p {
-            font-size: 1.1rem;
+            font-size: 0.95rem;
             opacity: 0.95;
+            line-height: 1.5;
+            color: #d0d0d0;
         }
 
         /* Languages */
@@ -692,17 +710,32 @@
             <!-- LLM Providers -->
             <section class="section">
                 <h2 class="section-title">Elige Tu Motor de IA</h2>
-                <p class="section-subtitle">Cambia entre proveedores en cualquier momento según tus necesidades</p>
+                <p class="section-subtitle">5 proveedores LLM más recientes con razonamiento avanzado - cambia según tus necesidades</p>
                 <div class="providers">
                     <div class="provider-card">
-                        <h3>Claude Sonnet 4.5</h3>
-                        <p style="margin-bottom: 15px;">Calidad Premium</p>
-                        <p style="font-size: 0.95rem;">Excelente comprensión, mejor para resúmenes de alta calidad. $3/1M tokens de entrada.</p>
+                        <h3>🔵 Claude Sonnet 4.5</h3>
+                        <p style="margin-bottom: 15px;">Razonamiento Premium</p>
+                        <p style="font-size: 0.9rem;">Último Sonnet 4.5 con capacidades de razonamiento avanzado. Mejor para análisis complejo y salida de alta calidad.</p>
                     </div>
                     <div class="provider-card">
-                        <h3>DeepSeek</h3>
-                        <p style="margin-bottom: 15px;">Rentable</p>
-                        <p style="font-size: 0.95rem;">Gran soporte en chino, económico. Perfecto para actualizaciones frecuentes.</p>
+                        <h3>💎 DeepSeek R1</h3>
+                        <p style="margin-bottom: 15px;">Pensamiento Extendido</p>
+                        <p style="font-size: 0.9rem;">Modelo de razonamiento DeepSeek-R1. Ultra bajo costo con capacidades de pensamiento extendido para análisis profundo.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>⚡ Gemini 3 Pro</h3>
+                        <p style="margin-bottom: 15px;">Multimodal de Nueva Generación</p>
+                        <p style="font-size: 0.9rem;">Última vista previa de Gemini 3 Pro. IA de próxima generación con capacidades multimodales y nivel gratuito.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>🚀 Grok 4.1</h3>
+                        <p style="margin-bottom: 15px;">Razonamiento Rápido</p>
+                        <p style="font-size: 0.9rem;">Grok 4.1 con modo de razonamiento rápido. Acceso a datos en tiempo real para información actualizada.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>🤖 GPT-5.1</h3>
+                        <p style="margin-bottom: 15px;">Último Buque Insignia</p>
+                        <p style="font-size: 0.9rem;">Modelo insignia GPT-5.1 de OpenAI. Rendimiento de vanguardia con capacidades mejoradas.</p>
                     </div>
                 </div>
             </section>

@@ -71,10 +71,10 @@
         .use-case-card h3 { font-size: 1.5rem; margin-bottom: 15px; }
         .use-case-card p { opacity: 0.95; line-height: 1.7; }
         .providers { display: flex; justify-content: center; gap: 50px; flex-wrap: wrap; margin: 40px 0; }
-        .provider-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 50px; border-radius: 15px; text-align: center; min-width: 280px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.3s ease; }
-        .provider-card:hover { transform: scale(1.05); }
-        .provider-card h3 { font-size: 2rem; margin-bottom: 15px; }
-        .provider-card p { font-size: 1.1rem; opacity: 0.95; }
+        .providers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 25px; margin: 40px auto; max-width: 1200px; } @media (min-width: 768px) { .providers { grid-template-columns: repeat(3, 1fr); } } @media (min-width: 1024px) { .providers { grid-template-columns: repeat(5, 1fr); } } .provider-card { background: #1a1a1a; color: white; padding: 35px 20px; border-radius: 15px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; border: 2px solid #2a2a2a; }
+        .provider-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,0,0,0.3); border-color: #667eea; }
+        .provider-card h3 { font-size: 1.3rem; margin-bottom: 10px; font-weight: 700; color: #667eea; }
+        .provider-card p { font-size: 0.95rem; opacity: 0.95; line-height: 1.5; color: #d0d0d0; }
         .languages { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin: 40px 0; }
         .language-tag { background: #e9ecef; padding: 12px 24px; border-radius: 25px; font-weight: 600; color: #667eea; transition: all 0.3s ease; font-size: 1rem; }
         .language-tag:hover { background: #667eea; color: white; transform: scale(1.08); }
@@ -237,14 +237,29 @@
                 <p class="section-subtitle">필요에 따라 언제든지 제공업체 간 전환</p>
                 <div class="providers">
                     <div class="provider-card">
-                        <h3>Claude Sonnet 4.5</h3>
-                        <p style="margin-bottom: 15px;">프리미엄 품질</p>
-                        <p style="font-size: 0.95rem;">우수한 이해력, 고품질 다이제스트에 최적. $3/100만 토큰 입력.</p>
+                        <h3>🔵 Claude Sonnet 4.5</h3>
+                        <p style="margin-bottom: 15px;">프리미엄 추론</p>
+                        <p style="font-size: 0.9rem;">고급 추론 기능을 갖춘 최신 Sonnet 4.5. 복잡한 분석과 고품질 출력에 최적.</p>
                     </div>
                     <div class="provider-card">
-                        <h3>DeepSeek</h3>
-                        <p style="margin-bottom: 15px;">비용 효율적</p>
-                        <p style="font-size: 0.95rem;">뛰어난 중국어 지원, 예산 친화적. 빈번한 업데이트에 완벽.</p>
+                        <h3>💎 DeepSeek R1</h3>
+                        <p style="margin-bottom: 15px;">확장된 사고</p>
+                        <p style="font-size: 0.9rem;">DeepSeek-R1 추론 모델. 깊은 분석을 위한 확장된 사고 기능과 초저렴한 비용.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>⚡ Gemini 3 Pro</h3>
+                        <p style="margin-bottom: 15px;">차세대 멀티모달</p>
+                        <p style="font-size: 0.9rem;">최신 Gemini 3 Pro 프리뷰. 멀티모달 기능과 무료 티어를 갖춘 차세대 AI.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>🚀 Grok 4.1</h3>
+                        <p style="margin-bottom: 15px;">빠른 추론</p>
+                        <p style="font-size: 0.9rem;">빠른 추론 모드를 갖춘 Grok 4.1. 최신 정보를 위한 실시간 데이터 액세스.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>🤖 GPT-5.1</h3>
+                        <p style="margin-bottom: 15px;">최신 플래그십</p>
+                        <p style="font-size: 0.9rem;">OpenAI의 GPT-5.1 플래그십 모델. 향상된 기능을 갖춘 최첨단 성능.</p>
                     </div>
                 </div>
             </section>

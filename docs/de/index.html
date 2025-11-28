@@ -74,10 +74,13 @@
         .use-case-card h3 { font-size: 1.5rem; margin-bottom: 15px; }
         .use-case-card p { opacity: 0.95; line-height: 1.7; }
         .providers { display: flex; justify-content: center; gap: 50px; flex-wrap: wrap; margin: 40px 0; }
-        .provider-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 50px; border-radius: 15px; text-align: center; min-width: 280px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.3s ease; }
-        .provider-card:hover { transform: scale(1.05); }
-        .provider-card h3 { font-size: 2rem; margin-bottom: 15px; }
-        .provider-card p { font-size: 1.1rem; opacity: 0.95; }
+        .providers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 25px; margin: 40px auto; max-width: 1200px; }
+        @media (min-width: 768px) { .providers { grid-template-columns: repeat(3, 1fr); } }
+        @media (min-width: 1024px) { .providers { grid-template-columns: repeat(5, 1fr); } }
+        .provider-card { background: #1a1a1a; color: white; padding: 35px 20px; border-radius: 15px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; border: 2px solid #2a2a2a; }
+        .provider-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,0,0,0.3); border-color: #667eea; }
+        .provider-card h3 { font-size: 1.3rem; margin-bottom: 10px; font-weight: 700; color: #667eea; }
+        .provider-card p { font-size: 0.95rem; opacity: 0.95; line-height: 1.5; color: #d0d0d0; }
         .languages { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin: 40px 0; }
         .language-tag { background: #e9ecef; padding: 12px 24px; border-radius: 25px; font-weight: 600; color: #667eea; transition: all 0.3s ease; font-size: 1rem; }
         .language-tag:hover { background: #667eea; color: white; transform: scale(1.08); }
@@ -240,14 +243,29 @@
                 <p class="section-subtitle">Wechseln Sie jederzeit zwischen Anbietern je nach Bedarf</p>
                 <div class="providers">
                     <div class="provider-card">
-                        <h3>Claude Sonnet 4.5</h3>
-                        <p style="margin-bottom: 15px;">Premium-Qualität</p>
-                        <p style="font-size: 0.95rem;">Hervorragendes Verständnis, am besten für hochwertige Digests. $3/1M Tokens Eingabe.</p>
+                        <h3>🔵 Claude Sonnet 4.5</h3>
+                        <p style="margin-bottom: 15px;">Premium-Argumentation</p>
+                        <p style="font-size: 0.9rem;">Neuestes Sonnet 4.5 mit erweiterten Argumentationsfähigkeiten. Am besten für komplexe Analysen und hochwertige Ausgabe.</p>
                     </div>
                     <div class="provider-card">
-                        <h3>DeepSeek</h3>
-                        <p style="margin-bottom: 15px;">Kosteneffektiv</p>
-                        <p style="font-size: 0.95rem;">Großartige chinesische Unterstützung, budgetfreundlich. Perfekt für häufige Updates.</p>
+                        <h3>💎 DeepSeek R1</h3>
+                        <p style="margin-bottom: 15px;">Erweitertes Denken</p>
+                        <p style="font-size: 0.9rem;">DeepSeek-R1 Argumentationsmodell. Ultraniedrige Kosten mit erweiterten Denkfähigkeiten für tiefgehende Analysen.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>⚡ Gemini 3 Pro</h3>
+                        <p style="margin-bottom: 15px;">Multimodal der nächsten Generation</p>
+                        <p style="font-size: 0.9rem;">Neueste Gemini 3 Pro Vorschau. KI der nächsten Generation mit multimodalen Fähigkeiten und kostenlosem Tarif.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>🚀 Grok 4.1</h3>
+                        <p style="margin-bottom: 15px;">Schnelle Argumentation</p>
+                        <p style="font-size: 0.9rem;">Grok 4.1 mit schnellem Argumentationsmodus. Echtzeit-Datenzugriff für aktuelle Informationen.</p>
+                    </div>
+                    <div class="provider-card">
+                        <h3>🤖 GPT-5.1</h3>
+                        <p style="margin-bottom: 15px;">Neuestes Flaggschiff</p>
+                        <p style="font-size: 0.9rem;">OpenAIs GPT-5.1 Flaggschiff-Modell. Modernste Leistung mit erweiterten Funktionen.</p>
                     </div>
                 </div>
             </section>
