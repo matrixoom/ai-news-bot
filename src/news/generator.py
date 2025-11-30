@@ -1,13 +1,12 @@
 """
 AI News Generator using configurable LLM providers
 """
-import os
-from typing import Dict, List, Optional
+from typing import List, Optional
 from ..logger import setup_logger
 from ..config import LANGUAGE_NAMES
 from .web_search import WebSearchTool, get_search_tool_definition
 from .fetcher import NewsFetcher
-from ..llm_providers import get_llm_provider, BaseLLMProvider
+from ..llm_providers import get_llm_provider
 
 
 logger = setup_logger(__name__)
@@ -50,151 +49,6 @@ class NewsGenerator:
             f"(model: {self.provider.model}, web_search: {enable_web_search})"
         )
 
-    def generate_news_digest(
-        self,
-        topics: List[str],
-        prompt_template: str,
-        max_tokens: int = 2000,
-        language: str = "en"
-    ) -> str:
-        """
-        Generate a news digest based on provided topics.
-        Uses web search tool to fetch current news when enabled.
-
-        Args:
-            topics: List of topics to cover in the news digest
-            prompt_template: Template string with {topics} placeholder
-            max_tokens: Maximum tokens in response
-            language: Language code for the response (e.g., 'en', 'zh', 'es', 'fr', 'ja')
-
-        Returns:
-            Generated news digest as string
-
-        Raises:
-            Exception: If API call fails
-        """
-        try:
-            # Format topics as a bulleted list
-            topics_formatted = "\n".join([f"- {topic}" for topic in topics])
-
-            # Create the full prompt
-            prompt = prompt_template.format(topics=topics_formatted)
-
-            # Add web search instruction if enabled
-            if self.enable_web_search:
-                prompt += "\n\nIMPORTANT: Use the web_search tool to find the most recent AI news from 2025. You can search 3-5 times with different queries to gather diverse news. After gathering news, create a comprehensive digest based on what you found."
-
-            # Add language instruction if not English
-            if language and language.lower() != "en":
-                language_name = LANGUAGE_NAMES.get(language.lower(), language.upper())
-                prompt += f"\n\nIMPORTANT: Please respond entirely in {language_name}."
-
-            logger.info(f"Generating news digest with {self.provider.provider_name}, language: {language}, web_search: {self.enable_web_search}")
-            logger.debug(f"Topics: {topics}")
-
-            # Prepare messages
-            messages = [{"role": "user", "content": prompt}]
-
-            # If web search is disabled, just generate
-            if not self.enable_web_search:
-                return self.provider.generate(
-                    messages=messages,
-                    max_tokens=max_tokens
-                )
-
-            # With web search enabled, use tool calling
-            tools = [get_search_tool_definition()]
-            
-            # Create tool handler for search
-            search_count = [0]  # Use list to allow modification in closure
-            max_searches = 6
-            
-            def tool_handler(tool_name: str, tool_input: dict, tool_use_id: str) -> str:
-                """Handle tool calls for web search"""
-                if tool_name == "web_search" and self.search_tool:
-                    search_count[0] += 1
-                    
-                    if search_count[0] > max_searches:
-                        return "Maximum number of searches reached. Please create the digest based on the information gathered so far."
-                    
-                    query = tool_input.get("query", "AI news 2025")
-                    max_results = tool_input.get("max_results", 10)
-                    search_results = self.search_tool.search_news(query, max_results)
-                    
-                    # Format search results
-                    if search_results:
-                        result_text = f"Search results for '{query}':\n\n"
-                        for i, result in enumerate(search_results, 1):
-                            result_text += f"{i}. {result['title']}\n"
-                            result_text += f"   {result['snippet']}\n"
-                            if result['url']:
-                                result_text += f"   URL: {result['url']}\n"
-                            result_text += "\n"
-                        return result_text
-                    else:
-                        return f"No results found for '{query}'. Try a different query or proceed with the information you have."
-                
-                return "Tool not available"
-            
-            # Convert tools to appropriate format if using DeepSeek
-            if self.provider.provider_name == "deepseek":
-                from ..llm_providers.deepseek_provider import DeepSeekProvider
-                if isinstance(self.provider, DeepSeekProvider):
-                    tools = self.provider.convert_claude_tools_to_openai_format(tools)
-            
-            response_text = self.provider.generate_with_tools(
-                messages=messages,
-                tools=tools,
-                max_tokens=max_tokens,
-                max_iterations=8,
-                tool_handler=tool_handler
-            )
-
-            logger.info("News digest generated successfully")
-            logger.debug(f"Response length: {len(response_text)} characters")
-
-            return response_text
-
-        except Exception as e:
-            logger.error(f"Failed to generate news digest: {str(e)}", exc_info=True)
-            raise
-
-    def generate_with_retry(
-        self,
-        topics: List[str],
-        prompt_template: str,
-        max_retries: int = 3,
-        **kwargs
-    ) -> str:
-        """
-        Generate news digest with retry logic.
-
-        Args:
-            topics: List of topics to cover
-            prompt_template: Template string with {topics} placeholder
-            max_retries: Maximum number of retry attempts
-            **kwargs: Additional arguments passed to generate_news_digest
-
-        Returns:
-            Generated news digest as string
-
-        Raises:
-            Exception: If all retries fail
-        """
-        last_exception = None
-
-        for attempt in range(max_retries):
-            try:
-                return self.generate_news_digest(topics, prompt_template, **kwargs)
-            except Exception as e:
-                last_exception = e
-                logger.warning(f"Attempt {attempt + 1}/{max_retries} failed: {str(e)}")
-                if attempt < max_retries - 1:
-                    logger.info("Retrying...")
-
-        logger.error(f"All {max_retries} attempts failed")
-        raise last_exception
-
     def generate_news_digest_from_sources(
         self,
         prompt_template: str,
@@ -228,14 +82,9 @@ class NewsGenerator:
             )
 
             if not news_data['international'] and not news_data['domestic']:
-                logger.warning("No news items fetched, falling back to general news generation")
-                # Fallback to the original method
-                return self.generate_news_digest(
-                    topics=["AI industry news"],
-                    prompt_template=prompt_template,
-                    max_tokens=max_tokens,
-                    language=language
-                )
+                error_msg = "No news items fetched from RSS sources. Please check your network connection or RSS feed availability."
+                logger.error(error_msg)
+                raise Exception(error_msg)
 
             # Format news for summarization
             formatted_news = self.news_fetcher.format_news_for_summary(news_data)

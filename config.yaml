@@ -11,12 +11,9 @@ llm:
   # model: claude-sonnet-4-5-20250929
 
 news:
-  # Enable fetching real-time news from RSS feeds (recommended)
-  # Set to false to use AI-generated news based on AI's knowledge (may be outdated)
-  use_real_sources: true
-
   # Enable web search tool (uses DuckDuckGo API via LLM tool calling)
-  # Note: DuckDuckGo API often returns limited results. RSS feeds (use_real_sources) is more reliable.
+  # Note: DuckDuckGo API often returns limited results. RSS feeds are more reliable.
+  # Default: false (recommended to keep disabled)
   enable_web_search: false
 
   # Include Chinese news sources

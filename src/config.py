@@ -161,11 +161,6 @@ Format your response as a structured news digest with clear sections."""
         return env_value in ("true", "1", "yes", "on")
 
     @property
-    def use_real_news_sources(self) -> bool:
-        """Whether to fetch real-time news from RSS feeds"""
-        return self.config_data.get("news", {}).get("use_real_sources", True)
-
-    @property
     def include_chinese_sources(self) -> bool:
         """Whether to include Chinese news sources"""
         return self.config_data.get("news", {}).get("include_chinese_sources", True)
