@@ -14,7 +14,6 @@ logger = setup_logger(__name__)
 class NewsFetcher:
     """Fetch real-time AI news from RSS feeds and news APIs"""
 
-    # TODO: add news sources base on the language
     def __init__(self):
         """Initialize the news fetcher"""
         # RSS feed sources for AI news (reliable sources only)
@@ -48,28 +47,135 @@ class NewsFetcher:
             "Autonomous Vehicle News": "https://www.autonomousvehicleinternational.com/feed",
         }
 
-        # Chinese AI news sources
+        # Chinese AI news sources (zh)
         self.chinese_feeds = {
+            # Tech News Outlets
+            "36Kr (36氪)": "https://36kr.com/feed",
+            "JiQiZhiXin (机器之心)": "https://www.jiqizhixin.com/rss",
+            "Leiphone (雷锋网)": "https://www.leiphone.com/feed",
+            "iFeng Tech (凤凰科技)": "https://tech.ifeng.com/rss/index.xml",
+            "Sina Tech (新浪科技)": "http://rss.sina.com.cn/tech/rollnews.xml",
+            # Google News (fallback)
             "Google News AI (CN)": "https://news.google.com/rss/search?q=人工智能+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
-            "Google News Tech (CN)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
             "Google News LLM (CN)": "https://news.google.com/rss/search?q=大模型+GPT+Claude&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
-            "Google News Robotics (CN)": "https://news.google.com/rss/search?q=机器人+自动驾驶&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
         }
 
-        # Japanese AI news sources
+        # Japanese AI news sources (ja)
         self.japanese_feeds = {
-            "Google News AI (JP)": "https://news.google.com/rss/search?q=人工知能+AI&hl=ja&gl=JP&ceid=JP:ja-JP",
-            "Google News Tech (JP)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=ja&gl=JP&ceid=JP:ja-JP",
-            "Google News LLM (JP)": "https://news.google.com/rss/search?q=大模型+GPT+Claude&hl=ja&gl=JP&ceid=JP:ja-JP",
-            "Google News Robotics (JP)": "https://news.google.com/rss/search?q=ロボット+自動運転&hl=ja&gl=JP&ceid=JP:ja-JP",
+            # Tech News Outlets
+            "ITmedia AI+": "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml",
+            "Nikkei xTECH": "https://xtech.nikkei.com/rss/index.rdf",
+            "ASCII.jp AI": "https://ascii.jp/elem/000/004/000/4000000/index-2.xml",
+            "Impress Watch": "https://www.watch.impress.co.jp/data/rss/1.0/ipw/feed.rdf",
+            # Google News (fallback)
+            "Google News AI (JP)": "https://news.google.com/rss/search?q=人工知能+AI&hl=ja&gl=JP&ceid=JP:ja",
+            "Google News Tech (JP)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=ja&gl=JP&ceid=JP:ja",
         }
 
-        # French AI news sources
+        # French AI news sources (fr)
         self.french_feeds = {
-            "Google News AI (FR)": "https://news.google.com/rss/search?q=intelligence+artificielle+AI&hl=fr&gl=FR&ceid=FR:fr-FR",
-            "Google News Tech (FR)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=fr&gl=FR&ceid=FR:fr-FR",
-            "Google News LLM (FR)": "https://news.google.com/rss/search?q=grand+modèle+GPT+Claude&hl=fr&gl=FR&ceid=FR:fr-FR",
-            "Google News Robotics (FR)": "https://news.google.com/rss/search?q=robot+autonomie&hl=fr&gl=FR&ceid=FR:fr-FR",
+            # Tech News Outlets
+            "L'Usine Digitale": "https://www.usine-digitale.fr/rss/intelligence-artificielle.xml",
+            "01net": "https://www.01net.com/rss/actualites/",
+            "Frandroid": "https://www.frandroid.com/feed",
+            "BFM Tech": "https://www.bfmtv.com/rss/tech/",
+            # Google News (fallback)
+            "Google News AI (FR)": "https://news.google.com/rss/search?q=intelligence+artificielle&hl=fr&gl=FR&ceid=FR:fr",
+            "Google News Tech (FR)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=fr&gl=FR&ceid=FR:fr",
+        }
+
+        # Spanish AI news sources (es)
+        self.spanish_feeds = {
+            # Tech News Outlets
+            "Xataka": "https://www.xataka.com/tag/inteligencia-artificial/rss2.xml",
+            "El País Tecnología": "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/tecnologia/portada",
+            "Hipertextual": "https://hipertextual.com/feed",
+            "Genbeta": "https://www.genbeta.com/tag/inteligencia-artificial/rss2.xml",
+            # Google News
+            "Google News AI (ES)": "https://news.google.com/rss/search?q=inteligencia+artificial&hl=es&gl=ES&ceid=ES:es",
+        }
+
+        # German AI news sources (de)
+        self.german_feeds = {
+            # Tech News Outlets
+            "Heise Online": "https://www.heise.de/rss/heise-atom.xml",
+            "t3n Digital Pioneers": "https://t3n.de/tag/kuenstliche-intelligenz/feed/",
+            "Golem.de": "https://rss.golem.de/rss.php?feed=RSS2.0",
+            "Computerwoche": "https://www.computerwoche.de/rss/feed/computerwoche-alle",
+            # Google News
+            "Google News AI (DE)": "https://news.google.com/rss/search?q=künstliche+intelligenz&hl=de&gl=DE&ceid=DE:de",
+        }
+
+        # Korean AI news sources (ko)
+        self.korean_feeds = {
+            # Tech News Outlets
+            "Chosun Biz Tech": "https://biz.chosun.com/rss/tech.xml",
+            "ZDNet Korea": "https://zdnet.co.kr/rss/",
+            "ETNews": "https://rss.etnews.com/Section901.xml",
+            "Korean AI News": "https://www.aitimes.kr/rss/allArticle.xml",
+            # Google News
+            "Google News AI (KR)": "https://news.google.com/rss/search?q=인공지능&hl=ko&gl=KR&ceid=KR:ko",
+        }
+
+        # Portuguese AI news sources (pt)
+        self.portuguese_feeds = {
+            # Tech News Outlets
+            "TecMundo": "https://www.tecmundo.com.br/rss",
+            "Olhar Digital": "https://olhardigital.com.br/feed/",
+            "Canaltech": "https://canaltech.com.br/rss/",
+            "Exame": "https://exame.com/feed/tecnologia/",
+            # Google News
+            "Google News AI (BR)": "https://news.google.com/rss/search?q=inteligência+artificial&hl=pt-BR&gl=BR&ceid=BR:pt-419",
+        }
+
+        # Italian AI news sources (it)
+        self.italian_feeds = {
+            # Tech News Outlets
+            "Il Sole 24 Ore Tech": "https://www.ilsole24ore.com/rss/tecnologia.xml",
+            "Punto Informatico": "https://www.punto-informatico.it/feed/",
+            "Tom's Hardware IT": "https://www.tomshw.it/feed",
+            "Wired Italia": "https://www.wired.it/feed/rss",
+            # Google News
+            "Google News AI (IT)": "https://news.google.com/rss/search?q=intelligenza+artificiale&hl=it&gl=IT&ceid=IT:it",
+        }
+
+        # Russian AI news sources (ru)
+        self.russian_feeds = {
+            # Tech News Outlets
+            "Habr": "https://habr.com/ru/rss/all/",
+            "CNews": "https://www.cnews.ru/inc/rss/news.xml",
+            "Roem.ru": "https://roem.ru/feed/",
+            "VC.ru": "https://vc.ru/rss/all",
+            # Google News
+            "Google News AI (RU)": "https://news.google.com/rss/search?q=искусственный+интеллект&hl=ru&gl=RU&ceid=RU:ru",
+        }
+
+        # Dutch AI news sources (nl)
+        self.dutch_feeds = {
+            # Tech News Outlets
+            "Tweakers": "https://feeds.feedburner.com/tweakers/mixed",
+            "Computable": "https://www.computable.nl/rss.xml",
+            "Dutch IT Channel": "https://dutchitchannel.nl/feed/",
+            # Google News
+            "Google News AI (NL)": "https://news.google.com/rss/search?q=kunstmatige+intelligentie&hl=nl&gl=NL&ceid=NL:nl",
+        }
+
+        # Arabic AI news sources (ar)
+        self.arabic_feeds = {
+            # Tech News Outlets
+            "Arageek": "https://www.arageek.com/feed",
+            "Tech Wd": "https://www.tech-wd.com/feed/",
+            # Google News
+            "Google News AI (AR)": "https://news.google.com/rss/search?q=الذكاء+الاصطناعي&hl=ar&gl=SA&ceid=SA:ar",
+        }
+
+        # Hindi AI news sources (hi)
+        self.hindi_feeds = {
+            # Tech News Outlets
+            "Jagran Josh Tech": "https://www.jagranjosh.com/rss/tech.xml",
+            "NDTV Gadgets": "https://feeds.feedburner.com/ndtvgadgets-latest",
+            # Google News
+            "Google News AI (HI)": "https://news.google.com/rss/search?q=कृत्रिम+बुद्धिमत्ता&hl=hi&gl=IN&ceid=IN:hi",
         }
 
 
@@ -172,15 +278,25 @@ class NewsFetcher:
                 item['source'] = source_name
                 all_news['international'].append(item)
 
-        # Fetch domestic news
-        if language == "zh":
-            feeds = self.chinese_feeds
-        elif language == "ja":
-            feeds = self.japanese_feeds
-        elif language == "fr":
-            feeds = self.french_feeds
-        else:
-            logger.error(f"Unsupported language: {language}")
+        # Fetch domestic news based on language
+        language_feeds_map = {
+            "zh": self.chinese_feeds,
+            "ja": self.japanese_feeds,
+            "fr": self.french_feeds,
+            "es": self.spanish_feeds,
+            "de": self.german_feeds,
+            "ko": self.korean_feeds,
+            "pt": self.portuguese_feeds,
+            "it": self.italian_feeds,
+            "ru": self.russian_feeds,
+            "nl": self.dutch_feeds,
+            "ar": self.arabic_feeds,
+            "hi": self.hindi_feeds,
+        }
+
+        feeds = language_feeds_map.get(language)
+        if not feeds:
+            logger.warning(f"No domestic feeds configured for language: {language}, using international only")
             return all_news
 
         for source_name, feed_url in feeds.items():
