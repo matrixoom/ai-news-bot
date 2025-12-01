@@ -312,7 +312,6 @@ The `config.yaml` file allows you to customize the news digest behavior:
 
 - **use_real_sources**: Enable fetching news from RSS feeds (recommended, default: true)
 - **enable_web_search**: Enable DuckDuckGo web search (default: false)
-- **include_chinese_sources**: Include Chinese news sources (default: true)
 - **max_items_per_source**: Maximum news items per source (default: 10)
 - **Topics**: Focus areas for news selection (optional, guides the AI)
 - **Prompt Template**: The instruction template for the LLM
@@ -332,7 +331,6 @@ llm:
 news:
   use_real_sources: true
   enable_web_search: false
-  include_chinese_sources: true
   max_items_per_source: 10
 
   topics:
@@ -431,13 +429,13 @@ llm:
 
 #### Choosing a Provider
 
-| Provider     | Pros                                  | Best For                               |
-| ------------ | ------------------------------------- | -------------------------------------- |
-| **Claude**   | Sonnet 4.5 - Top reasoning & quality  | Production, complex analysis           |
-| **DeepSeek** | R1 reasoning model - Ultra low cost   | Budget-conscious, extended reasoning   |
-| **Gemini**   | Gemini 3 Pro - Fast & multimodal      | High-volume, multimodal tasks          |
-| **Grok**     | 4.1 Fast Reasoning - Real-time data   | Up-to-date info, quick reasoning       |
-| **OpenAI**   | GPT-5.1 - Latest flagship model       | Cutting-edge performance, general use  |
+| Provider     | Pros                                 | Best For                              |
+| ------------ | ------------------------------------ | ------------------------------------- |
+| **Claude**   | Sonnet 4.5 - Top reasoning & quality | Production, complex analysis          |
+| **DeepSeek** | R1 reasoning model - Ultra low cost  | Budget-conscious, extended reasoning  |
+| **Gemini**   | Gemini 3 Pro - Fast & multimodal     | High-volume, multimodal tasks         |
+| **Grok**     | 4.1 Fast Reasoning - Real-time data  | Up-to-date info, quick reasoning      |
+| **OpenAI**   | GPT-5.1 - Latest flagship model      | Cutting-edge performance, general use |
 
 ### Language Configuration
 

@@ -161,11 +161,6 @@ Format your response as a structured news digest with clear sections."""
         return env_value in ("true", "1", "yes", "on")
 
     @property
-    def include_chinese_sources(self) -> bool:
-        """Whether to include Chinese news sources"""
-        return self.config_data.get("news", {}).get("include_chinese_sources", True)
-
-    @property
     def max_items_per_source(self) -> int:
         """Maximum news items to fetch per source"""
         return self.config_data.get("news", {}).get("max_items_per_source", 5)

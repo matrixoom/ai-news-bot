@@ -1,8 +1,11 @@
 # LLM Configuration - Choose your AI model provider
 llm:
-  # Provider: 'claude' or 'deepseek'
+  # Provider: 'claude', 'deepseek', 'gemini', 'grok', 'openai'
   # Claude (Anthropic): Excellent quality, higher cost
   # DeepSeek: Good quality, much lower cost, better Chinese support
+  # Gemini: Fast, multimodal, free tier available
+  # Grok: Advanced reasoning, real-time data
+  # OpenAI: Industry standard, latest models
   provider: claude
 
   # Optional: Specify a model (if not set, uses provider's default)
@@ -16,40 +19,8 @@ news:
   # Default: false (recommended to keep disabled)
   enable_web_search: false
 
-  # Include Chinese news sources
-  include_chinese_sources: true
-
   # Maximum news items to fetch per source (fetch more for AI to select from)
   max_items_per_source: 10
-
-  # Note: These topics guide news selection and categorization
-  topics:
-    # Core AI Technology
-    - "Large Language Models (LLM) - GPT, Claude, Gemini, LLaMA updates and breakthroughs"
-    - "AI Agents and Autonomous Systems"
-    - "Multimodal AI - vision, audio, video understanding"
-    - "AI Infrastructure - chips, training frameworks, deployment"
-
-    # Research & Innovation
-    - "Academic research papers and scientific breakthroughs"
-    - "Open source AI projects and community developments"
-    - "AI safety, alignment, and interpretability research"
-
-    # Products & Applications
-    - "Major product launches and feature updates"
-    - "Enterprise AI solutions and B2B applications"
-    - "Consumer AI products and creative tools"
-
-    # Industry Verticals
-    - "Healthcare and biomedical AI"
-    - "Autonomous vehicles and robotics"
-    - "Financial AI and fintech"
-    - "Education and EdTech AI"
-
-    # Business & Policy
-    - "Funding rounds, acquisitions, and market dynamics"
-    - "AI policies, regulations, and governance"
-    - "Industry trends and competitive landscape"
 
   prompt_template: |
       You are a senior AI industry analyst. From the provided news items, select and create a comprehensive, in-depth news digest.

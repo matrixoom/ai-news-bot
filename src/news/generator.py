@@ -40,7 +40,7 @@ class NewsGenerator:
             api_key=api_key,
             model=model
         )
-        
+
         self.enable_web_search = enable_web_search
         self.search_tool = WebSearchTool() if enable_web_search else None
         self.news_fetcher = NewsFetcher()
@@ -54,7 +54,6 @@ class NewsGenerator:
         prompt_template: str,
         max_tokens: int = 8000,
         language: str = "en",
-        include_chinese: bool = True,
         max_items_per_source: int = 5
     ) -> str:
         """
@@ -64,7 +63,6 @@ class NewsGenerator:
             prompt_template: Template for summarization instructions
             max_tokens: Maximum tokens in response
             language: Language code for the response
-            include_chinese: Whether to include Chinese news sources
             max_items_per_source: Maximum items to fetch per source
 
         Returns:
@@ -77,7 +75,6 @@ class NewsGenerator:
             # Fetch real-time news
             logger.info("Fetching real-time AI news from sources...")
             news_data = self.news_fetcher.fetch_recent_news(
-                include_chinese=include_chinese,
                 max_items_per_source=max_items_per_source
             )
 

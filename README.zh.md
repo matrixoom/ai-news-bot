@@ -26,9 +26,9 @@
 
 <div align="center">
 
-| [✨ 功能特点](#功能特点) |    [🚀 快速开始](#快速开始本地开发)    |      [⚙️ 配置](#配置)       | [🤖 LLM 提供商](#llm-提供商配置) |
-| :----------------------: | :------------------------------------: | :-------------------------: | :------------------------------: |
-| [🌍 语言配置](#语言配置) | [📧 邮件设置](#邮件设置指南) | [🔗 Webhook](#webhook-集成) |     [🔧 故障排除](#故障排除)     |
+| [✨ 功能特点](#功能特点) | [🚀 快速开始](#快速开始本地开发) |      [⚙️ 配置](#配置)       | [🤖 LLM 提供商](#llm-提供商配置) |
+| :----------------------: | :------------------------------: | :-------------------------: | :------------------------------: |
+| [🌍 语言配置](#语言配置) |   [📧 邮件设置](#邮件设置指南)   | [🔗 Webhook](#webhook-集成) |     [🔧 故障排除](#故障排除)     |
 
 </div>
 
@@ -55,10 +55,10 @@
 
 选择您的部署方式：
 
-| 方式               | 配置方法     | 使用场景                   |
-| ------------------ | ------------ | -------------------------- |
-| **GitHub Actions** | 仓库 Secrets | 自动化每日运行（推荐）     |
-| **本地开发**       | `.env` 文件  | 本地测试或手动运行         |
+| 方式               | 配置方法     | 使用场景               |
+| ------------------ | ------------ | ---------------------- |
+| **GitHub Actions** | 仓库 Secrets | 自动化每日运行（推荐） |
+| **本地开发**       | `.env` 文件  | 本地测试或手动运行     |
 
 > 💡 **推荐**：使用 GitHub Actions 实现自动化每日新闻推送。使用本地开发进行测试或自定义。
 
@@ -87,23 +87,23 @@ cd ai-news-bot
 
 #### ✅ 必需的 Secrets
 
-| Secret 名称            | 示例值                                               | 描述                                       |
-| ---------------------- | ---------------------------------------------------- | ------------------------------------------ |
-| `LLM_PROVIDER`         | `claude`、`deepseek`、`gemini`、`grok` 或 `openai`   | LLM 提供商（默认：`claude`）               |
-| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`                                | 您的 Anthropic API 密钥（使用 Claude 时）  |
-| `DEEPSEEK_API_KEY`     | `sk-xxx...`                                          | 您的 DeepSeek API 密钥（使用 DeepSeek 时） |
-| `GOOGLE_API_KEY`       | `AIza...`                                            | 您的 Google API 密钥（使用 Gemini 时）     |
-| `XAI_API_KEY`          | `xai-...`                                            | 您的 xAI API 密钥（使用 Grok 时）          |
-| `OPENAI_API_KEY`       | `sk-...`                                             | 您的 OpenAI API 密钥（使用 OpenAI 时）     |
-| `NOTIFICATION_METHODS` | `email`                                              | 通知渠道（逗号分隔）                       |
+| Secret 名称            | 示例值                                             | 描述                                       |
+| ---------------------- | -------------------------------------------------- | ------------------------------------------ |
+| `LLM_PROVIDER`         | `claude`、`deepseek`、`gemini`、`grok` 或 `openai` | LLM 提供商（默认：`claude`）               |
+| `ANTHROPIC_API_KEY`    | `sk-ant-api03-xxx...`                              | 您的 Anthropic API 密钥（使用 Claude 时）  |
+| `DEEPSEEK_API_KEY`     | `sk-xxx...`                                        | 您的 DeepSeek API 密钥（使用 DeepSeek 时） |
+| `GOOGLE_API_KEY`       | `AIza...`                                          | 您的 Google API 密钥（使用 Gemini 时）     |
+| `XAI_API_KEY`          | `xai-...`                                          | 您的 xAI API 密钥（使用 Grok 时）          |
+| `OPENAI_API_KEY`       | `sk-...`                                           | 您的 OpenAI API 密钥（使用 OpenAI 时）     |
+| `NOTIFICATION_METHODS` | `email`                                            | 通知渠道（逗号分隔）                       |
 
 #### 📧 邮件 Secrets（如果使用邮件通知）
 
-| Secret 名称          | 示例值                  | 描述                                                                             |
-| -------------------- | ----------------------- | -------------------------------------------------------------------------------- |
-| `GMAIL_ADDRESS`      | `you@gmail.com`         | 您的 Gmail 邮箱地址                                                              |
-| `GMAIL_APP_PASSWORD` | `xxxx xxxx xxxx xxxx`   | Gmail 应用专用密码（[点击获取](https://myaccount.google.com/apppasswords)）      |
-| `EMAIL_TO`           | `recipient@example.com` | 收件人邮箱地址                                                                   |
+| Secret 名称          | 示例值                  | 描述                                                                        |
+| -------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| `GMAIL_ADDRESS`      | `you@gmail.com`         | 您的 Gmail 邮箱地址                                                         |
+| `GMAIL_APP_PASSWORD` | `xxxx xxxx xxxx xxxx`   | Gmail 应用专用密码（[点击获取](https://myaccount.google.com/apppasswords)） |
+| `EMAIL_TO`           | `recipient@example.com` | 收件人邮箱地址                                                              |
 
 详细的 Gmail 配置说明请参见[邮件设置指南](#邮件设置指南)。
 
@@ -138,8 +138,8 @@ cd ai-news-bot
 
 ```yaml
 schedule:
-  - cron: "0 0 * * *"   # UTC 午夜（当前设置）
-  - cron: "0 9 * * *"   # UTC 上午 9:00
+  - cron: "0 0 * * *" # UTC 午夜（当前设置）
+  - cron: "0 9 * * *" # UTC 上午 9:00
   - cron: "0 */12 * * *" # 每 12 小时
 ```
 
@@ -276,7 +276,7 @@ python main.py
 
 | 变量                   | 是否必需             | 描述                                                                                                          |
 | ---------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `LLM_PROVIDER`         | 可选                 | LLM 提供商：`claude`、`deepseek`、`gemini`、`grok` 或 `openai`（默认：`claude`）                             |
+| `LLM_PROVIDER`         | 可选                 | LLM 提供商：`claude`、`deepseek`、`gemini`、`grok` 或 `openai`（默认：`claude`）                              |
 | `ANTHROPIC_API_KEY`    | 使用 Claude 时需要   | 您的 Anthropic API 密钥（[获取](https://console.anthropic.com/)）                                             |
 | `DEEPSEEK_API_KEY`     | 使用 DeepSeek 时需要 | 您的 DeepSeek API 密钥（[获取](https://platform.deepseek.com/)）                                              |
 | `GOOGLE_API_KEY`       | 使用 Gemini 时需要   | 您的 Google API 密钥（[获取](https://makersuite.google.com/app/apikey)）                                      |
@@ -303,7 +303,6 @@ python main.py
 
 - **use_real_sources**：启用从 RSS 源获取新闻（推荐，默认：true）
 - **enable_web_search**：启用 DuckDuckGo 网络搜索（默认：false）
-- **include_chinese_sources**：包含中文新闻源（默认：true）
 - **max_items_per_source**：每个源的最大新闻条目数（默认：10）
 - **Topics（主题）**：新闻选择的焦点领域（可选，引导 AI）
 - **Prompt Template（提示词模板）**：LLM 的指令模板
@@ -323,7 +322,6 @@ llm:
 news:
   use_real_sources: true
   enable_web_search: false
-  include_chinese_sources: true
   max_items_per_source: 10
 
   topics:
@@ -353,6 +351,7 @@ llm:
 ```
 
 **可用模型：**
+
 - `claude-sonnet-4-5-20250929` - 最新 Sonnet（默认）- 最适合大多数任务
 - `claude-3-5-sonnet-20241022` - 上一版本 Sonnet
 
@@ -367,6 +366,7 @@ llm:
 ```
 
 **可用模型：**
+
 - `deepseek-chat` - 通用聊天模型（默认）
 - `deepseek-reasoner` - 增强推理模型
 
@@ -381,6 +381,7 @@ llm:
 ```
 
 **可用模型：**
+
 - `gemini-2.0-flash-exp` - 最新 Gemini 2.0 Flash（默认）
 - `gemini-pro` - Gemini Pro 模型
 
@@ -395,6 +396,7 @@ llm:
 ```
 
 **可用模型：**
+
 - `grok-beta` - 最新 Grok 模型（默认）
 
 **定价：** 价格有竞争力，具有高级推理能力
@@ -408,6 +410,7 @@ llm:
 ```
 
 **可用模型：**
+
 - `gpt-4o` - GPT-4 优化版（默认）- 快速且强大
 - `gpt-4-turbo` - GPT-4 Turbo - 更强大
 - `gpt-3.5-turbo` - GPT-3.5 - 最具性价比
@@ -416,13 +419,13 @@ llm:
 
 #### 选择提供商
 
-| 提供商       | 优点                    | 最适合               |
-| ------------ | ----------------------- | -------------------- |
-| **Claude**   | 质量优秀，可靠          | 生产环境，高质量输出 |
-| **DeepSeek** | 成本极低，中文支持好    | 预算有限，中文内容   |
-| **Gemini**   | 快速，有免费额度        | 大批量，成本优化     |
-| **Grok**     | 高级推理，实时数据      | 复杂分析，最新信息   |
-| **OpenAI**   | 行业标准，经过验证      | 通用目的，可靠质量   |
+| 提供商       | 优点                 | 最适合               |
+| ------------ | -------------------- | -------------------- |
+| **Claude**   | 质量优秀，可靠       | 生产环境，高质量输出 |
+| **DeepSeek** | 成本极低，中文支持好 | 预算有限，中文内容   |
+| **Gemini**   | 快速，有免费额度     | 大批量，成本优化     |
+| **Grok**     | 高级推理，实时数据   | 复杂分析，最新信息   |
+| **OpenAI**   | 行业标准，经过验证   | 通用目的，可靠质量   |
 
 ### 语言配置
 
@@ -485,11 +488,11 @@ OpenAI发布了GPT-5...
 
 #### 📧 邮件 Secrets（如果使用邮件通知）
 
-| Secret 名称         | 示例值                 | 描述                                                                             |
-| ------------------- | ---------------------- | -------------------------------------------------------------------------------- |
-| `GMAIL_ADDRESS`     | `you@gmail.com`        | 您的 Gmail 邮箱地址                                                              |
-| `GMAIL_APP_PASSWORD`| `xxxx xxxx xxxx xxxx`  | Gmail 应用专用密码（[点击获取](https://myaccount.google.com/apppasswords)）      |
-| `EMAIL_TO`          | `recipient@example.com`| 收件人邮箱地址                                                                   |
+| Secret 名称          | 示例值                  | 描述                                                                        |
+| -------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| `GMAIL_ADDRESS`      | `you@gmail.com`         | 您的 Gmail 邮箱地址                                                         |
+| `GMAIL_APP_PASSWORD` | `xxxx xxxx xxxx xxxx`   | Gmail 应用专用密码（[点击获取](https://myaccount.google.com/apppasswords)） |
+| `EMAIL_TO`           | `recipient@example.com` | 收件人邮箱地址                                                              |
 
 #### 🔗 Webhook Secrets（如果使用 webhook 通知）
 

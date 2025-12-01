@@ -14,6 +14,7 @@ logger = setup_logger(__name__)
 class NewsFetcher:
     """Fetch real-time AI news from RSS feeds and news APIs"""
 
+    # TODO: add news sources base on the language
     def __init__(self):
         """Initialize the news fetcher"""
         # RSS feed sources for AI news (reliable sources only)
@@ -45,14 +46,6 @@ class NewsFetcher:
             "Healthcare IT News AI": "https://www.healthcareitnews.com/taxonomy/term/31/feed",
             "Robotics Business Review": "https://www.roboticsbusinessreview.com/feed/",
             "Autonomous Vehicle News": "https://www.autonomousvehicleinternational.com/feed",
-        }
-
-        # Chinese AI news sources
-        self.chinese_feeds = {
-            "Google News AI (CN)": "https://news.google.com/rss/search?q=人工智能+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
-            "Google News Tech (CN)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
-            "Google News LLM (CN)": "https://news.google.com/rss/search?q=大模型+GPT+Claude&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
-            "Google News Robotics (CN)": "https://news.google.com/rss/search?q=机器人+自动驾驶&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
         }
 
     def fetch_rss_feed(self, feed_url: str, max_items: int = 10) -> List[Dict[str, str]]:
@@ -127,14 +120,12 @@ class NewsFetcher:
 
     def fetch_recent_news(
         self,
-        include_chinese: bool = True,
         max_items_per_source: int = 5
     ) -> Dict[str, List[Dict[str, str]]]:
         """
         Fetch recent AI news from all configured sources.
 
         Args:
-            include_chinese: Whether to include Chinese news sources
             max_items_per_source: Maximum items to fetch per source
 
         Returns:
@@ -154,13 +145,11 @@ class NewsFetcher:
                 item['source'] = source_name
                 all_news['international'].append(item)
 
-        # Fetch Chinese news if requested
-        if include_chinese:
-            for source_name, feed_url in self.chinese_feeds.items():
-                items = self.fetch_rss_feed(feed_url, max_items_per_source)
-                for item in items:
-                    item['source'] = source_name
-                    all_news['domestic'].append(item)
+        for source_name, feed_url in self.chinese_feeds.items():
+            items = self.fetch_rss_feed(feed_url, max_items_per_source)
+            for item in items:
+                item['source'] = source_name
+                all_news['domestic'].append(item)
 
         logger.info(
             f"Fetched {len(all_news['international'])} international news items "
@@ -194,7 +183,7 @@ class NewsFetcher:
                 formatted += "\n"
 
         if news_data['domestic']:
-            formatted += "## Domestic (Chinese) News\n\n"
+            formatted += "## Domestic News\n\n"
             for i, item in enumerate(news_data['domestic'], 1):
                 formatted += f"### {i}. {item['title']}\n"
                 formatted += f"**Source:** {item['source']}\n"

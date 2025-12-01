@@ -55,7 +55,6 @@ def main():
         news_digest = news_gen.generate_news_digest_from_sources(
             prompt_template=config.news_prompt_template,
             language=config.ai_response_language,
-            include_chinese=config.include_chinese_sources,
             max_items_per_source=config.max_items_per_source
         )
 
