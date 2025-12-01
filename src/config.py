@@ -106,23 +106,78 @@ class Config:
         ])
 
     @property
-    def news_prompt_template(self) -> str:
-        """Get the prompt template for news generation"""
-        default_template = """You are an AI news curator. Please provide a concise daily digest of AI news and developments.
+    def stage1_prompt_template(self) -> str:
+        """Get the Stage 1 selection prompt template"""
+        default_template = """{formatted_news}
 
-Focus on these topics:
-{topics}
+## YOUR TASK - STAGE 1: NEWS SELECTION
 
-Requirements:
-1. Provide 3-5 key news items or developments
-2. Each item should include a brief description (2-3 sentences)
-3. Focus on significant developments from the past 24-48 hours
-4. Include context about why each item is important
-5. Use a professional but accessible tone
+You are a senior AI industry analyst. Analyze the {total_items} news items above and select exactly 15-20 of the highest-quality items.
 
-Format your response as a structured news digest with clear sections."""
+### SELECTION CRITERIA:
+- ✅ Groundbreaking research or technical breakthroughs
+- ✅ Major product launches or significant updates
+- ✅ Important policy changes or regulations
+- ✅ Large funding rounds or M&A activities
+- ✅ Balanced coverage across categories (LLM, Agents, Research, Products, etc.)
+- ✅ Include both international and domestic news when available
+- ✅ Prefer primary sources over secondary reporting
 
-        return self.config_data.get("news", {}).get("prompt_template", default_template)
+### OUTPUT FORMAT:
+Return ONLY a JSON array of selected news IDs. No explanations, no markdown, just the JSON array.
+
+Example format:
+["INT-1", "INT-5", "DOM-2", "INT-12", ...]
+
+CRITICAL: Select exactly 15-20 items. No more, no less."""
+
+        return self.config_data.get("news", {}).get("stage1_prompt_template", default_template)
+
+    @property
+    def stage2_prompt_template(self) -> str:
+        """Get the Stage 2 summarization prompt template"""
+        default_template = """You are a senior AI industry analyst. Create a comprehensive, in-depth news digest for the {count} pre-selected news items below.
+
+{selected_news}
+
+## OUTPUT STRUCTURE:
+
+Organize news items into relevant categories (use only categories that have news):
+1. **Large Language Models & Foundation Models**
+2. **AI Agents & Autonomous Systems**
+3. **Research & Academic Breakthroughs**
+4. **Product Launches & Updates**
+5. **AI Infrastructure & Hardware**
+6. **Funding & Market Dynamics**
+7. **Policy & Regulation**
+
+## CONTENT REQUIREMENTS:
+
+For each news item:
+- **Clear Headline**: Informative title
+- **Analytical Summary (4-6 sentences)**: What happened, technical details, why it matters, implications
+- **Source Attribution**: [Source Name](URL)
+
+## WRITING STYLE:
+- Professional, analytical tone
+- Include specific metrics and data
+- Technical accuracy
+- Context and analysis
+
+## QUALITY REQUIREMENTS:
+- ✅ Summarize ALL {count} items (no skipping)
+- ✅ Each summary exactly 4-6 sentences
+- ✅ Include specific numbers and data
+- ✅ Balanced coverage across categories
+- ✅ All sources as clickable markdown links
+
+## AVOID:
+❌ Generic statements
+❌ Wrong summary length
+❌ Missing links
+❌ Skipping items"""
+
+        return self.config_data.get("news", {}).get("stage2_prompt_template", default_template)
 
     @property
     def log_level(self) -> str:

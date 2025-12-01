@@ -100,10 +100,11 @@ class NewsGenerator:
 
     def generate_news_digest_from_sources(
         self,
-        prompt_template: str,
         max_tokens: int = 8000,
         language: str = "en",
-        max_items_per_source: int = 5
+        max_items_per_source: int = 5,
+        stage1_template: Optional[str] = None,
+        stage2_template: Optional[str] = None
     ) -> str:
         """
         Fetch real-time news and generate a digest using two-stage prompt chaining:
@@ -111,10 +112,11 @@ class NewsGenerator:
         Stage 2: Create detailed summaries for selected items
 
         Args:
-            prompt_template: Template for summarization instructions
             max_tokens: Maximum tokens in response
             language: Language code for the response
             max_items_per_source: Maximum items to fetch per source
+            stage1_template: Optional Stage 1 prompt template (from config)
+            stage2_template: Optional Stage 2 prompt template (from config)
 
         Returns:
             Generated news digest as string
@@ -146,28 +148,17 @@ class NewsGenerator:
             # ============================================================
             logger.info(f"Stage 1: Analyzing and selecting high-quality news items...")
 
-            selection_prompt = f"""{formatted_news}
+            # Use provided template or load from config
+            if stage1_template is None:
+                from ..config import Config
+                config = Config()
+                stage1_template = config.stage1_prompt_template
 
-## YOUR TASK - STAGE 1: NEWS SELECTION
-
-You are a senior AI industry analyst. Analyze the {total_items} news items above and select exactly 15-20 of the highest-quality items.
-
-### SELECTION CRITERIA:
-- ✅ Groundbreaking research or technical breakthroughs
-- ✅ Major product launches or significant updates
-- ✅ Important policy changes or regulations
-- ✅ Large funding rounds or M&A activities
-- ✅ Balanced coverage across categories (LLM, Agents, Research, Products, etc.)
-- ✅ Include both international and domestic news when available
-- ✅ Prefer primary sources over secondary reporting
-
-### OUTPUT FORMAT:
-Return ONLY a JSON array of selected news IDs. No explanations, no markdown, just the JSON array.
-
-Example format:
-["INT-1", "INT-5", "DOM-2", "INT-12", ...]
-
-CRITICAL: Select exactly 15-20 items. No more, no less."""
+            # Format Stage 1 prompt with placeholders
+            selection_prompt = stage1_template.format(
+                formatted_news=formatted_news,
+                total_items=total_items
+            )
 
             messages = [{"role": "user", "content": selection_prompt}]
             selection_response = self.provider.generate(
@@ -221,39 +212,17 @@ CRITICAL: Select exactly 15-20 items. No more, no less."""
                     formatted_selected += f"**Published:** {item['published']}\n"
                 formatted_selected += "\n"
 
-            # Create Stage 2 prompt
-            summarization_prompt = f"""You are a senior AI industry analyst. Create a comprehensive, in-depth news digest for the {len(selected_ids)} pre-selected news items below.
+            # Use provided template or load from config
+            if stage2_template is None:
+                from ..config import Config
+                config = Config()
+                stage2_template = config.stage2_prompt_template
 
-{formatted_selected}
-
-### Base Instructions:
-{prompt_template}
-
-## CRITICAL REQUIREMENTS:
-
-### 1. Content Depth (EACH SUMMARY: 4-6 SENTENCES)
-- ✅ Each news summary must be exactly 4-6 sentences (not shorter, not longer)
-- ✅ Include: what happened, technical details, why it matters, potential implications
-- ✅ Include specific numbers, metrics, and data when available in the source
-- ✅ Maintain accuracy - only include information from the provided articles
-
-### 2. Formatting Standards
-- ✅ Format the output in clean, readable markdown with category headers
-- ✅ Group news by categories (LLM, Agents, Research, Products, Policy, Funding, etc.)
-- ✅ Include source attributions as clickable markdown links: [Source Name](URL)
-- ✅ Use the **Link:** field from each news item to create the clickable source link
-
-### 3. Coverage Requirements
-- ✅ Summarize ALL {len(selected_ids)} items provided above (no skipping)
-- ✅ Maintain balanced coverage across different categories
-- ✅ Include both international and domestic news
-
-## AVOID:
-❌ Generic statements without specifics
-❌ Summaries shorter than 4 sentences or longer than 6 sentences
-❌ Missing clickable links or improper markdown formatting
-❌ Skipping any of the {len(selected_ids)} pre-selected news items
-"""
+            # Format Stage 2 prompt with placeholders
+            summarization_prompt = stage2_template.format(
+                count=len(selected_ids),
+                selected_news=formatted_selected
+            )
 
             # Add language instruction if not English
             if language and language.lower() != "en":

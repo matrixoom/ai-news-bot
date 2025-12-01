@@ -53,9 +53,10 @@ def main():
         # Generate news digest from real-time RSS sources
         logger.info("Generating AI news digest from real-time sources...")
         news_digest = news_gen.generate_news_digest_from_sources(
-            prompt_template=config.news_prompt_template,
             language=config.ai_response_language,
-            max_items_per_source=config.max_items_per_source
+            max_items_per_source=config.max_items_per_source,
+            stage1_template=config.stage1_prompt_template,
+            stage2_template=config.stage2_prompt_template
         )
 
         logger.info(f"News digest generated ({len(news_digest)} characters)")

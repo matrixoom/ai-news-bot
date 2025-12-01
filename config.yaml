@@ -22,11 +22,40 @@ news:
   # Maximum news items to fetch per source (fetch more for AI to select from)
   max_items_per_source: 10
 
-  # Prompt template for Stage 2: Summarization (news items are already selected in Stage 1)
-  prompt_template: |
-      Create a comprehensive, professional AI news digest with the following structure:
+  # Stage 1: Selection prompt template
+  # Placeholders: {total_items}, {formatted_news}
+  stage1_prompt_template: |
+      {formatted_news}
 
-      ## Output Structure:
+      ## YOUR TASK - STAGE 1: NEWS SELECTION
+
+      You are a senior AI industry analyst. Analyze the {total_items} news items above and select exactly 15-20 of the highest-quality items.
+
+      ### SELECTION CRITERIA:
+      - ✅ Groundbreaking research or technical breakthroughs
+      - ✅ Major product launches or significant updates
+      - ✅ Important policy changes or regulations
+      - ✅ Large funding rounds or M&A activities
+      - ✅ Balanced coverage across categories (LLM, Agents, Research, Products, etc.)
+      - ✅ Include both international and domestic news when available
+      - ✅ Prefer primary sources over secondary reporting
+
+      ### OUTPUT FORMAT:
+      Return ONLY a JSON array of selected news IDs. No explanations, no markdown, just the JSON array.
+
+      Example format:
+      ["INT-1", "INT-5", "DOM-2", "INT-12", ...]
+
+      CRITICAL: Select exactly 15-20 items. No more, no less.
+
+  # Stage 2: Summarization prompt template (complete prompt for creating the digest)
+  # Placeholders: {count}, {selected_news}
+  stage2_prompt_template: |
+      You are a senior AI industry analyst. Create a comprehensive, in-depth news digest for the {count} pre-selected news items below.
+
+      {selected_news}
+
+      ## OUTPUT STRUCTURE:
 
       Organize news items into relevant categories (use only categories that have news):
       1. **Large Language Models & Foundation Models** - LLM updates, new model releases, benchmarks
@@ -42,25 +71,25 @@ news:
       11. **Policy & Regulation** - Government policies, AI governance, ethics
       12. **Open Source & Community** - Open source projects, community developments
 
-      ## Content Style:
+      ## CONTENT REQUIREMENTS:
 
       For each news item, provide:
       1. **Clear Headline**: Informative title that captures the key development
-      2. **Analytical Summary**: 
+      2. **Analytical Summary (4-6 sentences)**:
          - What happened (core news and context)
          - Technical details, key specifications, or metrics
          - Why it matters (industry significance and impact)
          - Potential implications (future developments, competitive landscape)
       3. **Source Attribution**: Always include as clickable markdown link: [Source Name](URL)
 
-      ## Writing Style:
+      ## WRITING STYLE:
       - Professional, analytical tone suitable for industry professionals
       - Include specific numbers, metrics, and data points when available
       - Keep technical terminology accurate (preserve technical jargon)
       - Balance accessibility with technical depth
       - Provide context and analysis, not just reporting facts
 
-      ## Example Format:
+      ## EXAMPLE FORMAT:
 
       ## Large Language Models & Foundation Models
 
@@ -72,11 +101,20 @@ news:
 
       ---
 
-      ## Quality Standards:
-      - Prioritize accuracy over speculation
-      - Cite specific sources and data points
-      - Provide balanced perspective on significance
-      - Maintain consistent formatting throughout
+      ## QUALITY REQUIREMENTS:
+      - ✅ Summarize ALL {count} items provided above (no skipping)
+      - ✅ Each summary must be exactly 4-6 sentences
+      - ✅ Include specific numbers, metrics, and data when available
+      - ✅ Maintain balanced coverage across different categories
+      - ✅ Include both international and domestic news
+      - ✅ Prioritize accuracy over speculation
+      - ✅ All sources must have clickable markdown links
+
+      ## AVOID:
+      ❌ Generic statements without specifics
+      ❌ Summaries shorter than 4 sentences or longer than 6 sentences
+      ❌ Missing clickable links or improper markdown formatting
+      ❌ Skipping any news items
 
 logging:
   level: INFO
