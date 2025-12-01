@@ -75,6 +75,7 @@ class NewsGenerator:
             # Fetch real-time news
             logger.info("Fetching real-time AI news from sources...")
             news_data = self.news_fetcher.fetch_recent_news(
+                language=language,
                 max_items_per_source=max_items_per_source
             )
 

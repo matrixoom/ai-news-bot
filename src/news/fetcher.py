@@ -48,6 +48,31 @@ class NewsFetcher:
             "Autonomous Vehicle News": "https://www.autonomousvehicleinternational.com/feed",
         }
 
+        # Chinese AI news sources
+        self.chinese_feeds = {
+            "Google News AI (CN)": "https://news.google.com/rss/search?q=人工智能+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            "Google News Tech (CN)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            "Google News LLM (CN)": "https://news.google.com/rss/search?q=大模型+GPT+Claude&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            "Google News Robotics (CN)": "https://news.google.com/rss/search?q=机器人+自动驾驶&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        }
+
+        # Japanese AI news sources
+        self.japanese_feeds = {
+            "Google News AI (JP)": "https://news.google.com/rss/search?q=人工知能+AI&hl=ja&gl=JP&ceid=JP:ja-JP",
+            "Google News Tech (JP)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=ja&gl=JP&ceid=JP:ja-JP",
+            "Google News LLM (JP)": "https://news.google.com/rss/search?q=大模型+GPT+Claude&hl=ja&gl=JP&ceid=JP:ja-JP",
+            "Google News Robotics (JP)": "https://news.google.com/rss/search?q=ロボット+自動運転&hl=ja&gl=JP&ceid=JP:ja-JP",
+        }
+
+        # French AI news sources
+        self.french_feeds = {
+            "Google News AI (FR)": "https://news.google.com/rss/search?q=intelligence+artificielle+AI&hl=fr&gl=FR&ceid=FR:fr-FR",
+            "Google News Tech (FR)": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtcG9HZ0pEVGlnQVAB?hl=fr&gl=FR&ceid=FR:fr-FR",
+            "Google News LLM (FR)": "https://news.google.com/rss/search?q=grand+modèle+GPT+Claude&hl=fr&gl=FR&ceid=FR:fr-FR",
+            "Google News Robotics (FR)": "https://news.google.com/rss/search?q=robot+autonomie&hl=fr&gl=FR&ceid=FR:fr-FR",
+        }
+
+
     def fetch_rss_feed(self, feed_url: str, max_items: int = 10) -> List[Dict[str, str]]:
         """
         Fetch news items from an RSS feed.
@@ -120,12 +145,14 @@ class NewsFetcher:
 
     def fetch_recent_news(
         self,
+        language: str = "en",
         max_items_per_source: int = 5
     ) -> Dict[str, List[Dict[str, str]]]:
         """
         Fetch recent AI news from all configured sources.
 
         Args:
+            language: Language code for the response
             max_items_per_source: Maximum items to fetch per source
 
         Returns:
@@ -145,7 +172,18 @@ class NewsFetcher:
                 item['source'] = source_name
                 all_news['international'].append(item)
 
-        for source_name, feed_url in self.chinese_feeds.items():
+        # Fetch domestic news
+        if language == "zh":
+            feeds = self.chinese_feeds
+        elif language == "ja":
+            feeds = self.japanese_feeds
+        elif language == "fr":
+            feeds = self.french_feeds
+        else:
+            logger.error(f"Unsupported language: {language}")
+            return all_news
+
+        for source_name, feed_url in feeds.items():
             items = self.fetch_rss_feed(feed_url, max_items_per_source)
             for item in items:
                 item['source'] = source_name
@@ -153,7 +191,7 @@ class NewsFetcher:
 
         logger.info(
             f"Fetched {len(all_news['international'])} international news items "
-            f"and {len(all_news['domestic'])} domestic news items"
+            f"and {len(all_news['domestic'])} domestic ({language}) news items"
         )
 
         return all_news
