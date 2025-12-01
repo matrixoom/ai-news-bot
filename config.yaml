@@ -22,20 +22,13 @@ news:
   # Maximum news items to fetch per source (fetch more for AI to select from)
   max_items_per_source: 10
 
+  # Prompt template for Stage 2: Summarization (news items are already selected in Stage 1)
   prompt_template: |
-      You are a senior AI industry analyst. From the provided news items, select and create a comprehensive, in-depth news digest.
-
-      ## Selection Criteria (CRITICAL):
-      - Select 15-20 high-quality news items (prioritize quality, but aim for comprehensive coverage)
-      - Prioritize: groundbreaking research, major product launches, significant policy changes, large funding rounds
-      - Balance coverage across different categories and topics
-      - Include both international and domestic news when available
-      - Avoid duplicate or overly similar news items
-      - Prefer primary sources (official blogs, research papers) over secondary reporting
+      Create a comprehensive, professional AI news digest with the following structure:
 
       ## Output Structure:
 
-      ### Categories to use (select relevant ones):
+      Organize news items into relevant categories (use only categories that have news):
       1. **Large Language Models & Foundation Models** - LLM updates, new model releases, benchmarks
       2. **AI Agents & Autonomous Systems** - Agent frameworks, autonomous AI developments
       3. **Multimodal AI** - Vision, audio, video AI capabilities
@@ -49,24 +42,23 @@ news:
       11. **Policy & Regulation** - Government policies, AI governance, ethics
       12. **Open Source & Community** - Open source projects, community developments
 
-      ## Content Requirements for Each News Item:
+      ## Content Style:
 
       For each news item, provide:
-      1. **Headline**: Clear, informative title that captures the essence
-      2. **Summary** (4-6 sentences):
-         - What happened (the core news)
-         - Technical details or key specifications (when applicable)
-         - Why it matters (significance and impact)
-         - Potential implications (industry impact, future developments)
-      3. **Source**: Clickable markdown link format: [Source Name](URL)
+      1. **Clear Headline**: Informative title that captures the key development
+      2. **Analytical Summary**: 
+         - What happened (core news and context)
+         - Technical details, key specifications, or metrics
+         - Why it matters (industry significance and impact)
+         - Potential implications (future developments, competitive landscape)
+      3. **Source Attribution**: Always include as clickable markdown link: [Source Name](URL)
 
-      ## Formatting Guidelines:
-      - Use clear markdown with headers for each category
-      - Use bullet points for easy scanning
-      - Keep technical terms accurate (don't over-translate technical jargon)
-      - Maintain professional, analytical tone
-      - Include specific numbers, metrics, and data when available
-      - For translated content, preserve accuracy while ensuring readability
+      ## Writing Style:
+      - Professional, analytical tone suitable for industry professionals
+      - Include specific numbers, metrics, and data points when available
+      - Keep technical terminology accurate (preserve technical jargon)
+      - Balance accessibility with technical depth
+      - Provide context and analysis, not just reporting facts
 
       ## Example Format:
 
@@ -80,14 +72,11 @@ news:
 
       ---
 
-      IMPORTANT:
-      - Aim for 15-20 news items total (adjust based on quality of available news)
-      - Each summary should be 4-6 sentences with substantive analysis
-      - Always include the source link in markdown format
-      - Group related news under appropriate category headers
-
-      Focus on these topics:
-      {topics}
+      ## Quality Standards:
+      - Prioritize accuracy over speculation
+      - Cite specific sources and data points
+      - Provide balanced perspective on significance
+      - Maintain consistent formatting throughout
 
 logging:
   level: INFO
