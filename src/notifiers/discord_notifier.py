@@ -44,7 +44,8 @@ class DiscordNotifier:
         self,
         content: str,
         title: Optional[str] = None,
-        color: int = 0x0366d6
+        color: int = 0x0366d6,
+        language: str = "en"
     ) -> bool:
         """
         Send Discord notification with news digest using embeds.
@@ -53,6 +54,7 @@ class DiscordNotifier:
             content: News digest content
             title: Title for the notification. If None, uses default with current date
             color: Embed color (integer representation of hex color)
+            language: Language code to include in title (e.g., 'en', 'zh', 'ja')
 
         Returns:
             True if message sent successfully, False otherwise
@@ -65,7 +67,8 @@ class DiscordNotifier:
             # Create default title if not provided
             if title is None:
                 today = datetime.now().strftime("%Y-%m-%d")
-                title = f"AI News Digest - {today}"
+                lang_suffix = f" [{language.upper()}]" if language != "en" else ""
+                title = f"AI News Digest - {today}{lang_suffix}"
 
             # Split content into embeds (Discord has limits)
             embeds = self._create_embeds(title, content, color)

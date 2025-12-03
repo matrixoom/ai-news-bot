@@ -109,10 +109,10 @@ cd ai-news-bot
 
 #### 🌍 可选的 Secrets
 
-| Secret 名称            | 示例值               | 描述                                   |
-| ---------------------- | -------------------- | -------------------------------------- |
-| `AI_RESPONSE_LANGUAGE` | `zh` 或 `es` 或 `ja` | 语言代码（未设置时默认为 `en`）        |
-| `ENABLE_WEB_SEARCH`    | `true` 或 `false`    | 启用网络搜索获取新闻（默认为 `false`） |
+| Secret 名称            | 示例值                     | 描述                                                       |
+| ---------------------- | -------------------------- | ---------------------------------------------------------- |
+| `AI_RESPONSE_LANGUAGE` | `zh` 或 `es` 或 `en,zh,ja` | 语言代码（默认 `en`）。多语言用逗号分隔                    |
+| `ENABLE_WEB_SEARCH`    | `true` 或 `false`          | 启用网络搜索获取新闻（默认为 `false`）                     |
 
 其他通知渠道（Webhook、Slack、Telegram、Discord）配置请参见[完整配置表](#github-actions-设置)。
 
@@ -194,7 +194,10 @@ WEBHOOK_URL=https://your-webhook-url.com/endpoint
 NOTIFICATION_METHODS=email,webhook
 
 # 语言设置（可选，默认为 'en'）
+# 单一语言：
 AI_RESPONSE_LANGUAGE=zh
+# 多语言（逗号分隔）：
+# AI_RESPONSE_LANGUAGE=en,zh,ja
 
 # 网络搜索（可选，默认为 false）
 ENABLE_WEB_SEARCH=false
@@ -280,11 +283,11 @@ python main.py
 | `ANTHROPIC_API_KEY`    | 使用 Claude 时需要   | 您的 Anthropic API 密钥（[获取](https://console.anthropic.com/)）                                             |
 | `DEEPSEEK_API_KEY`     | 使用 DeepSeek 时需要 | 您的 DeepSeek API 密钥（[获取](https://platform.deepseek.com/)）                                              |
 | `GOOGLE_API_KEY`       | 使用 Gemini 时需要   | 您的 Google API 密钥（[获取](https://makersuite.google.com/app/apikey)）                                      |
-| `XAI_API_KEY`          | 使用 Grok 时需要     | 您的 xAI API 密钥（[获取](https://x.ai/)）                                                                    |
-| `OPENAI_API_KEY`       | 使用 OpenAI 时需要   | 您的 OpenAI API 密钥（[获取](https://platform.openai.com/api-keys)）                                          |
-| `NOTIFICATION_METHODS` | ✅ 必需              | 逗号分隔的列表：`email`、`webhook` 或 `email,webhook`                                                         |
-| `AI_RESPONSE_LANGUAGE` | 可选                 | AI 响应的语言代码（默认：`en`）。支持：`zh`、`es`、`fr`、`ja`、`de`、`ko`、`pt`、`ru`、`ar`、`hi`、`it`、`nl` |
-| `ENABLE_WEB_SEARCH`    | 可选                 | 启用网络搜索获取新闻（默认：`false`）                                                                         |
+| `XAI_API_KEY`          | 使用 Grok 时需要     | 您的 xAI API 密钥（[获取](https://x.ai/)）                                                                                                |
+| `OPENAI_API_KEY`       | 使用 OpenAI 时需要   | 您的 OpenAI API 密钥（[获取](https://platform.openai.com/api-keys)）                                                                      |
+| `NOTIFICATION_METHODS` | ✅ 必需              | 逗号分隔的列表：`email`、`webhook` 或 `email,webhook`                                                                                     |
+| `AI_RESPONSE_LANGUAGE` | 可选                 | AI 响应的语言代码（默认：`en`）。多语言用逗号分隔（如 `en,zh,ja`）。支持：`zh`、`es`、`fr`、`ja`、`de`、`ko`、`pt`、`ru`、`ar`、`hi`、`it`、`nl` |
+| `ENABLE_WEB_SEARCH`    | 可选                 | 启用网络搜索获取新闻（默认：`false`）                                                                                                     |
 | `GMAIL_ADDRESS`        | 使用 Gmail 时需要    | 您的 Gmail 邮箱地址                                                                                           |
 | `GMAIL_APP_PASSWORD`   | 使用 Gmail 时需要    | Gmail 应用专用密码（16 位，不是普通密码）                                                                     |
 | `EMAIL_TO`             | 使用邮件时需要       | 收件人邮箱地址                                                                                                |
@@ -442,11 +445,15 @@ llm:
 **使用方法：**
 
 ```bash
-# .env 文件
+# .env 文件 - 单一语言
 AI_RESPONSE_LANGUAGE=zh  # 完整中文输出
+
+# .env 文件 - 多语言（逗号分隔）
+AI_RESPONSE_LANGUAGE=en,zh,ja  # 生成英语、中文和日语新闻
 
 # GitHub Secret
 # 添加：AI_RESPONSE_LANGUAGE = zh
+# 或多语言：AI_RESPONSE_LANGUAGE = en,zh,ja
 ```
 
 **示例输出（中文）：**
@@ -502,10 +509,10 @@ OpenAI发布了GPT-5...
 
 #### 🌍 可选的 Secrets
 
-| Secret 名称            | 示例值               | 描述                                   |
-| ---------------------- | -------------------- | -------------------------------------- |
-| `AI_RESPONSE_LANGUAGE` | `zh` 或 `es` 或 `ja` | 语言代码（未设置时默认为 `en`）        |
-| `ENABLE_WEB_SEARCH`    | `true` 或 `false`    | 启用网络搜索获取新闻（默认为 `false`） |
+| Secret 名称            | 示例值                     | 描述                                                       |
+| ---------------------- | -------------------------- | ---------------------------------------------------------- |
+| `AI_RESPONSE_LANGUAGE` | `zh` 或 `es` 或 `en,zh,ja` | 语言代码（默认 `en`）。多语言用逗号分隔                    |
+| `ENABLE_WEB_SEARCH`    | `true` 或 `false`          | 启用网络搜索获取新闻（默认为 `false`）                     |
 
 ### 步骤 2：启用 GitHub Actions
 

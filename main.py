@@ -31,17 +31,20 @@ def main():
             log_format=config.log_format
         )
 
+        # Get list of languages to process
+        languages = config.ai_response_languages
+        
         logger.info("=" * 60)
         logger.info("AI News Bot Starting")
         logger.info(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"LLM Provider: {config.llm_provider}")
         if config.llm_model:
             logger.info(f"LLM Model: {config.llm_model}")
-        logger.info(f"Language: {config.ai_response_language}")
+        logger.info(f"Languages: {', '.join(languages)}")
         logger.info(f"Web Search: {config.enable_web_search}")
         logger.info("=" * 60)
 
-        # Initialize news generator
+        # Initialize news generator once
         logger.info("Initializing news generator...")
         news_gen = NewsGenerator(
             provider_name=config.llm_provider,
@@ -50,96 +53,128 @@ def main():
             enable_web_search=config.enable_web_search
         )
 
-        # Generate news digest from real-time RSS sources
-        logger.info("Generating AI news digest from real-time sources...")
-        news_digest = news_gen.generate_news_digest_from_sources(
-            language=config.ai_response_language,
-            max_items_per_source=config.max_items_per_source,
-            stage1_template=config.stage1_prompt_template,
-            stage2_template=config.stage2_prompt_template
-        )
-
-        logger.info(f"News digest generated ({len(news_digest)} characters)")
-        logger.info("-" * 60)
-        logger.info("News Digest Preview:")
-        logger.info("-" * 60)
-        # Print first 500 characters as preview
-        preview = news_digest[:500] + "..." if len(news_digest) > 500 else news_digest
-        logger.info(preview)
-        logger.info("-" * 60)
-
         # Get enabled notification methods
         notification_methods = config.notification_methods
         logger.info(f"Enabled notification methods: {notification_methods}")
 
-        # Track notification results
-        results = {"sent": [], "failed": []}
+        # Track overall results
+        overall_results = {"sent": [], "failed": []}
+        
+        # Process each language
+        for language in languages:
+            logger.info("=" * 60)
+            logger.info(f"Processing language: {language.upper()}")
+            logger.info("=" * 60)
 
-        # Send email notification if enabled
-        if "email" in notification_methods:
-            logger.info("Sending email notification...")
-            email_notifier = EmailNotifier()
-            if email_notifier.send(news_digest):
-                results["sent"].append("email")
-                logger.info("Email notification sent successfully")
-            else:
-                results["failed"].append("email")
-                logger.warning("Email notification failed")
+            try:
+                # Generate news digest for this language
+                logger.info(f"Generating AI news digest in {language.upper()} from real-time sources...")
+                news_digest = news_gen.generate_news_digest_from_sources(
+                    language=language,
+                    max_items_per_source=config.max_items_per_source,
+                    stage1_template=config.stage1_prompt_template,
+                    stage2_template=config.stage2_prompt_template
+                )
 
-        # Send webhook notification if enabled
-        if "webhook" in notification_methods:
-            logger.info("Sending webhook notification...")
-            webhook_notifier = WebhookNotifier()
-            if webhook_notifier.send(news_digest):
-                results["sent"].append("webhook")
-                logger.info("Webhook notification sent successfully")
-            else:
-                results["failed"].append("webhook")
-                logger.warning("Webhook notification failed")
+                logger.info(f"News digest generated for {language.upper()} ({len(news_digest)} characters)")
+                logger.info("-" * 60)
+                logger.info(f"News Digest Preview ({language.upper()}):")
+                logger.info("-" * 60)
+                # Print first 500 characters as preview
+                preview = news_digest[:500] + "..." if len(news_digest) > 500 else news_digest
+                logger.info(preview)
+                logger.info("-" * 60)
 
-        # Send Slack notification if enabled
-        if "slack" in notification_methods:
-            logger.info("Sending Slack notification...")
-            slack_notifier = SlackNotifier()
-            if slack_notifier.send(news_digest):
-                results["sent"].append("slack")
-                logger.info("Slack notification sent successfully")
-            else:
-                results["failed"].append("slack")
-                logger.warning("Slack notification failed")
+                # Track notification results for this language
+                lang_results = {"sent": [], "failed": []}
 
-        # Send Telegram notification if enabled
-        if "telegram" in notification_methods:
-            logger.info("Sending Telegram notification...")
-            telegram_notifier = TelegramNotifier()
-            if telegram_notifier.send(news_digest):
-                results["sent"].append("telegram")
-                logger.info("Telegram notification sent successfully")
-            else:
-                results["failed"].append("telegram")
-                logger.warning("Telegram notification failed")
+                # Send email notification if enabled
+                if "email" in notification_methods:
+                    logger.info(f"Sending email notification for {language.upper()}...")
+                    email_notifier = EmailNotifier()
+                    if email_notifier.send(news_digest, language=language):
+                        lang_results["sent"].append("email")
+                        logger.info(f"Email notification sent successfully for {language.upper()}")
+                    else:
+                        lang_results["failed"].append("email")
+                        logger.warning(f"Email notification failed for {language.upper()}")
 
-        # Send Discord notification if enabled
-        if "discord" in notification_methods:
-            logger.info("Sending Discord notification...")
-            discord_notifier = DiscordNotifier()
-            if discord_notifier.send(news_digest):
-                results["sent"].append("discord")
-                logger.info("Discord notification sent successfully")
-            else:
-                results["failed"].append("discord")
-                logger.warning("Discord notification failed")
+                # Send webhook notification if enabled
+                if "webhook" in notification_methods:
+                    logger.info(f"Sending webhook notification for {language.upper()}...")
+                    webhook_notifier = WebhookNotifier()
+                    if webhook_notifier.send(news_digest, language=language):
+                        lang_results["sent"].append("webhook")
+                        logger.info(f"Webhook notification sent successfully for {language.upper()}")
+                    else:
+                        lang_results["failed"].append("webhook")
+                        logger.warning(f"Webhook notification failed for {language.upper()}")
 
-        # Summary
+                # Send Slack notification if enabled
+                if "slack" in notification_methods:
+                    logger.info(f"Sending Slack notification for {language.upper()}...")
+                    slack_notifier = SlackNotifier()
+                    if slack_notifier.send(news_digest, language=language):
+                        lang_results["sent"].append("slack")
+                        logger.info(f"Slack notification sent successfully for {language.upper()}")
+                    else:
+                        lang_results["failed"].append("slack")
+                        logger.warning(f"Slack notification failed for {language.upper()}")
+
+                # Send Telegram notification if enabled
+                if "telegram" in notification_methods:
+                    logger.info(f"Sending Telegram notification for {language.upper()}...")
+                    telegram_notifier = TelegramNotifier()
+                    if telegram_notifier.send(news_digest, language=language):
+                        lang_results["sent"].append("telegram")
+                        logger.info(f"Telegram notification sent successfully for {language.upper()}")
+                    else:
+                        lang_results["failed"].append("telegram")
+                        logger.warning(f"Telegram notification failed for {language.upper()}")
+
+                # Send Discord notification if enabled
+                if "discord" in notification_methods:
+                    logger.info(f"Sending Discord notification for {language.upper()}...")
+                    discord_notifier = DiscordNotifier()
+                    if discord_notifier.send(news_digest, language=language):
+                        lang_results["sent"].append("discord")
+                        logger.info(f"Discord notification sent successfully for {language.upper()}")
+                    else:
+                        lang_results["failed"].append("discord")
+                        logger.warning(f"Discord notification failed for {language.upper()}")
+
+                # Update overall results
+                for method in lang_results["sent"]:
+                    result_key = f"{method} ({language.upper()})"
+                    if result_key not in overall_results["sent"]:
+                        overall_results["sent"].append(result_key)
+                
+                for method in lang_results["failed"]:
+                    result_key = f"{method} ({language.upper()})"
+                    if result_key not in overall_results["failed"]:
+                        overall_results["failed"].append(result_key)
+
+                logger.info(f"Language {language.upper()} completed successfully")
+
+            except Exception as lang_error:
+                logger.error(f"Error processing language {language.upper()}: {str(lang_error)}", exc_info=True)
+                # Mark all notification methods as failed for this language
+                for method in notification_methods:
+                    result_key = f"{method} ({language.upper()})"
+                    if result_key not in overall_results["failed"]:
+                        overall_results["failed"].append(result_key)
+
+        # Final Summary
         logger.info("=" * 60)
         logger.info("AI News Bot Completed")
-        logger.info(f"Successfully sent: {', '.join(results['sent']) if results['sent'] else 'None'}")
-        if results["failed"]:
-            logger.warning(f"Failed to send: {', '.join(results['failed'])}")
+        logger.info(f"Processed {len(languages)} language(s): {', '.join(lang.upper() for lang in languages)}")
+        logger.info(f"Successfully sent: {', '.join(overall_results['sent']) if overall_results['sent'] else 'None'}")
+        if overall_results["failed"]:
+            logger.warning(f"Failed to send: {', '.join(overall_results['failed'])}")
         logger.info("=" * 60)
 
         # Return exit code based on results
-        if notification_methods and not results["sent"]:
+        if notification_methods and not overall_results["sent"]:
             logger.error("All notifications failed")
             return 1
 

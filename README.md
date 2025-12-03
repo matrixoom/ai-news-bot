@@ -109,10 +109,10 @@ See [Email Setup Guide](#email-setup-guide) for detailed Gmail configuration ins
 
 #### 🌍 Optional Secrets
 
-| Secret Name            | Example Value        | Description                                      |
-| ---------------------- | -------------------- | ------------------------------------------------ |
-| `AI_RESPONSE_LANGUAGE` | `zh` or `es` or `ja` | Language code (defaults to `en` if not set)      |
-| `ENABLE_WEB_SEARCH`    | `true` or `false`    | Enable web search for news (defaults to `false`) |
+| Secret Name            | Example Value              | Description                                                                       |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------------------- |
+| `AI_RESPONSE_LANGUAGE` | `zh` or `es` or `en,zh,ja` | Language code(s) (defaults to `en`). Use commas for multiple languages           |
+| `ENABLE_WEB_SEARCH`    | `true` or `false`          | Enable web search for news (defaults to `false`)                                  |
 
 For other notification channels (Webhook, Slack, Telegram, Discord), see the [full configuration table](#github-actions-setup).
 
@@ -195,7 +195,10 @@ WEBHOOK_URL=https://your-webhook-url.com/endpoint
 NOTIFICATION_METHODS=email,webhook
 
 # Language Settings (optional, defaults to 'en')
+# Single language:
 AI_RESPONSE_LANGUAGE=zh
+# Multiple languages (comma-separated):
+# AI_RESPONSE_LANGUAGE=en,zh,ja
 
 # Web Search (optional, defaults to false)
 ENABLE_WEB_SEARCH=false
@@ -237,10 +240,15 @@ Rules: Recent news, no markdown, clear language
 Prompts are in English (best for Claude), but output can be in **13+ languages**:
 
 ```bash
-# In .env file
-AI_RESPONSE_LANGUAGE=zh  # Chinese output
-AI_RESPONSE_LANGUAGE=es  # Spanish output
-AI_RESPONSE_LANGUAGE=ja  # Japanese output
+# In .env file - Single language
+AI_RESPONSE_LANGUAGE=zh  # Chinese output only
+AI_RESPONSE_LANGUAGE=es  # Spanish output only
+AI_RESPONSE_LANGUAGE=ja  # Japanese output only
+
+# Multiple languages (comma-separated)
+AI_RESPONSE_LANGUAGE=en,zh,ja  # English, Chinese, and Japanese
+AI_RESPONSE_LANGUAGE=en,es,fr  # English, Spanish, and French
+
 # Supports: en, zh, es, fr, ja, de, ko, pt, ru, ar, hi, it, nl
 ```
 
@@ -281,11 +289,11 @@ The bot requires the following configuration. How you set them depends on your d
 | `ANTHROPIC_API_KEY`    | If using Claude   | Your Anthropic API key ([Get it here](https://console.anthropic.com/))                                                           |
 | `DEEPSEEK_API_KEY`     | If using DeepSeek | Your DeepSeek API key ([Get it here](https://platform.deepseek.com/))                                                            |
 | `GOOGLE_API_KEY`       | If using Gemini   | Your Google API key ([Get it here](https://makersuite.google.com/app/apikey))                                                    |
-| `XAI_API_KEY`          | If using Grok     | Your xAI API key ([Get it here](https://x.ai/))                                                                                  |
-| `OPENAI_API_KEY`       | If using OpenAI   | Your OpenAI API key ([Get it here](https://platform.openai.com/api-keys))                                                        |
-| `NOTIFICATION_METHODS` | ✅ Required       | Comma-separated list: `email`, `webhook`, `slack`, `telegram`, `discord`, or any combination (e.g., `email,slack,telegram`)      |
-| `AI_RESPONSE_LANGUAGE` | Optional          | Language code for AI responses (default: `en`). Supports: `zh`, `es`, `fr`, `ja`, `de`, `ko`, `pt`, `ru`, `ar`, `hi`, `it`, `nl` |
-| `ENABLE_WEB_SEARCH`    | Optional          | Enable web search for news (default: `false`)                                                                                    |
+| `XAI_API_KEY`          | If using Grok     | Your xAI API key ([Get it here](https://x.ai/))                                                                                                  |
+| `OPENAI_API_KEY`       | If using OpenAI   | Your OpenAI API key ([Get it here](https://platform.openai.com/api-keys))                                                                        |
+| `NOTIFICATION_METHODS` | ✅ Required       | Comma-separated list: `email`, `webhook`, `slack`, `telegram`, `discord`, or any combination (e.g., `email,slack,telegram`)                      |
+| `AI_RESPONSE_LANGUAGE` | Optional          | Language code(s) for AI responses (default: `en`). Use commas for multiple (e.g., `en,zh,ja`). Supports: `zh`, `es`, `fr`, `ja`, `de`, `ko`, `pt`, `ru`, `ar`, `hi`, `it`, `nl` |
+| `ENABLE_WEB_SEARCH`    | Optional          | Enable web search for news (default: `false`)                                                                                                    |
 | `GMAIL_ADDRESS`        | If using Gmail    | Your Gmail address                                                                                                               |
 | `GMAIL_APP_PASSWORD`   | If using Gmail    | Gmail App Password (16 characters, NOT regular password)                                                                         |
 | `EMAIL_TO`             | If using email    | Recipient email address                                                                                                          |
@@ -452,12 +460,23 @@ llm:
 **Usage:**
 
 ```bash
-# .env file
+# .env file - Single language
 AI_RESPONSE_LANGUAGE=zh  # Full Chinese output
+
+# .env file - Multiple languages (comma-separated)
+AI_RESPONSE_LANGUAGE=en,zh,ja  # Generate news in English, Chinese, and Japanese
 
 # GitHub Secret
 # Add: AI_RESPONSE_LANGUAGE = zh
+# Or for multiple: AI_RESPONSE_LANGUAGE = en,zh,ja
 ```
+
+**Multi-Language Support:**
+
+When you specify multiple languages (e.g., `en,zh,ja`), the bot will:
+1. Generate separate news digests for each language
+2. Send individual notifications for each language
+3. Include the language code in the notification title (e.g., "AI News Digest - 2024-12-03 [ZH]")
 
 **Example Output (Chinese):**
 

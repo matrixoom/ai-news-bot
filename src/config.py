@@ -202,8 +202,24 @@ For each news item:
 
     @property
     def ai_response_language(self) -> str:
-        """Get the language for AI-generated content"""
+        """Get the language for AI-generated content (single language, deprecated)"""
         return os.getenv("AI_RESPONSE_LANGUAGE", "en").strip().lower()
+    
+    @property
+    def ai_response_languages(self) -> List[str]:
+        """Get the list of languages for AI-generated content (supports comma-separated values)"""
+        languages_str = os.getenv("AI_RESPONSE_LANGUAGE", "en").strip().lower()
+        # Split by comma and clean up whitespace
+        languages = [lang.strip() for lang in languages_str.split(",") if lang.strip()]
+        # Validate languages
+        valid_languages = []
+        for lang in languages:
+            if lang == "en" or lang in LANGUAGE_NAMES:
+                valid_languages.append(lang)
+            else:
+                logger.warning(f"Unsupported language code '{lang}', skipping")
+        # Return at least 'en' if no valid languages
+        return valid_languages if valid_languages else ["en"]
 
     @property
     def enable_web_search(self) -> bool:

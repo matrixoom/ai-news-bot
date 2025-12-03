@@ -44,7 +44,8 @@ class SlackNotifier:
         self,
         content: str,
         title: Optional[str] = None,
-        color: str = "#0366d6"
+        color: str = "#0366d6",
+        language: str = "en"
     ) -> bool:
         """
         Send Slack notification with news digest.
@@ -53,6 +54,7 @@ class SlackNotifier:
             content: News digest content
             title: Title for the notification. If None, uses default with current date
             color: Attachment color (hex color code)
+            language: Language code to include in title (e.g., 'en', 'zh', 'ja')
 
         Returns:
             True if message sent successfully, False otherwise
@@ -65,7 +67,8 @@ class SlackNotifier:
             # Create default title if not provided
             if title is None:
                 today = datetime.now().strftime("%Y-%m-%d")
-                title = f"AI News Digest - {today}"
+                lang_suffix = f" [{language.upper()}]" if language != "en" else ""
+                title = f"AI News Digest - {today}{lang_suffix}"
 
             # Split content into sections for better formatting
             sections = self._format_content(content)

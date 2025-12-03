@@ -72,6 +72,8 @@ jobs:
 
           # Optional: Language (defaults to 'en' if not set)
           # Supported: en, zh, es, fr, ja, de, ko, pt, ru, ar, hi, it, nl
+          # For multiple languages, separate with commas (e.g., 'en,zh,ja')
+          # The bot will generate and send news for each language separately
           AI_RESPONSE_LANGUAGE: ${{ secrets.AI_RESPONSE_LANGUAGE }}
 
         run: |
