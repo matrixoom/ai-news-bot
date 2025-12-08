@@ -620,6 +620,17 @@ NOTIFICATION_METHODS=email,webhook
 - 斜体来源引用
 - 在任何设备上都舒适的阅读体验
 
+**邮件示例截图：**
+
+<div align="center">
+
+| 中文邮件 | 英文邮件 |
+|:-------------:|:-------------:|
+| ![中文 AI 新闻摘要](image/screenshot1.png) | ![英文 AI 新闻摘要](image/screenshot2.png) |
+| 中文版新闻摘要 | 英文版新闻摘要 |
+
+</div>
+
 **预览您的邮件：**
 在本地运行机器人并检查生成的 HTML 邮件内容。
 

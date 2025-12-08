@@ -681,6 +681,17 @@ The bot generates **email-optimized content** that looks stunning across all ema
 - Italicized source citations
 - Comfortable reading experience on any device
 
+**Example Email Screenshots:**
+
+<div align="center">
+
+| Chinese Email | English Email |
+|:-------------:|:-------------:|
+| ![Chinese AI News Digest](image/screenshot1.png) | ![English AI News Digest](image/screenshot2.png) |
+| Chinese language digest | English language digest |
+
+</div>
+
 **Preview your emails:**
 Run the bot locally and check the generated HTML email content.
 
