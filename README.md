@@ -51,6 +51,17 @@
 - **Email Client Compatible**: Works perfectly in Gmail, Outlook, Apple Mail, and mobile email apps
 - **Simple Email Setup**: Just use your Gmail account with App Password - no third-party email service needed
 
+### 📸 Example Screenshots
+
+<div align="center">
+
+| Chinese Email | English Email |
+|:-------------:|:-------------:|
+| ![Chinese AI News Digest](image/screenshot1.png) | ![English AI News Digest](image/screenshot2.png) |
+| Chinese language digest example | English language digest example |
+
+</div>
+
 ## 🚀 Deployment Options
 
 Choose your deployment method:
