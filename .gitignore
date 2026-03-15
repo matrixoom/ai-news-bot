@@ -51,3 +51,7 @@ htmlcov/
 
 # local
 local/
+.local-temp/
+.pip-cache/
+.uv-cache/
+.uv-python/
