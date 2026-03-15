@@ -1,4 +1,16 @@
-﻿# Task 03: Web Homepage And App Shell
+# Task 03: Web Homepage And App Shell
+
+## 状态
+
+Completed for implementation phase.
+
+## 本次已交付产物
+
+- Web 主入口设计与路由说明：[03-route-map-and-viewmodel.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/03-route-map-and-viewmodel.md)
+- 首页最小可运行版本：`src/app/web/app.py`、`src/app/web/fastapi_app.py`
+- 本地开发服务入口：`src/app/web/server.py`
+- Dashboard ViewModel 示例实现：`src/services/dashboard_service.py`
+- 验收测试：`tests/test_task03_web_app_shell.py`
 
 ## 目标
 
@@ -15,7 +27,7 @@
 - 展示未来会议 / 政策预告
 - 提供刷新时间和数据状态
 
-## 第一版页面结构建议
+## 第一版页面结构
 
 - 顶部总览区
 - 三栏新闻区
@@ -24,61 +36,21 @@
 - 事件与政策预告区
 - 数据状态与更新时间区
 
-## 技术约束
+## Web 栈决策
 
-在未明确前端栈前，建议优先选择简单稳定方案：
+当前阶段采用：
 
-- 服务端渲染模板
-- 或极简单页应用 + JSON API
+- 服务端渲染 HTML
+- JSON API 提供同一份 Dashboard ViewModel
+- FastAPI 作为目标 Web 入口
+- 保留兼容的轻量 WSGI 包装，避免任务 1 测试和旧代码断裂
 
-第一阶段目标是“低复杂度上线”，不是前端炫技。
+## App Shell 路由
 
-## 任务拆解
-
-### 1. 选择 Web 栈
-
-候选方向：
-
-- Python Web 框架 + 模板（考虑FastAPI）
-- 轻量 API + 静态前端
-
-优先原则：
-
-- 与现有 Python 代码复用高
-- 部署和本地运行简单
-- 不把前端工程复杂度引入过早
-
-### 2. 设计 App Shell
-
-需要定义：
-
-- 首页路由
-- 健康检查路由
-- 数据接口路由
-- 错误页和空状态
-
-### 3. 设计 Dashboard ViewModel
-
-页面不能直接吃 provider 原始数据。
-
-建议统一输出：
-
-- `dashboard_summary`
-- `news_sections`
-- `macro_sections`
-- `market_sections`
-- `event_sections`
-
-### 4. 明确与推送模块的关系
-
-Web 页面和推送共用：
-
-- 结构化数据
-- 报告服务
-
-不共用：
-
-- 具体的渲染细节
+- `/`：首页
+- `/healthz`：健康检查
+- `/api/dashboard`：结构化数据接口
+- 404：自定义错误页
 
 ## 本阶段交付
 
@@ -96,7 +68,19 @@ Web 页面和推送共用：
 ## 难点
 
 - 需要控制范围，避免过早把任务拖入前端工程化
+- 需要让首页和 API 共用同一份结构化快照，而不是拼两套数据
 
 ## 优先级
 
 P1
+
+## 验收结果
+
+- 首页已经具备总览、新闻、宏观、市场、事件、数据状态六个区域
+- `/api/dashboard` 已返回任务 3 约束的 Dashboard ViewModel
+- 404 和服务异常都有独立错误输出
+- Web 展示层与推送入口继续通过 `DashboardService` 解耦
+
+## 下一步
+
+直接进入 [04-news-intelligence-pipeline.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/04-news-intelligence-pipeline.md)。
