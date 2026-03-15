@@ -1,4 +1,15 @@
-﻿# Task 02: Data Source Feasibility And Provider Strategy
+# Task 02: Data Source Feasibility And Provider Strategy
+
+## 状态
+
+Completed for design phase.
+
+## 本次已交付产物
+
+- 数据源矩阵：[02-data-source-matrix.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/02-data-source-matrix.md)
+- Provider 契约清单：[02-provider-contracts.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/02-provider-contracts.md)
+- 免费可行性结论：[02-free-data-feasibility-conclusion.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/02-free-data-feasibility-conclusion.md)
+- 可执行接口骨架：`src/domain/external_data.py`、`src/providers/contracts.py`、`src/providers/strategy.py`
 
 ## 目标
 
@@ -127,3 +138,16 @@
 ## 优先级
 
 P0
+
+## 验收结果
+
+- 科技、财经、时政新闻都已定义免费主源、备源和降级方案
+- 搜索热点被限制为辅助源，不再承担唯一事实源职责
+- 宏观指标采用“官方主源 + AKShare 备源”的策略
+- 宽基指数行情采用“AKShare 主源 + 交易所页面备源”的策略
+- 事件预告采用“官方日历主源 + 豆包研究补强”的策略
+- 业务层后续只依赖统一 provider 契约，不直接依赖第三方库
+
+## 下一步
+
+直接进入 [03-web-homepage-and-app-shell.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/03-web-homepage-and-app-shell.md)。
