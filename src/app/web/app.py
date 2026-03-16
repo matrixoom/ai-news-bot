@@ -48,6 +48,11 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> bytes:
             "<article class=\"card metric-card\">"
             f"<div class=\"section-head\"><h3>{escape(card['label'])}</h3>{_render_badge(card['status'])}</div>"
             f"<p class=\"metric-value\">{escape(card['value'])}</p>"
+            f"<p class=\"muted\">Previous: {escape(card.get('previous_value', 'Unavailable'))}</p>"
+            f"<p class=\"muted\">{escape(card.get('change_label', 'Change unavailable'))}</p>"
+            f"<p class=\"signal\">Trend: {escape(card.get('trend', 'unavailable'))}</p>"
+            f"<p class=\"muted\">Source: {escape(card.get('source_label', 'Unavailable'))}</p>"
+            f"<p class=\"muted\">Updated: {escape(card.get('updated_at', 'Unavailable'))} | Frequency: {escape(card.get('frequency', 'unavailable'))}</p>"
             f"<p class=\"muted\">{escape(card['context'])}</p>"
             "</article>"
         )
@@ -60,7 +65,11 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> bytes:
             f"<div class=\"section-head\"><h3>{escape(card['label'])}</h3>{_render_badge(card['status'])}</div>"
             f"<p class=\"metric-value\">Close: {escape(card['close_value'])}</p>"
             f"<p class=\"muted\">MA20: {escape(card['ma20_value'])}</p>"
-            f"<p class=\"signal\">{escape(card['signal'])}</p>"
+            f"<p class=\"signal\">State: {escape(card['signal'])}</p>"
+            f"<p class=\"muted\">Deviation: {escape(card.get('deviation_pct', 'Unavailable'))}</p>"
+            f"<p class=\"muted\">Trade date: {escape(card.get('trade_date', 'Unavailable'))}</p>"
+            f"<p class=\"muted\">Source: {escape(card.get('source_label', 'Unavailable'))}</p>"
+            f"<p class=\"muted\">{escape(card.get('explanation', 'Unavailable'))}</p>"
             "</article>"
         )
         for card in payload["market_sections"]

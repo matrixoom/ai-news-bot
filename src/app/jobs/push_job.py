@@ -1,9 +1,8 @@
-﻿"""Push job entrypoint kept compatible with the legacy main.py flow."""
+"""Push job entrypoint that renders a shared dashboard report for delivery channels."""
 from datetime import datetime
 
 from ...config import Config
 from ...logger import setup_logger
-from ...news import NewsGenerator
 from ...notifiers import (
     DiscordNotifier,
     EmailNotifier,
@@ -11,14 +10,11 @@ from ...notifiers import (
     TelegramNotifier,
     WebhookNotifier,
 )
+from ...services import DashboardService, PushReportService
 
 
-
-def _send_notifications(news_digest: str, language: str, notification_methods, logger):
-    """Send the generated digest to all enabled channels."""
-    lang_results = {"sent": [], "failed": []}
-
-    notifier_specs = [
+def _default_notifier_specs():
+    return [
         ("email", EmailNotifier),
         ("webhook", WebhookNotifier),
         ("slack", SlackNotifier),
@@ -26,13 +22,25 @@ def _send_notifications(news_digest: str, language: str, notification_methods, l
         ("discord", DiscordNotifier),
     ]
 
-    for method_name, notifier_class in notifier_specs:
+
+def _send_notifications(report: str, subject: str, language: str, notification_methods, logger, notifier_specs=None):
+    """Send the generated report to all enabled channels."""
+    lang_results = {"sent": [], "failed": []}
+    specs = notifier_specs or _default_notifier_specs()
+
+    for method_name, notifier_class in specs:
         if method_name not in notification_methods:
             continue
 
         logger.info(f"Sending {method_name} notification for {language.upper()}...")
         notifier = notifier_class()
-        if notifier.send(news_digest, language=language):
+        kwargs = {"language": language}
+        if method_name == "email":
+            kwargs["subject"] = subject
+        else:
+            kwargs["title"] = subject
+
+        if notifier.send(report, **kwargs):
             lang_results["sent"].append(method_name)
             logger.info(f"{method_name.capitalize()} notification sent successfully for {language.upper()}")
         else:
@@ -42,18 +50,25 @@ def _send_notifications(news_digest: str, language: str, notification_methods, l
     return lang_results
 
 
-
-def run_push_job() -> int:
-    """Run the legacy push workflow through the new jobs layer."""
+def run_push_job(
+    *,
+    config: Config | None = None,
+    dashboard_service: DashboardService | None = None,
+    report_service: PushReportService | None = None,
+    notifier_specs=None,
+) -> int:
+    """Run the shared dashboard push workflow through the jobs layer."""
     logger = setup_logger("ai_news_bot")
 
     try:
-        config = Config()
+        config = config or Config()
         logger = setup_logger(
             "ai_news_bot",
             level=config.log_level,
             log_format=config.log_format,
         )
+        dashboard_service = dashboard_service or DashboardService(prefer_live_data=True)
+        report_service = report_service or PushReportService()
 
         languages = config.ai_response_languages
         notification_methods = config.notification_methods
@@ -61,20 +76,10 @@ def run_push_job() -> int:
         logger.info("=" * 60)
         logger.info("AI News Bot Push Job Starting")
         logger.info(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"LLM Provider: {config.llm_provider}")
-        if config.llm_model:
-            logger.info(f"LLM Model: {config.llm_model}")
         logger.info(f"Languages: {', '.join(languages)}")
-        logger.info(f"Web Search: {config.enable_web_search}")
         logger.info("=" * 60)
 
-        news_gen = NewsGenerator(
-            provider_name=config.llm_provider,
-            api_key=config.llm_api_key,
-            model=config.llm_model,
-            enable_web_search=config.enable_web_search,
-        )
-
+        snapshot = dashboard_service.build_snapshot()
         overall_results = {"sent": [], "failed": []}
 
         for language in languages:
@@ -83,26 +88,24 @@ def run_push_job() -> int:
             logger.info("=" * 60)
 
             try:
-                news_digest = news_gen.generate_news_digest_from_sources(
-                    language=language,
-                    max_items_per_source=config.max_items_per_source,
-                    stage1_template=config.stage1_prompt_template,
-                    stage2_template=config.stage2_prompt_template,
-                )
+                subject = report_service.build_subject(snapshot, language=language)
+                report = report_service.build_markdown(snapshot, language=language)
 
-                logger.info(f"News digest generated for {language.upper()} ({len(news_digest)} characters)")
-                preview = news_digest[:500] + "..." if len(news_digest) > 500 else news_digest
+                logger.info(f"Dashboard report generated for {language.upper()} ({len(report)} characters)")
+                preview = report[:500] + "..." if len(report) > 500 else report
                 logger.info("-" * 60)
-                logger.info(f"News Digest Preview ({language.upper()}):")
+                logger.info(f"Dashboard Report Preview ({language.upper()}):")
                 logger.info("-" * 60)
                 logger.info(preview)
                 logger.info("-" * 60)
 
                 lang_results = _send_notifications(
-                    news_digest=news_digest,
+                    report=report,
+                    subject=subject,
                     language=language,
                     notification_methods=notification_methods,
                     logger=logger,
+                    notifier_specs=notifier_specs,
                 )
 
                 for method in lang_results["sent"]:

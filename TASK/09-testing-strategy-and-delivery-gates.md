@@ -1,91 +1,24 @@
-﻿# Task 09: Testing Strategy And Delivery Gates
+# Task 09: Testing Strategy And Delivery Gates
+
+## 状态
+
+Completed for implementation phase.
+
+## 本次已交付产物
+
+- 交付门禁文档：[09-test-matrix-and-delivery-gates.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/09-test-matrix-and-delivery-gates.md)
+- 集成测试：`tests/test_task09_integration_suite.py`
 
 ## 目标
 
-按你的要求，以测试驱动方式规划整个项目，确保每一项需求完成后都能通过测试，再进入下一项。
+按测试驱动方式规划并落实整个项目，确保每一项需求完成后都能通过测试，再进入下一项。
 
-## 测试总原则
+## 验收结果
 
-- 先定义接口，再写实现
-- 先定义样本数据，再写 provider
-- 先定义验收测试，再做页面与报告渲染
+- Task 1-8 都已经映射到独立测试文件
+- 首页 API、统一报告、推送编排已经有集成覆盖
+- 主要降级场景有可执行测试，不只停留在文档说明
 
-## 测试层次
+## 下一步
 
-### 1. 单元测试
-
-覆盖：
-
-- 数据模型
-- provider 适配层
-- 新闻去重规则
-- 当日过滤规则
-- 宏观指标标准化
-- 市场模型计算
-- 报告装配
-
-### 2. 契约测试
-
-用于约束外部 provider 输出格式，例如：
-
-- 新闻 provider 输出字段完整
-- 市场数据 provider 返回统一结构
-- 豆包研究 provider 返回可解析 JSON
-
-### 3. 集成测试
-
-验证：
-
-- 首页 ViewModel 能组合多模块数据
-- 推送报告能正确装配
-- 主要降级场景可运行
-
-### 4. 快照测试
-
-适合用于：
-
-- 首页关键视图
-- 推送 markdown / html 模板
-
-## 每阶段交付门禁
-
-### Gate 1
-
-架构和 provider 接口设计完成，并有接口测试样本。
-
-### Gate 2
-
-Web 首页最小壳子可运行，并通过基础页面测试。
-
-### Gate 3
-
-新闻模块跑通，并通过去重、当日过滤、领域分流测试。
-
-### Gate 4
-
-宏观和市场模块跑通，并通过指标计算与模型测试。
-
-### Gate 5
-
-预告和推送模块接通，并通过集成测试。
-
-## 本阶段交付
-
-- 测试矩阵
-- 阶段门禁定义
-- Mock 策略
-- 样本数据策略
-
-## 验收标准
-
-- 每个任务文件都能映射到至少一组测试
-- 外部 API 失败时可通过 mock 测试主要流程
-- 新需求开发前先补对应测试设计
-
-## 难点
-
-- 如果接口边界不先稳定，后续测试会大面积返工
-
-## 优先级
-
-P0
+直接进入 [10-local-dev-environment-and-debug.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/10-local-dev-environment-and-debug.md)。

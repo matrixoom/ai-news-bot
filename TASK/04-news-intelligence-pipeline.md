@@ -1,4 +1,15 @@
-﻿# Task 04: News Intelligence Pipeline
+# Task 04: News Intelligence Pipeline
+
+## 状态
+
+Completed for implementation phase.
+
+## 本次已交付产物
+
+- 新闻管线主文档：[04-domain-config-and-summary-protocol.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/04-domain-config-and-summary-protocol.md)
+- 领域模型：`src/domain/news_pipeline.py`
+- 新闻聚合服务：`src/services/news_pipeline_service.py`
+- 验收测试：`tests/test_task04_news_pipeline.py`
 
 ## 目标
 
@@ -28,7 +39,7 @@
 
 ### 1. 统一新闻数据模型
 
-至少包含：
+已补齐：
 
 - 标题
 - 域
@@ -43,45 +54,34 @@
 
 ### 2. 领域化配置
 
-需要支持：
+已支持：
 
-- `tech`
+- `technology`
 - `finance`
-- `politics`
+- `policy`
 
 每个域独立配置：
 
-- RSS 源
 - 搜索查询模板
 - 配额
 - 摘要策略
+- 官方信源与优先信源规则
 
 ### 3. 搜索增强
 
-搜索不是替代 RSS，而是补齐：
-
-- 当日热点
-- 官方公告漏抓
-- 重要话题热度
+搜索只负责补齐和交叉印证，不直接替代 RSS。
 
 ### 4. 去重与排序规则
 
-建议按以下维度打分：
+当前已经实现：
 
-- 是否当日
-- 是否官方 / 一级信源
-- 是否多源交叉印证
-- 关键词相关度
-- 内容完整度
+- 基于标题 / 链接的 dedupe key
+- 默认只保留包含“当日记录”的新闻组
+- 按信源权重、交叉印证数、摘要完整度排序
 
 ### 5. 摘要策略
 
-建议采用两层输出：
-
-- 结构化卡片摘要
-- 深度报告摘要
-
-Web 首页优先展示结构化卡片，推送再生成更完整文本。
+当前先输出结构化卡片协议，深度报告摘要留给后续报告服务。
 
 ## 本阶段交付
 
@@ -105,3 +105,14 @@ Web 首页优先展示结构化卡片，推送再生成更完整文本。
 ## 优先级
 
 P1
+
+## 验收结果
+
+- 三域配置已经固化为默认配置
+- 搜索结果会和 RSS 结果按 dedupe key 融合
+- 无当日记录的新闻组会被整体过滤
+- 输出结构已经适合继续喂给 Web 首页和后续推送装配
+
+## 下一步
+
+直接进入 [05-macro-indicators-monitoring.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/05-macro-indicators-monitoring.md)。
