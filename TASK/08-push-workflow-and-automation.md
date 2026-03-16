@@ -1,63 +1,27 @@
-﻿# Task 08: Push Workflow And Automation
+# Task 08: Push Workflow And Automation
+
+## 状态
+
+Completed for implementation phase.
+
+## 本次已交付产物
+
+- 推送协议：[08-report-and-automation-design.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/08-report-and-automation-design.md)
+- 报告服务：`src/services/push_report_service.py`
+- 新推送入口：`src/app/jobs/push_job.py`
+- 验收测试：`tests/test_task08_push_workflow.py`
 
 ## 目标
 
-保留现有推送能力，但将其改造成“消费统一结构化数据的输出模块”，而不是继续作为核心业务主流程。
+保留现有推送能力，但将其改造成“消费统一结构化数据的输出模块”。
 
-## 设计原则
+## 验收结果
 
-- 推送模块从主业务中下沉
-- Web 和推送共用同一份数据与服务层
-- GitHub Actions 负责调度，不负责承载业务编排逻辑
+- 推送脚本已改为消费 `DashboardSnapshot`
+- 邮件 / Webhook / Slack / Telegram / Discord 继续复用
+- 任一渠道失败不会拖垮整轮推送
+- GitHub Actions 只需继续调度 `main.py`
 
-## 任务拆解
+## 下一步
 
-### 1. 重新定义入口
-
-建议保留两个入口：
-
-- Web 应用入口
-- 推送任务入口
-
-### 2. 推送内容重构
-
-推送内容不再只是一篇新闻摘要，而是一个综合报告：
-
-- 科技 / 财经 / 时政摘要
-- 宏观指标摘要
-- 市场模型表格
-- 事件与政策预告
-
-### 3. 调度策略
-
-建议区分：
-
-- 页面数据刷新任务
-- 推送任务
-
-两者时间点未必相同。
-
-### 4. 渠道复用
-
-现有邮件、Webhook、Slack、Telegram、Discord 继续保留，但需要统一基于新的报告对象输出。
-
-## 本阶段交付
-
-- 新入口定义
-- 推送编排设计
-- 渠道复用方案
-- GitHub Actions 调度职责划分
-
-## 验收标准
-
-- 推送脚本不再直接操纵底层抓取器
-- 任意一个输出渠道失败不会拖垮整体任务
-- GitHub Actions 仅做调度和执行
-
-## 难点
-
-- 报告内容增多后，需要控制不同渠道的长度和格式
-
-## 优先级
-
-P2
+直接进入 [09-testing-strategy-and-delivery-gates.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/09-testing-strategy-and-delivery-gates.md)。

@@ -1,4 +1,15 @@
-﻿# Task 06: Market Models And Daily Dashboard
+# Task 06: Market Models And Daily Dashboard
+
+## 状态
+
+Completed for implementation phase.
+
+## 本次已交付产物
+
+- 市场模型协议：[06-fishbowl-rules-and-panel-protocol.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/06-fishbowl-rules-and-panel-protocol.md)
+- 市场领域模型：`src/domain/market_monitoring.py`
+- 市场监测服务：`src/services/market_monitoring_service.py`
+- 验收测试：`tests/test_task06_market_models.py`
 
 ## 目标
 
@@ -12,70 +23,13 @@
 - 鱼盆模型状态
 - 可选的均线模型状态
 
-## 设计原则
+## 验收结果
 
-- 先做“规则清晰、结果稳定”的模型
-- 不做黑盒预测
-- 输出给用户的是“观察面板”和“规则状态”，不是投资建议
+- 6 个跟踪指数已注册
+- MA20 和偏离度计算已可复现
+- 鱼盆模型规则已固化为状态枚举和解释文案
+- 单个指数失败会降级为单卡不可用，不影响整体面板
 
-## 任务拆解
+## 下一步
 
-### 1. 确定跟踪标的
-
-建议先做：
-
-- 沪深 300
-- 中证 500
-- 中证 1000
-- 上证指数
-- 创业板指
-- 恒生科技指数
-
-### 2. 定义数据字段
-
-每个标的至少输出：
-
-- 交易日期
-- 收盘价
-- 20 日均线
-- 偏离比例
-- 模型状态
-- 简短解释
-
-### 3. 固化鱼盆模型规则
-
-这是关键任务，必须文档化：
-
-- 输入数据
-- 阈值
-- 状态枚举
-- 解释文案
-
-### 4. 日面板输出
-
-建议区分两层：
-
-- Web 首页表格卡片
-- 推送中的 markdown 表格和简短说明
-
-## 本阶段交付
-
-- 市场模型设计
-- 指数跟踪清单
-- 鱼盆模型规则定义
-- 面板输出协议
-
-## 验收标准
-
-- 模型计算可复现
-- 新增指数标的成本低
-- 某单个指数数据失败时不影响整体面板
-
-## 难点
-
-- 交易日历与数据发布时间处理
-- 模型规则如果定义模糊，后续测试无法稳定
-
-## 优先级
-
-P1
+直接进入 [07-events-policy-outlook-and-llm-research.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/07-events-policy-outlook-and-llm-research.md)。

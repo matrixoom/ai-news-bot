@@ -74,6 +74,7 @@ class MarketIndexSnapshot:
     close_price: float
     currency: str
     source_url: str
+    lookback_closes: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,10 @@ class MacroIndicatorReading:
     period_label: str
     released_at: str
     source_url: str
+    previous_value: float | None = None
+    change_value: float | None = None
+    change_kind: str | None = None
+    trend_summary: str | None = None
 
 
 @dataclass(frozen=True)

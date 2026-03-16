@@ -1,82 +1,27 @@
-﻿# Task 07: Events, Policy Outlook And LLM Research
+# Task 07: Events, Policy Outlook And LLM Research
+
+## 状态
+
+Completed for implementation phase.
+
+## 本次已交付产物
+
+- 事件过滤协议：[07-confidence-and-research-protocol.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/07-confidence-and-research-protocol.md)
+- 事件领域模型：`src/domain/events_outlook.py`
+- 预告服务：`src/services/events_outlook_service.py`
+- 验收测试：`tests/test_task07_events_outlook.py`
 
 ## 目标
 
 新增未来 1 周 / 1 月 / 3 月 / 6 月的热点会议、政策、政策落地预告模块。
 
-## 设计原则
+## 验收结果
 
-该模块最容易产生“看起来合理但不可靠”的结果，因此必须采用“检索增强 + 结构化输出 + 可信度分层”的方式。
+- 四个固定时间窗口已经固化
+- 低可信、无来源记录默认被过滤
+- 首页只展示中高可信、可追溯记录
+- provider 失效时窗口会降级但不消失
 
-## 输入来源
+## 下一步
 
-- 官方日历
-- 公开政策议程
-- 权威媒体预告
-- 豆包 API 的结构化研究结果
-
-豆包 API 可以用，但不能被当作唯一事实源。
-
-## 任务拆解
-
-### 1. 事件模型
-
-每个事件至少包含：
-
-- 标题
-- 分类
-- 预计时间
-- 时间窗口
-- 区域
-- 影响摘要
-- 来源
-- 可信度
-
-### 2. 时间窗口
-
-固定为：
-
-- 未来 7 天
-- 未来 30 天
-- 未来 90 天
-- 未来 180 天
-
-### 3. 可信度分层
-
-建议：
-
-- 高：有明确官方来源
-- 中：多源印证
-- 低：模型推断或弱证据
-
-默认首页只展示高和中。
-
-### 4. 豆包 API 使用方式
-
-必须要求：
-
-- 输出 JSON
-- 每条记录带来源依据
-- 无来源的记录不得进入主展示区
-
-## 本阶段交付
-
-- 预告模块设计
-- 事件数据模型
-- 可信度机制
-- 豆包研究 provider 约束
-
-## 验收标准
-
-- 每条展示记录都可追溯来源
-- 低可信度内容不会混入主面板
-- provider 失效时模块可降级
-
-## 难点
-
-- 预告信息天然不稳定
-- 需要在“有用”与“可信”之间做约束
-
-## 优先级
-
-P2
+直接进入 [08-push-workflow-and-automation.md](/d:/E/documents/gitspaces/ai-news-bot/TASK/08-push-workflow-and-automation.md)。
