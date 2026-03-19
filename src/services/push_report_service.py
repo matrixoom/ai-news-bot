@@ -15,9 +15,9 @@ class PushReportService:
         lines: List[str] = [
             f"# {snapshot.title}",
             "",
-            f"Generated at: {snapshot.generated_at}",
+            f"生成时间：{snapshot.generated_at}",
             "",
-            "## News",
+            "## 新闻",
         ]
 
         for section in snapshot.news_sections:
@@ -28,9 +28,9 @@ class PushReportService:
 
         lines.extend(
             [
-                "## Macro Indicators",
+                "## 宏观指标",
                 "",
-                "| Indicator | Value | Previous | Trend | Updated |",
+                "| 指标 | 当前值 | 前值 | 趋势 | 更新时间 |",
                 "| --- | --- | --- | --- | --- |",
             ]
         )
@@ -42,9 +42,9 @@ class PushReportService:
         lines.extend(
             [
                 "",
-                "## Market Models",
+                "## 市场模型",
                 "",
-                "| Index | Close | MA20 | Deviation | Fishbowl |",
+                "| 指数 | 收盘 | MA20 | 偏离 | Fishbowl |",
                 "| --- | --- | --- | --- | --- |",
             ]
         )
@@ -53,14 +53,14 @@ class PushReportService:
                 f"| {card.label} | {card.close_value} | {card.ma20_value} | {card.deviation_pct} | {card.signal} |"
             )
 
-        lines.extend(["", "## Events Outlook", ""])
+        lines.extend(["", "## 事件展望", ""])
         for section in snapshot.event_sections:
             lines.append(f"### {section.title}")
             for item in section.items:
                 lines.append(f"- {item.title} | {item.time_window} | {item.confidence} | {item.source}")
             lines.append("")
 
-        lines.extend(["## Data Status", ""])
+        lines.extend(["## 数据状态", ""])
         for item in snapshot.data_status:
             lines.append(f"- {item.label}: {item.status} - {item.detail}")
 

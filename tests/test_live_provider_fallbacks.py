@@ -46,7 +46,7 @@ class LiveProviderFallbackTests(unittest.TestCase):
 
         self.assertEqual(len(readings), 2)
         self.assertEqual(provider.healthcheck().availability.value, "degraded")
-        self.assertIn("sample indicator values", provider.healthcheck().detail)
+        self.assertIn("样例指标值", provider.healthcheck().detail)
 
     def test_market_provider_backfills_missing_symbols_from_sample(self):
         provider = FallbackMarketDataProvider(PartialMarketProvider(), SampleMarketDataProvider())
@@ -88,7 +88,7 @@ class LiveProviderFallbackTests(unittest.TestCase):
         self.assertEqual(len(snapshot.event_sections), 4)
         self.assertTrue(any(section.items for section in snapshot.news_sections))
         self.assertTrue(any(item.status == "degraded" for item in snapshot.data_status))
-        self.assertIn("sample fallback", snapshot.dashboard_summary.coverage_note.lower())
+        self.assertIn("回退到样例数据", snapshot.dashboard_summary.coverage_note)
 
 
 if __name__ == "__main__":

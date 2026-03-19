@@ -81,11 +81,11 @@ class MetricCard:
     value: str
     context: str
     status: str
-    previous_value: str = "Unavailable"
-    change_label: str = "Change unavailable"
+    previous_value: str = "暂无数据"
+    change_label: str = "暂无变化信息"
     trend: str = "unavailable"
-    source_label: str = "Unavailable"
-    updated_at: str = "Unavailable"
+    source_label: str = "暂无数据"
+    updated_at: str = "暂无数据"
     frequency: str = "unavailable"
 
 
@@ -99,10 +99,10 @@ class MarketCard:
     ma20_value: str
     signal: str
     status: str
-    trade_date: str = "Unavailable"
-    deviation_pct: str = "Unavailable"
-    source_label: str = "Unavailable"
-    explanation: str = "Unavailable"
+    trade_date: str = "暂无数据"
+    deviation_pct: str = "暂无数据"
+    source_label: str = "暂无数据"
+    explanation: str = "暂无数据"
 
 
 @dataclass(frozen=True)
@@ -212,17 +212,17 @@ class DashboardService:
         data_status = self._build_data_status()
 
         summary = SummaryBlock(
-            title="Finance And Policy Intelligence Dashboard",
-            subtitle="A compact homepage for finance, policy, macro, and market monitoring.",
+            title="财经与政策情报仪表盘",
+            subtitle="聚合财经、政策、宏观与市场监控的首页概览。",
             as_of_label=generated_at,
             coverage_note=self._coverage_note(data_status),
             highlights=self._summary_highlights(data_status),
         )
 
         title_by_category = {
-            NewsCategory.TECHNOLOGY: "Technology News",
-            NewsCategory.FINANCE: "Finance News",
-            NewsCategory.POLICY: "Policy News",
+            NewsCategory.TECHNOLOGY: "科技新闻",
+            NewsCategory.FINANCE: "财经新闻",
+            NewsCategory.POLICY: "政策新闻",
         }
         news_sections = [
             NewsSectionView(
@@ -230,18 +230,18 @@ class DashboardService:
                 title=title_by_category[digest.category],
                 status="live" if digest.items else "degraded",
                 description=(
-                    f"{digest.candidate_count} candidates, "
-                    f"{digest.merged_duplicate_count} merges, "
-                    f"{digest.dropped_outdated_count} outdated drops."
+                    f"候选 {digest.candidate_count} 条，"
+                    f"合并重复 {digest.merged_duplicate_count} 条，"
+                    f"剔除过期 {digest.dropped_outdated_count} 条。"
                 ),
                 items=[
                     NewsItemView(
                         title=item.title,
                         source=item.source_name,
-                        published_at=item.published_at or "Unavailable",
+                        published_at=item.published_at or "暂无数据",
                         tag=item.source_type.value,
                     )
-                    for item in digest.items[:3]
+                    for item in digest.items[:10]
                 ],
             )
             for digest in news_snapshot.domains
@@ -299,11 +299,11 @@ class DashboardService:
         ]
 
         sections = [
-            DashboardSection("news", "News Intelligence", data_status[0].status, "Three-domain news pipeline is now service-backed."),
-            DashboardSection("macro", "Macro Indicators", data_status[1].status, "Registry-driven macro cards include source and freshness metadata."),
-            DashboardSection("market", "Market Models", data_status[2].status, "Fishbowl and MA20 outputs are reproducible and independent per symbol."),
-            DashboardSection("events", "Events And Policy Outlook", data_status[3].status, "Outlook windows filter out low-confidence, weak-source findings."),
-            DashboardSection("push", "Push Automation", "compatible", "Push report now consumes the shared dashboard snapshot."),
+            DashboardSection("news", "新闻情报", data_status[0].status, "三类新闻管道已接入服务化视图模型。"),
+            DashboardSection("macro", "宏观指标", data_status[1].status, "宏观卡片基于指标注册表生成，包含来源和新鲜度信息。"),
+            DashboardSection("market", "市场模型", data_status[2].status, "Fishbowl 与 MA20 输出可复现，并按指数独立计算。"),
+            DashboardSection("events", "事件与政策展望", data_status[3].status, "展望窗口会过滤低置信度和弱来源条目。"),
+            DashboardSection("push", "推送自动化", "compatible", "推送报告已复用共享的仪表盘快照。"),
         ]
 
         return DashboardSnapshot(
@@ -345,35 +345,35 @@ class DashboardService:
     def _build_data_status(self) -> List[DataStatusItem]:
         if not self._prefer_live_data:
             return [
-                DataStatusItem("news", "News Pipeline", "sample", "Sample RSS and search data are rendered for local development."),
-                DataStatusItem("macro", "Macro Monitoring", "sample", "Sample macro cards are rendered because live mode is disabled."),
-                DataStatusItem("market", "Market Models", "sample", "Sample market snapshots are rendered because live mode is disabled."),
-                DataStatusItem("events", "Events Outlook", "sample", "Sample events outlook is rendered because live mode is disabled."),
+                DataStatusItem("news", "新闻管道", "sample", "当前展示样例 RSS 与搜索数据，便于本地开发。"),
+                DataStatusItem("macro", "宏观监控", "sample", "当前为样例宏观卡片，因为实时模式未开启。"),
+                DataStatusItem("market", "市场模型", "sample", "当前为样例市场快照，因为实时模式未开启。"),
+                DataStatusItem("events", "事件展望", "sample", "当前为样例事件展望，因为实时模式未开启。"),
             ]
 
         news_status = self._combine_statuses(
             key="news",
-            label="News Pipeline",
+            label="新闻管道",
             statuses=[
                 self._news_provider.healthcheck() if self._news_provider else None,
                 self._search_provider.healthcheck() if self._search_provider else None,
             ],
         )
-        macro_status = self._single_status("macro", "Macro Monitoring", self._macro_provider)
-        market_status = self._single_status("market", "Market Models", self._market_provider)
-        events_status = self._single_status("events", "Events Outlook", self._research_provider)
+        macro_status = self._single_status("macro", "宏观监控", self._macro_provider)
+        market_status = self._single_status("market", "市场模型", self._market_provider)
+        events_status = self._single_status("events", "事件展望", self._research_provider)
         return [news_status, macro_status, market_status, events_status]
 
     def _single_status(self, key: str, label: str, provider) -> DataStatusItem:
         if provider is None:
-            return DataStatusItem(key, label, "unknown", "No provider status is available.")
+            return DataStatusItem(key, label, "unknown", "暂无可用的数据源状态。")
         status = provider.healthcheck()
         return DataStatusItem(key, label, status.availability.value, status.detail)
 
     def _combine_statuses(self, *, key: str, label: str, statuses) -> DataStatusItem:
         available = [status for status in statuses if status is not None]
         if not available:
-            return DataStatusItem(key, label, "unknown", "No provider status is available.")
+            return DataStatusItem(key, label, "unknown", "暂无可用的数据源状态。")
 
         if any(status.availability == ProviderAvailability.DEGRADED for status in available):
             final_status = ProviderAvailability.DEGRADED.value
@@ -387,23 +387,23 @@ class DashboardService:
 
     def _coverage_note(self, data_status: List[DataStatusItem]) -> str:
         if not self._prefer_live_data:
-            return "The dashboard is running in sample-data mode for stable local development and tests."
+            return "当前仪表盘运行在样例数据模式，便于稳定的本地开发与测试。"
         if any(item.status == ProviderAvailability.DEGRADED.value for item in data_status):
-            return "The dashboard is running in live-first mode with automatic sample fallback for providers that are missing keys, dependencies, or reachable data."
-        return "The dashboard is running in live-first mode and all configured providers reported live status on the latest fetch."
+            return "当前仪表盘运行在实时优先模式，对缺少密钥、依赖或不可达数据源自动回退到样例数据。"
+        return "当前仪表盘运行在实时优先模式，最近一次抓取中所有已配置数据源都返回正常状态。"
 
     def _summary_highlights(self, data_status: List[DataStatusItem]) -> List[str]:
         base = [
-            "News, macro, market, and events are composed from dedicated services instead of hardcoded sections.",
-            "The same dashboard snapshot powers both the homepage and the push report.",
+            "新闻、宏观、市场和事件模块都由独立服务聚合，而不是硬编码区块。",
+            "首页与推送报告共用同一份仪表盘快照。",
         ]
         if not self._prefer_live_data:
-            base.append("Runtime entrypoints can switch to live-first providers; tests continue to use deterministic sample data.")
+            base.append("运行入口可切换到实时优先数据源，测试仍使用确定性的样例数据。")
             return base
 
         degraded = [item.label for item in data_status if item.status == ProviderAvailability.DEGRADED.value]
         if degraded:
-            base.append("Automatic sample fallback is active for: " + ", ".join(degraded) + ".")
+            base.append("以下模块已启用自动样例回退：" + "、".join(degraded) + "。")
         else:
-            base.append("All provider groups reported live status on the latest refresh.")
+            base.append("最近一次刷新中，所有数据源分组均返回正常状态。")
         return base

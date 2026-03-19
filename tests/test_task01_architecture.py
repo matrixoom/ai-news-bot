@@ -9,7 +9,7 @@ class DashboardServiceTests(unittest.TestCase):
     def test_build_snapshot_returns_expected_sections(self):
         snapshot = DashboardService().build_snapshot()
 
-        self.assertEqual(snapshot.title, "Finance And Policy Intelligence Dashboard")
+        self.assertEqual(snapshot.title, "财经与政策情报仪表盘")
         self.assertGreaterEqual(len(snapshot.sections), 5)
         self.assertIn("Z", snapshot.generated_at)
 
@@ -47,7 +47,7 @@ class WebAppTests(unittest.TestCase):
 
         self.assertEqual(status, "200 OK")
         self.assertIn("text/html", headers["Content-Type"])
-        self.assertIn("Finance And Policy Intelligence Dashboard", body.decode("utf-8"))
+        self.assertIn("财经与政策情报仪表盘", body.decode("utf-8"))
 
 
 if __name__ == "__main__":

@@ -51,11 +51,11 @@ class MarketMonitoringSnapshot:
 def build_default_market_registry() -> Dict[str, TrackedIndexDefinition]:
     """Return the default tracked-index registry for Task 06."""
     definitions = (
-        TrackedIndexDefinition("CSI300", "CSI 300", "AKShare / Exchange", "CNY"),
-        TrackedIndexDefinition("CSI500", "CSI 500", "AKShare / Exchange", "CNY"),
-        TrackedIndexDefinition("CSI1000", "CSI 1000", "AKShare / Exchange", "CNY"),
-        TrackedIndexDefinition("SSE", "SSE Composite", "AKShare / Exchange", "CNY"),
-        TrackedIndexDefinition("CHINEXT", "ChiNext", "AKShare / Exchange", "CNY"),
-        TrackedIndexDefinition("HSTECH", "Hang Seng Tech", "AKShare / Exchange", "HKD"),
+        TrackedIndexDefinition("CSI300", "沪深 300", "AKShare / 交易所", "CNY"),
+        TrackedIndexDefinition("CSI500", "中证 500", "AKShare / 交易所", "CNY"),
+        TrackedIndexDefinition("CSI1000", "中证 1000", "AKShare / 交易所", "CNY"),
+        TrackedIndexDefinition("SSE", "上证综指", "AKShare / 交易所", "CNY"),
+        TrackedIndexDefinition("CHINEXT", "创业板指", "AKShare / 交易所", "CNY"),
+        TrackedIndexDefinition("HSTECH", "恒生科技指数", "AKShare / 交易所", "HKD"),
     )
     return {definition.symbol: definition for definition in definitions}

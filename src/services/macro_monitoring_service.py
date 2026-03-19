@@ -57,12 +57,12 @@ class MacroMonitoringService:
             return MacroIndicatorView(
                 key=definition.indicator_code,
                 label=definition.display_name,
-                value="Unavailable",
-                previous_value="Unavailable",
-                change_label="Waiting for provider data",
+                value="暂无数据",
+                previous_value="暂无数据",
+                change_label="等待数据源返回",
                 trend=TrendDirection.UNAVAILABLE,
                 source_label=definition.source_label,
-                updated_at="Unavailable",
+                updated_at="暂无数据",
                 frequency=definition.frequency,
                 context=definition.update_rule,
                 status="unavailable",
@@ -85,30 +85,38 @@ class MacroMonitoringService:
 
     def _format_optional_value(self, value: float | None, unit: str) -> str:
         if value is None:
-            return "Unavailable"
+            return "暂无数据"
         return self._format_value(value, unit)
 
     def _format_value(self, value: float, unit: str) -> str:
         if unit == "%":
             return f"{value:.1f}%"
         if unit == "tn yuan":
-            return f"{value:.1f} tn yuan"
+            return f"{value:.1f} 万亿元"
         text = f"{value:.2f}".rstrip("0").rstrip(".")
         return f"{text} {unit}".strip()
 
     def _build_change_label(self, reading: MacroIndicatorReading) -> str:
         if reading.change_value is not None and reading.change_kind:
             change_value = self._format_signed_change(reading.change_value, reading.unit)
-            return f"{reading.change_kind}: {change_value}"
+            return f"{self._localize_change_kind(reading.change_kind)}：{change_value}"
         if reading.previous_value is not None:
-            return f"Previous: {self._format_value(reading.previous_value, reading.unit)}"
-        return "Change unavailable"
+            return f"前值：{self._format_value(reading.previous_value, reading.unit)}"
+        return "暂无变化信息"
 
     def _format_signed_change(self, value: float, unit: str) -> str:
         sign = "+" if value > 0 else ""
         if unit == "%":
-            return f"{sign}{value:.1f} pct"
+            return f"{sign}{value:.1f} 个百分点"
         return f"{sign}{value:.2f}".rstrip("0").rstrip(".")
+
+    def _localize_change_kind(self, change_kind: str) -> str:
+        return {
+            "MoM": "环比",
+            "YoY": "同比",
+            "vs prior quarter": "较上季度",
+            "vs prior month": "较上月",
+        }.get(change_kind, change_kind)
 
     def _resolve_trend(self, reading: MacroIndicatorReading) -> TrendDirection:
         if reading.trend_summary:

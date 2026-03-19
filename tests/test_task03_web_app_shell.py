@@ -43,15 +43,15 @@ class FastAPIWebShellTests(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Finance And Policy Intelligence Dashboard", response.text)
-        self.assertIn("Technology News", response.text)
-        self.assertIn("Data Status", response.text)
+        self.assertIn("财经与政策情报仪表盘", response.text)
+        self.assertIn("科技新闻", response.text)
+        self.assertIn("数据状态", response.text)
 
     def test_unknown_route_returns_custom_not_found_page(self):
         response = self.client.get("/missing")
 
         self.assertEqual(response.status_code, 404)
-        self.assertIn("Page not found", response.text)
+        self.assertIn("页面不存在", response.text)
 
 
 if __name__ == "__main__":
