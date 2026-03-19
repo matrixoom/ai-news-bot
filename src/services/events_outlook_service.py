@@ -65,9 +65,9 @@ class EventsOutlookService:
 
     def _title_for_horizon(self, horizon: EventHorizon) -> str:
         titles = {
-            EventHorizon.NEXT_7_DAYS: "Next 7 Days",
-            EventHorizon.NEXT_30_DAYS: "Next 30 Days",
-            EventHorizon.NEXT_90_DAYS: "Next 90 Days",
-            EventHorizon.NEXT_180_DAYS: "Next 180 Days",
+            EventHorizon.NEXT_7_DAYS: "未来 7 天",
+            EventHorizon.NEXT_30_DAYS: "未来 30 天",
+            EventHorizon.NEXT_90_DAYS: "未来 90 天",
+            EventHorizon.NEXT_180_DAYS: "未来 180 天",
         }
         return titles[horizon]

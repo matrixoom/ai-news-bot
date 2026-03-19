@@ -56,6 +56,7 @@ class MacroRegistryTests(unittest.TestCase):
         )
         self.assertEqual(registry["cpi"].frequency, MacroFrequency.MONTHLY)
         self.assertEqual(registry["gdp_real"].frequency, MacroFrequency.QUARTERLY)
+        self.assertEqual(registry["gdp_nominal"].unit, "%")
 
 
 class MacroMonitoringServiceTests(unittest.TestCase):
@@ -86,7 +87,7 @@ class MacroMonitoringServiceTests(unittest.TestCase):
 
         self.assertEqual(snapshot.indicators[0].value, "0.4%")
         self.assertEqual(snapshot.indicators[0].previous_value, "0.2%")
-        self.assertEqual(snapshot.indicators[0].change_label, "MoM: +0.2 pct")
+        self.assertEqual(snapshot.indicators[0].change_label, "环比：+0.2 个百分点")
         self.assertEqual(snapshot.indicators[0].trend, TrendDirection.UP)
         self.assertEqual(snapshot.indicators[0].status, "live")
 
@@ -101,8 +102,8 @@ class MacroMonitoringServiceTests(unittest.TestCase):
         snapshot = service.build_snapshot(["government_leverage"])
 
         self.assertEqual(snapshot.indicators[0].status, "unavailable")
-        self.assertEqual(snapshot.indicators[0].value, "Unavailable")
-        self.assertEqual(snapshot.indicators[0].updated_at, "Unavailable")
+        self.assertEqual(snapshot.indicators[0].value, "暂无数据")
+        self.assertEqual(snapshot.indicators[0].updated_at, "暂无数据")
 
 
 class DashboardMacroIntegrationTests(unittest.TestCase):
@@ -110,8 +111,8 @@ class DashboardMacroIntegrationTests(unittest.TestCase):
         snapshot = DashboardService().build_snapshot()
 
         self.assertGreaterEqual(len(snapshot.macro_sections), 7)
-        self.assertEqual(snapshot.macro_sections[0].source_label, "National Bureau of Statistics")
-        self.assertNotEqual(snapshot.macro_sections[0].updated_at, "Unavailable")
+        self.assertEqual(snapshot.macro_sections[0].source_label, "国家统计局")
+        self.assertNotEqual(snapshot.macro_sections[0].updated_at, "暂无数据")
 
     def test_dashboard_api_exposes_macro_source_and_frequency(self):
         client = TestClient(create_fastapi_app())

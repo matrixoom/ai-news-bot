@@ -52,11 +52,11 @@ class MarketMonitoringService:
                 key=definition.symbol,
                 label=definition.display_name,
                 trade_date=trade_date.isoformat(),
-                close_value="Unavailable",
-                ma20_value="Unavailable",
-                deviation_pct="Unavailable",
+                close_value="暂无数据",
+                ma20_value="暂无数据",
+                deviation_pct="暂无数据",
                 fishbowl_state=FishbowlState.UNAVAILABLE,
-                explanation="Provider data unavailable for this index.",
+                explanation="该指数暂无可用数据源返回。",
                 source_label=definition.source_label,
                 status="unavailable",
             )
@@ -68,10 +68,10 @@ class MarketMonitoringService:
                 label=definition.display_name,
                 trade_date=snapshot.trade_date.isoformat(),
                 close_value=f"{snapshot.close_price:.1f}",
-                ma20_value="Unavailable",
-                deviation_pct="Unavailable",
+                ma20_value="暂无数据",
+                deviation_pct="暂无数据",
                 fishbowl_state=FishbowlState.UNAVAILABLE,
-                explanation="Insufficient lookback history to compute MA20.",
+                explanation="历史回看数据不足，无法计算 MA20。",
                 source_label=definition.source_label,
                 status="degraded",
             )
@@ -104,9 +104,9 @@ class MarketMonitoringService:
 
     def _explain_state(self, state: FishbowlState, deviation_pct: float) -> str:
         if state == FishbowlState.BREAKOUT:
-            return f"Price is materially above MA20 ({deviation_pct:+.1f}%), indicating a strong breakout state."
+            return f"价格显著高于 MA20（{deviation_pct:+.1f}%），处于明显突破状态。"
         if state == FishbowlState.CONSTRUCTIVE:
-            return f"Price is holding above MA20 ({deviation_pct:+.1f}%), keeping the fishbowl constructive."
+            return f"价格维持在 MA20 上方（{deviation_pct:+.1f}%），鱼缸状态保持偏强。"
         if state == FishbowlState.NEUTRAL:
-            return f"Price is modestly below MA20 ({deviation_pct:+.1f}%), close to the fishbowl boundary."
-        return f"Price is well below MA20 ({deviation_pct:+.1f}%), showing clear pressure in the fishbowl model."
+            return f"价格小幅低于 MA20（{deviation_pct:+.1f}%），接近鱼缸边界。"
+        return f"价格明显低于 MA20（{deviation_pct:+.1f}%），鱼缸模型显示压力较大。"

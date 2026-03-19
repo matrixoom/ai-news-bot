@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>财经与政策情报仪表盘</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="background-glow"></div>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <p class="eyebrow">FRONTEND APP</p>
+          <h1>财经与政策情报中心</h1>
+          <p id="generatedAt" class="muted">加载中...</p>
+        </div>
+        <nav class="module-nav">
+          <a href="#newsModule">热点新闻</a>
+          <a href="#macroModule">宏观趋势</a>
+          <a href="#marketModule">市场模型</a>
+          <a href="#eventsModule">事件展望</a>
+          <a href="#statusModule">数据状态</a>
+        </nav>
+        <section class="sidebar-note">
+          <h2>说明</h2>
+          <p id="coverageNote">正在读取后端数据...</p>
+        </section>
+      </aside>
+
+      <main class="content">
+        <section class="hero-card">
+          <p class="eyebrow">SEPARATED FRONTEND</p>
+          <h2 id="heroTitle">正在连接后端接口...</h2>
+          <p id="heroSubtitle" class="muted">请稍候</p>
+          <ul id="highlights" class="highlights"></ul>
+        </section>
+
+        <section id="newsModule" class="module">
+          <div class="module-head">
+            <h3>热点新闻</h3>
+            <span class="chip">每类 10 条</span>
+          </div>
+          <div id="newsGrid" class="news-grid"></div>
+        </section>
+
+        <section id="macroModule" class="module">
+          <div class="module-head">
+            <h3>宏观指标（近 1 年）</h3>
+            <span class="chip">折线图</span>
+          </div>
+          <div id="macroGrid" class="macro-grid"></div>
+        </section>
+
+        <section id="marketModule" class="module">
+          <div class="module-head">
+            <h3>市场模型</h3>
+            <span class="chip">独立模块</span>
+          </div>
+          <div id="marketGrid" class="card-grid"></div>
+        </section>
+
+        <section id="eventsModule" class="module">
+          <div class="module-head">
+            <h3>事件展望</h3>
+            <span class="chip">独立模块</span>
+          </div>
+          <div id="eventsGrid" class="card-grid"></div>
+        </section>
+
+        <section id="statusModule" class="module">
+          <div class="module-head">
+            <h3>数据状态</h3>
+            <span class="chip">后端健康</span>
+          </div>
+          <ul id="statusList" class="status-list"></ul>
+        </section>
+      </main>
+    </div>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

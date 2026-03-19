@@ -47,7 +47,7 @@ class EventsOutlookServiceTests(unittest.TestCase):
         snapshot = service.build_snapshot(as_of=date(2026, 3, 15))
 
         next_7 = snapshot.windows[0]
-        self.assertEqual(next_7.title, "Next 7 Days")
+        self.assertEqual(next_7.title, "未来 7 天")
         self.assertEqual(len(next_7.items), 1)
         self.assertEqual(next_7.items[0].title, "Keep me")
 

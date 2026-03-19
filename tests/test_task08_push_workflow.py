@@ -36,10 +36,10 @@ class PushWorkflowTests(unittest.TestCase):
         snapshot = DashboardService().build_snapshot()
         report = PushReportService().build_markdown(snapshot)
 
-        self.assertIn("## News", report)
-        self.assertIn("## Macro Indicators", report)
-        self.assertIn("## Market Models", report)
-        self.assertIn("## Events Outlook", report)
+        self.assertIn("## 新闻", report)
+        self.assertIn("## 宏观指标", report)
+        self.assertIn("## 市场模型", report)
+        self.assertIn("## 事件展望", report)
 
     def test_push_job_survives_partial_notifier_failure(self):
         result = run_push_job(
