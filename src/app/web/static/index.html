@@ -3,7 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>财经与政策情报终端</title>
+    <title>信息终端</title>
+    <script>
+      (() => {
+        try {
+          const storedTheme = window.localStorage.getItem("dashboard-theme");
+          if (storedTheme === "light" || storedTheme === "dark") {
+            document.documentElement.setAttribute("data-theme", storedTheme);
+          }
+        } catch (error) {}
+      })();
+    </script>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
@@ -11,7 +21,7 @@
       <aside id="sidebar" class="sidebar reveal" aria-label="一级模块导航">
         <div class="brand-block">
           <p class="brand-kicker">MARKETS + POLICY DESK</p>
-          <h1 id="heroTitle">财经与政策情报终端</h1>
+          <h1 id="heroTitle">信息终端</h1>
           <p id="heroSubtitle" class="brand-subtitle">正在连接后端数据接口...</p>
         </div>
 
@@ -65,16 +75,16 @@
             <button id="sidebarToggle" type="button" class="sidebar-toggle" aria-expanded="false" aria-controls="sidebar">
               模块
             </button>
-            <div class="hero-copy">
-              <p class="hero-kicker">Integrated Intelligence Workspace</p>
-              <h2>今日工作台</h2>
-              <p class="hero-text">左侧只保留一级模块，模块内具体内容与切换都放到右侧内容区。</p>
+            <section id="marketTicker" class="ticker top-ticker" aria-label="顶部摘要行情">
+              <span class="ticker-empty">行情条加载中...</span>
+            </section>
+            <div class="hero-actions">
+              <button id="themeToggle" type="button" class="theme-toggle" aria-pressed="false" aria-label="切换颜色模式" title="切换颜色模式">
+                <span class="theme-toggle-icon" aria-hidden="true"></span>
+              </button>
+              <span id="newsModeTag" class="mode-chip">Hybrid</span>
             </div>
-            <span id="newsModeTag" class="mode-chip">Hybrid</span>
           </div>
-          <section id="marketTicker" class="ticker" aria-label="顶部摘要行情">
-            <span class="ticker-empty">行情条加载中...</span>
-          </section>
         </header>
 
         <section class="module-panel reveal">

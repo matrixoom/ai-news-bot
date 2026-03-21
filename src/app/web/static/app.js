@@ -76,6 +76,48 @@ const viewState = {
 
 let legacyDashboardPromise = null;
 
+function getCurrentTheme() {
+  const theme = document.documentElement.getAttribute("data-theme");
+  return theme === "light" ? "light" : "dark";
+}
+
+function persistTheme(theme) {
+  try {
+    window.localStorage.setItem("dashboard-theme", theme);
+  } catch (error) {}
+}
+
+function renderThemeToggle() {
+  const button = document.getElementById("themeToggle");
+  if (!button) {
+    return;
+  }
+  const theme = getCurrentTheme();
+  const nextLabel = theme === "light" ? "切换到暗色模式" : "切换到浅色模式";
+  button.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
+  button.setAttribute("aria-label", nextLabel);
+  button.setAttribute("title", nextLabel);
+}
+
+function applyTheme(theme, { persist = true } = {}) {
+  document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
+  if (persist) {
+    persistTheme(theme === "light" ? "light" : "dark");
+  }
+  renderThemeToggle();
+}
+
+function initThemeToggle() {
+  const button = document.getElementById("themeToggle");
+  if (!button) {
+    return;
+  }
+  renderThemeToggle();
+  button.addEventListener("click", () => {
+    applyTheme(getCurrentTheme() === "light" ? "dark" : "light");
+  });
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -416,8 +458,8 @@ function renderHeadlineList(items, emptyText = "暂无内容") {
     .map((item) => {
       const url = normalizeNewsUrl(item.url);
       const title = url
-        ? `<a class="headline-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">#${item.rank} ${escapeHtml(item.title)}</a>`
-        : `<span class="headline-link disabled">#${item.rank} ${escapeHtml(item.title)}</span>`;
+        ? `<a class="headline-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.rank)} ${escapeHtml(item.title)}</a>`
+        : `<span class="headline-link disabled">${escapeHtml(item.rank)} ${escapeHtml(item.title)}</span>`;
       return `<li><p class="headline-title">${title}</p><p class="headline-meta">${escapeHtml(item.source)} | ${escapeHtml(item.published_at)} | ${escapeHtml(item.tag)}</p></li>`;
     })
     .join("")}</ol>`;
@@ -492,7 +534,7 @@ function renderNewsTable(section) {
       ? `<a class="headline-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>`
       : `<span class="headline-link disabled">${escapeHtml(item.title)}</span>`;
     return [
-      { text: `#${item.rank}`, className: "cell-mono cell-tight" },
+      { text: String(item.rank), className: "cell-mono cell-tight" },
       { html: title, className: "cell-grow" },
       { text: item.source, className: "cell-muted" },
       { text: item.published_at, className: "cell-mono" },
@@ -501,7 +543,7 @@ function renderNewsTable(section) {
   });
   return renderTable(
     [
-      { label: "Rank", className: "cell-mono cell-tight" },
+      { label: "排名", className: "cell-mono cell-tight" },
       { label: "Headline", className: "cell-grow" },
       { label: "Source" },
       { label: "Time", className: "cell-mono" },
@@ -855,6 +897,8 @@ window.addEventListener("hashchange", () => {
   applyRoute(route.moduleId, route.detailId);
 });
 
+applyTheme(getCurrentTheme(), { persist: false });
+initThemeToggle();
 initSidebarToggle();
 renderShell();
 revealPanels();
