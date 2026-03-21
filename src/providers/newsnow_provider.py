@@ -173,7 +173,7 @@ class _NewsNowUpstreamServerManager:
             self._process = None
 
     def _start_process(self, *, base_url: str) -> subprocess.Popen[str]:
-        repo_dir = Path(os.getenv("NEWSNOW_UPSTREAM_PROJECT_DIR", ".local-temp-newsnow")).resolve()
+        repo_dir = Path(os.getenv("NEWSNOW_UPSTREAM_PROJECT_DIR", ".third_part_newsnow")).resolve()
         if not repo_dir.exists():
             raise RuntimeError(f"upstream NewsNow project directory not found: {repo_dir}")
         if not (repo_dir / "node_modules").exists():
