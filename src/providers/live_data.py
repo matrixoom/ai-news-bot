@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+import inspect
 import json
 import os
 import re
@@ -323,7 +324,11 @@ class AkshareMarketDataProvider:
         akshare = self._load_akshare()
         snapshots: list[MarketIndexSnapshot] = []
         for symbol in symbols:
-            frame = self._load_market_frame(akshare=akshare, symbol=symbol, trade_date=trade_date)
+            try:
+                frame = self._load_market_frame(akshare=akshare, symbol=symbol, trade_date=trade_date)
+            except Exception as exc:
+                logger.warning("AKShare market fetch failed for %s: %s", symbol, exc)
+                continue
             if frame is None:
                 continue
 
@@ -372,20 +377,33 @@ class AkshareMarketDataProvider:
             call_kwargs.setdefault("start_date", start_date)
             call_kwargs.setdefault("end_date", end_date)
             try:
-                return getattr(akshare, function_name)(**call_kwargs)
-            except TypeError:
-                call_kwargs.pop("start_date", None)
-                call_kwargs.pop("end_date", None)
-                try:
-                    return getattr(akshare, function_name)(**call_kwargs)
-                except Exception as exc:  # pragma: no cover - exercised through wrapper
-                    last_error = exc
+                return self._call_akshare_function(
+                    function=getattr(akshare, function_name),
+                    call_kwargs=call_kwargs,
+                )
             except Exception as exc:  # pragma: no cover - exercised through wrapper
                 last_error = exc
 
         if last_error is not None:
             raise last_error
         return None
+
+    def _call_akshare_function(self, *, function, call_kwargs: dict[str, Any]):
+        try:
+            signature = inspect.signature(function)
+        except (TypeError, ValueError):
+            return function(**call_kwargs)
+
+        parameters = signature.parameters
+        if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
+            return function(**call_kwargs)
+
+        filtered_kwargs = {
+            key: value
+            for key, value in call_kwargs.items()
+            if key in parameters
+        }
+        return function(**filtered_kwargs)
 
     def _extract_market_records(self, frame) -> list[dict[str, Any]]:
         if frame is None or getattr(frame, "empty", True):
@@ -441,7 +459,11 @@ class AkshareMacroDataProvider:
         akshare = self._load_akshare()
         readings: list[MacroIndicatorReading] = []
         for code in indicator_codes:
-            reading = self._fetch_one(akshare=akshare, indicator_code=code)
+            try:
+                reading = self._fetch_one(akshare=akshare, indicator_code=code)
+            except Exception as exc:
+                logger.warning("AKShare macro fetch failed for %s: %s", code, exc)
+                continue
             if reading is not None:
                 readings.append(reading)
         return readings
@@ -643,7 +665,7 @@ class FallbackNewsProvider(_FallbackStatusMixin):
             return items
         except Exception as exc:
             self._primary_failed = True
-            logger.warning("News provider fallback triggered: %s", exc, exc_info=True)
+            logger.warning("News provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
                 f"实时新闻数据源失败（{exc}）；当前改为展示样例新闻。",
@@ -669,7 +691,7 @@ class FallbackSearchProvider(_FallbackStatusMixin):
             return items
         except Exception as exc:
             self._primary_failed = True
-            logger.warning("Search provider fallback triggered: %s", exc, exc_info=True)
+            logger.warning("Search provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
                 f"实时搜索补充失败（{exc}）；当前改为展示样例补充结果。",
@@ -694,7 +716,7 @@ class FallbackMacroProvider(_FallbackStatusMixin):
             primary_items = list(self._primary.fetch_latest_readings(indicator_codes=requested))
         except Exception as exc:
             self._primary_failed = True
-            logger.warning("Macro provider fallback triggered: %s", exc, exc_info=True)
+            logger.warning("Macro provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
                 f"实时宏观数据源失败（{exc}）；当前改为展示样例指标值。",
@@ -732,7 +754,7 @@ class FallbackMarketDataProvider(_FallbackStatusMixin):
             primary_items = list(self._primary.fetch_index_snapshots(symbols=requested, trade_date=trade_date))
         except Exception as exc:
             self._primary_failed = True
-            logger.warning("Market provider fallback triggered: %s", exc, exc_info=True)
+            logger.warning("Market provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
                 f"实时市场数据源失败（{exc}）；当前改为展示样例指数数据。",
@@ -778,9 +800,17 @@ class FallbackResearchProvider(_FallbackStatusMixin):
             items = list(self._primary.collect_outlook(horizon=horizon, topics=topics, as_of=as_of))
             self._set_state(ProviderAvailability.LIVE, f"已通过 {self._primary.provider_key} 加载实时事件展望研究。")
             return items
+        except ProviderConfigurationError as exc:
+            self._primary_failed = True
+            logger.warning("Research provider fallback triggered: %s", exc)
+            self._set_state(
+                ProviderAvailability.DEGRADED,
+                f"实时事件研究失败（{exc}）；当前改为展示样例展望条目。",
+            )
+            return list(self._fallback.collect_outlook(horizon=horizon, topics=topics, as_of=as_of))
         except Exception as exc:
             self._primary_failed = True
-            logger.warning("Research provider fallback triggered: %s", exc, exc_info=True)
+            logger.warning("Research provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
                 f"实时事件研究失败（{exc}）；当前改为展示样例展望条目。",

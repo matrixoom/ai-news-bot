@@ -9,7 +9,14 @@ from fastapi.staticfiles import StaticFiles
 
 from ...services.dashboard_service import DashboardService
 from .app import build_dashboard_payload, render_dashboard_html, render_error_html
-from .frontend_payload import build_frontend_payload
+from .frontend_payload import (
+    build_frontend_events_module_payload,
+    build_frontend_macro_module_payload,
+    build_frontend_market_module_payload,
+    build_frontend_news_module_payload,
+    build_frontend_payload,
+    build_frontend_status_module_payload,
+)
 
 
 def create_fastapi_app(dashboard_service: DashboardService | None = None) -> FastAPI:
@@ -48,6 +55,89 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
         except Exception:
             return JSONResponse(
                 {"error": "frontend_dashboard_unavailable"},
+                status_code=503,
+            )
+
+    @app.get("/api/frontend/modules/news")
+    def frontend_news_module(news_mode: str | None = None) -> JSONResponse:
+        try:
+            generated_at, effective_news_mode, news_sections, news_status = service.build_news_module(news_mode=news_mode)
+            return JSONResponse(
+                build_frontend_news_module_payload(
+                    generated_at=generated_at,
+                    news_mode=effective_news_mode,
+                    news_sections=news_sections,
+                    news_status=news_status,
+                )
+            )
+        except Exception:
+            return JSONResponse(
+                {"error": "frontend_news_module_unavailable"},
+                status_code=503,
+            )
+
+    @app.get("/api/frontend/modules/macro")
+    def frontend_macro_module() -> JSONResponse:
+        try:
+            generated_at, macro_sections = service.build_macro_module()
+            return JSONResponse(
+                build_frontend_macro_module_payload(
+                    generated_at=generated_at,
+                    macro_sections=macro_sections,
+                )
+            )
+        except Exception:
+            return JSONResponse(
+                {"error": "frontend_macro_module_unavailable"},
+                status_code=503,
+            )
+
+    @app.get("/api/frontend/modules/market")
+    def frontend_market_module() -> JSONResponse:
+        try:
+            generated_at, market_sections = service.build_market_module()
+            return JSONResponse(
+                build_frontend_market_module_payload(
+                    generated_at=generated_at,
+                    market_sections=market_sections,
+                )
+            )
+        except Exception:
+            return JSONResponse(
+                {"error": "frontend_market_module_unavailable"},
+                status_code=503,
+            )
+
+    @app.get("/api/frontend/modules/events")
+    def frontend_events_module() -> JSONResponse:
+        try:
+            generated_at, event_sections = service.build_events_module()
+            return JSONResponse(
+                build_frontend_events_module_payload(
+                    generated_at=generated_at,
+                    event_sections=event_sections,
+                )
+            )
+        except Exception:
+            return JSONResponse(
+                {"error": "frontend_events_module_unavailable"},
+                status_code=503,
+            )
+
+    @app.get("/api/frontend/modules/status")
+    def frontend_status_module(news_mode: str | None = None) -> JSONResponse:
+        try:
+            generated_at, data_status, coverage_note = service.build_status_module(news_mode=news_mode)
+            return JSONResponse(
+                build_frontend_status_module_payload(
+                    generated_at=generated_at,
+                    data_status=data_status,
+                    coverage_note=coverage_note,
+                )
+            )
+        except Exception:
+            return JSONResponse(
+                {"error": "frontend_status_module_unavailable"},
                 status_code=503,
             )
 

@@ -135,6 +135,8 @@ class _NewsNowUpstreamServerManager:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._process: subprocess.Popen[str] | None = None
+        self._disabled_until_by_base_url: dict[str, float] = {}
+        self._last_failure_by_base_url: dict[str, str] = {}
         atexit.register(self.stop)
 
     def ensure_running(self, *, base_url: str) -> None:
@@ -145,20 +147,40 @@ class _NewsNowUpstreamServerManager:
         if os.getenv("NEWSNOW_UPSTREAM_AUTO_START", "1") == "0":
             return
         if self._is_healthy(base_url):
+            self._clear_failure(base_url)
             return
+        failure = self._current_failure(base_url)
+        if failure is not None:
+            raise RuntimeError(failure)
 
         with self._lock:
             if self._is_healthy(base_url):
+                self._clear_failure(base_url)
                 return
+            failure = self._current_failure(base_url)
+            if failure is not None:
+                raise RuntimeError(failure)
             if self._process is None or self._process.poll() is not None:
-                self._process = self._start_process(base_url=base_url)
+                try:
+                    self._process = self._start_process(base_url=base_url)
+                except Exception as exc:
+                    detail = f"local upstream NewsNow server start failed: {exc}"
+                    self._mark_failed(base_url=base_url, detail=detail)
+                    raise RuntimeError(detail) from exc
 
-        deadline = time.time() + float(os.getenv("NEWSNOW_UPSTREAM_START_TIMEOUT_SECONDS", "45"))
+        timeout_seconds = float(os.getenv("NEWSNOW_UPSTREAM_START_TIMEOUT_SECONDS", "5"))
+        deadline = time.time() + timeout_seconds
         while time.time() < deadline:
             if self._is_healthy(base_url):
+                self._clear_failure(base_url)
                 return
-            time.sleep(1.0)
-        raise RuntimeError(f"local upstream NewsNow server did not become healthy: {base_url}")
+            time.sleep(0.5)
+        detail = (
+            "local upstream NewsNow server did not become healthy within "
+            f"{timeout_seconds:.1f}s: {base_url}"
+        )
+        self._mark_failed(base_url=base_url, detail=detail)
+        raise RuntimeError(detail)
 
     def stop(self) -> None:
         with self._lock:
@@ -203,6 +225,27 @@ class _NewsNowUpstreamServerManager:
         except Exception:
             return False
 
+    def _current_failure(self, base_url: str) -> str | None:
+        disabled_until = self._disabled_until_by_base_url.get(base_url)
+        if disabled_until is None:
+            return None
+        if time.time() >= disabled_until:
+            self._clear_failure(base_url)
+            return None
+        return self._last_failure_by_base_url.get(base_url)
+
+    def _mark_failed(self, *, base_url: str, detail: str) -> None:
+        cooldown_seconds = max(
+            1.0,
+            float(os.getenv("NEWSNOW_UPSTREAM_RETRY_COOLDOWN_SECONDS", "120")),
+        )
+        self._disabled_until_by_base_url[base_url] = time.time() + cooldown_seconds
+        self._last_failure_by_base_url[base_url] = detail
+
+    def _clear_failure(self, base_url: str) -> None:
+        self._disabled_until_by_base_url.pop(base_url, None)
+        self._last_failure_by_base_url.pop(base_url, None)
+
     def describe(self, *, base_url: str) -> dict[str, object]:
         parsed = urlparse(base_url)
         hostname = (parsed.hostname or "").lower()
@@ -215,6 +258,9 @@ class _NewsNowUpstreamServerManager:
         elif managed:
             status = "starting"
             detail = "upstream process started but health endpoint is not ready"
+        elif self._current_failure(base_url):
+            status = "cooldown"
+            detail = self._current_failure(base_url) or "upstream retries are cooling down"
         elif is_local:
             status = "stopped"
             detail = "local upstream service is not running"
@@ -262,6 +308,7 @@ class NewsNowAggregatedNewsProvider:
         now_factory: Callable[[], datetime] | None = None,
         provider_key: str | None = None,
         auto_start_local_server: bool = False,
+        enable_native_fallback: bool = True,
     ) -> None:
         self._base_url = (
             base_url
@@ -298,6 +345,7 @@ class NewsNowAggregatedNewsProvider:
         self._now_factory = now_factory or (lambda: datetime.now(UTC))
         self.provider_key = provider_key or self.provider_key
         self._auto_start_local_server = auto_start_local_server
+        self._enable_native_fallback = enable_native_fallback
 
         self._sources_by_id = {source.source_id: source for source in source_specs}
         self._sources_by_category = {
@@ -430,21 +478,23 @@ class NewsNowAggregatedNewsProvider:
             if refreshed.items:
                 self._cache_by_source[source.source_id] = refreshed
                 return refreshed
-            native_items = self._fetch_native_source_items(source=source, now_ms=now_ms)
-            if native_items:
-                native_entry = _SourceCacheEntry(updated_ms=now_ms, items=tuple(native_items))
-                self._cache_by_source[source.source_id] = native_entry
-                return native_entry
+            if self._enable_native_fallback:
+                native_items = self._fetch_native_source_items(source=source, now_ms=now_ms)
+                if native_items:
+                    native_entry = _SourceCacheEntry(updated_ms=now_ms, items=tuple(native_items))
+                    self._cache_by_source[source.source_id] = native_entry
+                    return native_entry
             if cached:
                 return cached
             self._cache_by_source[source.source_id] = refreshed
             return refreshed
         except Exception:
-            native_items = self._fetch_native_source_items(source=source, now_ms=now_ms)
-            if native_items:
-                native_entry = _SourceCacheEntry(updated_ms=now_ms, items=tuple(native_items))
-                self._cache_by_source[source.source_id] = native_entry
-                return native_entry
+            if self._enable_native_fallback:
+                native_items = self._fetch_native_source_items(source=source, now_ms=now_ms)
+                if native_items:
+                    native_entry = _SourceCacheEntry(updated_ms=now_ms, items=tuple(native_items))
+                    self._cache_by_source[source.source_id] = native_entry
+                    return native_entry
             if cached:
                 return cached
             raise
@@ -922,6 +972,7 @@ class NewsNowModeProvider:
             base_url=os.getenv("NEWSNOW_UPSTREAM_BASE_URL", "http://127.0.0.1:5173"),
             provider_key="newsnow-upstream-provider",
             auto_start_local_server=True,
+            enable_native_fallback=False,
         )
 
     @property
@@ -1032,4 +1083,3 @@ class CompositeNewsProvider:
             detail=f"Composite provider active ({len(self._providers)} upstream providers).",
             checked_at=_checked_at(),
         )
-

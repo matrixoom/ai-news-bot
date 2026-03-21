@@ -1,10 +1,18 @@
 import unittest
+from datetime import date
+import os
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+import pandas as pd
 
 from src.app.web import create_fastapi_app
 from src.app.web.frontend_payload import build_frontend_payload
+from src.domain.external_data import NewsCategory
+from src.providers.live_data import AkshareMacroDataProvider, AkshareMarketDataProvider
+from src.providers.newsnow_provider import NewsNowAggregatedNewsProvider, _NewsNowUpstreamServerManager
 from src.services.dashboard_service import (
     DashboardSection,
     DashboardSnapshot,
@@ -75,13 +83,42 @@ class FastAPIWebShellTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["news_mode"], "upstream")
 
+    def test_frontend_news_module_endpoint_returns_module_payload(self):
+        response = self.client.get("/api/frontend/modules/news?news_mode=upstream")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["module"]["id"], "news")
+        self.assertEqual(payload["news_mode"], "upstream")
+        self.assertIn("news_mode_options", payload)
+        self.assertIn("upstream_service_status", payload)
+        self.assertIn("details", payload["module"])
+
+    def test_frontend_status_module_endpoint_returns_shell_status(self):
+        response = self.client.get("/api/frontend/modules/status")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["module"]["id"], "status")
+        self.assertIn("coverage_note", payload)
+        self.assertIn("details", payload["module"])
+
+    def test_frontend_market_module_endpoint_returns_module_payload(self):
+        response = self.client.get("/api/frontend/modules/market")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["module"]["id"], "market")
+        self.assertIn("details", payload["module"])
+
     def test_root_renders_named_dashboard_panels(self):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("财经与政策情报终端", response.text)
-        self.assertIn("热点新闻追踪", response.text)
-        self.assertIn("数据状态", response.text)
+        self.assertIn("一级模块导航", response.text)
+        self.assertIn("contentStage", response.text)
+        self.assertIn("loading-spinner", response.text)
 
     def test_unknown_route_returns_custom_not_found_page(self):
         response = self.client.get("/missing")
@@ -144,6 +181,165 @@ class FrontendPayloadTests(unittest.TestCase):
         self.assertEqual(payload["news_mode"], "hybrid")
         self.assertEqual(payload["news_sections"][0]["item_count"], 12)
         self.assertEqual(len(payload["news_sections"][0]["items"]), 12)
+
+
+class DashboardServiceCacheTests(unittest.TestCase):
+    def test_live_dashboard_service_reuses_cached_snapshot_within_ttl(self):
+        from src.services.dashboard_service import DashboardService
+
+        class CountingNewsService:
+            def __init__(self):
+                self.calls = 0
+
+            def build_snapshot(self):
+                self.calls += 1
+                return SimpleNamespace(domains=[])
+
+        class CountingMacroService:
+            def __init__(self):
+                self.calls = 0
+
+            def build_snapshot(self):
+                self.calls += 1
+                return SimpleNamespace(indicators=[])
+
+        class CountingMarketService:
+            def __init__(self):
+                self.calls = 0
+
+            def build_snapshot(self):
+                self.calls += 1
+                return SimpleNamespace(items=[])
+
+        class CountingEventsService:
+            def __init__(self):
+                self.calls = 0
+
+            def build_snapshot(self):
+                self.calls += 1
+                return SimpleNamespace(windows=[])
+
+        news_service = CountingNewsService()
+        macro_service = CountingMacroService()
+        market_service = CountingMarketService()
+        events_service = CountingEventsService()
+
+        with patch.dict(os.environ, {"DASHBOARD_SNAPSHOT_TTL_SECONDS": "60"}):
+            service = DashboardService(
+                news_service=news_service,
+                macro_service=macro_service,
+                market_service=market_service,
+                events_service=events_service,
+                prefer_live_data=True,
+            )
+            first = service.build_snapshot()
+            second = service.build_snapshot()
+
+        self.assertIs(first, second)
+        self.assertEqual(news_service.calls, 1)
+        self.assertEqual(macro_service.calls, 1)
+        self.assertEqual(market_service.calls, 1)
+        self.assertEqual(events_service.calls, 1)
+
+
+class NewsNowUpstreamManagerTests(unittest.TestCase):
+    def test_failed_start_enters_cooldown_and_does_not_restart_immediately(self):
+        manager = _NewsNowUpstreamServerManager()
+        start_calls = 0
+
+        def fake_start_process(*, base_url):
+            nonlocal start_calls
+            start_calls += 1
+            raise RuntimeError("boom")
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "NEWSNOW_UPSTREAM_START_TIMEOUT_SECONDS": "0.1",
+                    "NEWSNOW_UPSTREAM_RETRY_COOLDOWN_SECONDS": "60",
+                },
+            ),
+            patch.object(manager, "_is_healthy", return_value=False),
+            patch.object(manager, "_start_process", side_effect=fake_start_process),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "start failed"):
+                manager.ensure_running(base_url="http://127.0.0.1:5173")
+            with self.assertRaisesRegex(RuntimeError, "start failed"):
+                manager.ensure_running(base_url="http://127.0.0.1:5173")
+
+        self.assertEqual(start_calls, 1)
+
+    def test_upstream_provider_can_disable_native_fallback_after_fetch_failure(self):
+        provider = NewsNowAggregatedNewsProvider(
+            base_url="http://127.0.0.1:5173",
+            source_specs=(),
+            enable_native_fallback=False,
+        )
+
+        with (
+            patch.object(provider, "_fetch_source", side_effect=RuntimeError("boom")),
+            patch.object(provider, "_fetch_native_source_items") as native_fallback,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                provider._fetch_or_reuse_source(
+                    SimpleNamespace(source_id="demo", interval_ms=0),
+                )
+
+        native_fallback.assert_not_called()
+
+
+class LiveProviderResilienceTests(unittest.TestCase):
+    def test_macro_provider_skips_failed_indicator_and_returns_remaining_readings(self):
+        provider = AkshareMacroDataProvider()
+
+        class FakeAkshare:
+            @staticmethod
+            def macro_china_cpi_yearly():
+                return pd.DataFrame(
+                    [
+                        {"月份": "2025-12", "同比": 0.1},
+                        {"月份": "2026-01", "同比": 0.3},
+                    ]
+                )
+
+            @staticmethod
+            def macro_china_shrzgm():
+                raise RuntimeError("ssl handshake failed")
+
+        with patch.object(provider, "_load_akshare", return_value=FakeAkshare()):
+            readings = provider.fetch_latest_readings(indicator_codes=["cpi", "social_financing"])
+
+        self.assertEqual([item.indicator_code for item in readings], ["cpi"])
+
+    def test_market_provider_skips_failed_symbol_and_filters_unsupported_kwargs(self):
+        provider = AkshareMarketDataProvider()
+
+        class FakeAkshare:
+            @staticmethod
+            def stock_zh_index_daily_em(symbol: str, start_date: str, end_date: str):
+                self.assertEqual(symbol, "sh000300")
+                self.assertEqual(start_date, "20251221")
+                self.assertEqual(end_date, "20260321")
+                return pd.DataFrame(
+                    [
+                        {"date": "2026-03-20", "close": 3999.0},
+                        {"date": "2026-03-21", "close": 4001.0},
+                    ]
+                )
+
+            @staticmethod
+            def stock_hk_index_daily_em(symbol: str):
+                raise RuntimeError("proxy unavailable")
+
+        with patch.object(provider, "_load_akshare", return_value=FakeAkshare()):
+            snapshots = provider.fetch_index_snapshots(
+                symbols=["CSI300", "HSTECH"],
+                trade_date=date(2026, 3, 21),
+            )
+
+        self.assertEqual([item.symbol for item in snapshots], ["CSI300"])
+        self.assertEqual(snapshots[0].close_price, 4001.0)
 
 
 if __name__ == "__main__":
