@@ -6,7 +6,14 @@ import re
 from typing import Any
 
 from ...providers.newsnow_provider import get_upstream_service_status
-from ...services.dashboard_service import DashboardSnapshot
+from ...services.dashboard_service import (
+    DashboardSnapshot,
+    DataStatusItem,
+    EventSectionView,
+    MarketCard,
+    MetricCard,
+    NewsSectionView,
+)
 
 MACRO_TREND_MONTHS = 12
 
@@ -29,38 +36,8 @@ def build_frontend_payload(snapshot: DashboardSnapshot) -> dict[str, Any]:
         "highlights": list(snapshot.dashboard_summary.highlights),
         "news_sections": _build_news_sections(snapshot),
         "macro_sections": _build_macro_sections(snapshot, generated_at),
-        "market_sections": [
-            {
-                "key": section.key,
-                "label": section.label,
-                "status": section.status,
-                "close_value": section.close_value,
-                "ma20_value": section.ma20_value,
-                "signal": section.signal,
-                "deviation_pct": section.deviation_pct,
-                "trade_date": section.trade_date,
-                "source_label": section.source_label,
-                "explanation": section.explanation,
-            }
-            for section in snapshot.market_sections
-        ],
-        "event_sections": [
-            {
-                "key": section.key,
-                "title": section.title,
-                "status": section.status,
-                "items": [
-                    {
-                        "title": item.title,
-                        "time_window": item.time_window,
-                        "confidence": item.confidence,
-                        "source": item.source,
-                    }
-                    for item in section.items
-                ],
-            }
-            for section in snapshot.event_sections
-        ],
+        "market_sections": _build_market_sections_from_views(snapshot.market_sections),
+        "event_sections": _build_event_sections_from_views(snapshot.event_sections),
         "data_status": [
             {
                 "key": item.key,
@@ -73,9 +50,160 @@ def build_frontend_payload(snapshot: DashboardSnapshot) -> dict[str, Any]:
     }
 
 
+def build_frontend_news_module_payload(
+    *,
+    generated_at: str,
+    news_mode: str,
+    news_sections: list[NewsSectionView],
+    news_status: DataStatusItem,
+) -> dict[str, Any]:
+    sections = _build_news_sections_from_views(news_sections)
+    return {
+        "generated_at": generated_at,
+        "news_mode": news_mode,
+        "news_mode_options": [
+            {"value": "hybrid", "label": "Hybrid"},
+            {"value": "api", "label": "API"},
+            {"value": "upstream", "label": "Upstream"},
+        ],
+        "upstream_service_status": get_upstream_service_status(),
+        "module": {
+            "id": "news",
+            "label": "新闻情报",
+            "note": f"{len(sections)} 个频道",
+            "description": "科技、财经、政策新闻按频道组织，细项切换放到右侧。",
+            "status": _group_status(sections, fallback=news_status.status),
+            "details": [
+                {
+                    "id": section["key"],
+                    "label": section["title"],
+                    "kind": "news",
+                    "note": f"{section['item_count']} 条",
+                    "section": section,
+                }
+                for section in sections
+            ],
+        },
+    }
+
+
+def build_frontend_macro_module_payload(*, generated_at: str, macro_sections: list[MetricCard]) -> dict[str, Any]:
+    sections = _build_macro_sections_from_views(macro_sections, generated_at)
+    return {
+        "generated_at": generated_at,
+        "module": {
+            "id": "macro",
+            "label": "宏观指标",
+            "note": f"{len(sections)} 个指标",
+            "description": "趋势、来源和变动说明集中到右侧模块区。",
+            "status": _group_status(sections),
+            "details": [
+                {
+                    "id": section["key"],
+                    "label": section["label"],
+                    "kind": "macro",
+                    "note": section["latest_value"],
+                    "section": section,
+                }
+                for section in sections
+            ],
+        },
+    }
+
+
+def build_frontend_market_module_payload(*, generated_at: str, market_sections: list[MarketCard]) -> dict[str, Any]:
+    sections = _build_market_sections_from_views(market_sections)
+    return {
+        "generated_at": generated_at,
+        "module": {
+            "id": "market",
+            "label": "市场模型",
+            "note": f"{len(sections)} 个模型",
+            "description": "收盘、MA20、模型信号等内容在右侧展开。",
+            "status": _group_status(sections),
+            "details": [
+                {
+                    "id": section["key"],
+                    "label": section["label"],
+                    "kind": "market",
+                    "note": section["signal"],
+                    "section": section,
+                }
+                for section in sections
+            ],
+        },
+    }
+
+
+def build_frontend_events_module_payload(*, generated_at: str, event_sections: list[EventSectionView]) -> dict[str, Any]:
+    sections = _build_event_sections_from_views(event_sections)
+    return {
+        "generated_at": generated_at,
+        "module": {
+            "id": "events",
+            "label": "事件展望",
+            "note": f"{len(sections)} 个窗口",
+            "description": "未来事件按时间窗口切换查看。",
+            "status": _group_status(sections),
+            "details": [
+                {
+                    "id": section["key"],
+                    "label": section["title"],
+                    "kind": "events",
+                    "note": f"{len(section['items'])} 条",
+                    "section": section,
+                }
+                for section in sections
+            ],
+        },
+    }
+
+
+def build_frontend_status_module_payload(
+    *,
+    generated_at: str,
+    data_status: list[DataStatusItem],
+    coverage_note: str,
+) -> dict[str, Any]:
+    sections = [
+        {
+            "key": item.key,
+            "label": item.label,
+            "status": item.status,
+            "detail": item.detail,
+        }
+        for item in data_status
+    ]
+    return {
+        "generated_at": generated_at,
+        "coverage_note": coverage_note,
+        "module": {
+            "id": "status",
+            "label": "数据状态",
+            "note": f"{len(sections)} 个模块",
+            "description": "所有链路状态集中在一个模块内查看。",
+            "status": _group_status(sections),
+            "details": [
+                {
+                    "id": section["key"],
+                    "label": section["label"],
+                    "kind": "status",
+                    "note": section["status"],
+                    "section": section,
+                }
+                for section in sections
+            ],
+        },
+    }
+
+
 def _build_news_sections(snapshot: DashboardSnapshot) -> list[dict[str, Any]]:
+    return _build_news_sections_from_views(snapshot.news_sections)
+
+
+def _build_news_sections_from_views(news_sections: list[NewsSectionView]) -> list[dict[str, Any]]:
     sections: list[dict[str, Any]] = []
-    for section in snapshot.news_sections:
+    for section in news_sections:
         ranked_items = [
             {
                 "rank": index + 1,
@@ -102,9 +230,13 @@ def _build_news_sections(snapshot: DashboardSnapshot) -> list[dict[str, Any]]:
 
 
 def _build_macro_sections(snapshot: DashboardSnapshot, generated_at: str) -> list[dict[str, Any]]:
+    return _build_macro_sections_from_views(snapshot.macro_sections, generated_at)
+
+
+def _build_macro_sections_from_views(macro_sections: list[MetricCard], generated_at: str) -> list[dict[str, Any]]:
     month_labels = _last_month_labels(generated_at, MACRO_TREND_MONTHS)
     sections: list[dict[str, Any]] = []
-    for card in snapshot.macro_sections:
+    for card in macro_sections:
         latest = _extract_float(card.value)
         unit = _extract_unit(card.value)
         points = _build_trend_points(
@@ -131,6 +263,57 @@ def _build_macro_sections(snapshot: DashboardSnapshot, generated_at: str) -> lis
             }
         )
     return sections
+
+
+def _build_market_sections_from_views(market_sections: list[MarketCard]) -> list[dict[str, Any]]:
+    return [
+        {
+            "key": section.key,
+            "label": section.label,
+            "status": section.status,
+            "close_value": section.close_value,
+            "ma20_value": section.ma20_value,
+            "signal": section.signal,
+            "deviation_pct": section.deviation_pct,
+            "trade_date": section.trade_date,
+            "source_label": section.source_label,
+            "explanation": section.explanation,
+        }
+        for section in market_sections
+    ]
+
+
+def _build_event_sections_from_views(event_sections: list[EventSectionView]) -> list[dict[str, Any]]:
+    return [
+        {
+            "key": section.key,
+            "title": section.title,
+            "status": section.status,
+            "items": [
+                {
+                    "title": item.title,
+                    "time_window": item.time_window,
+                    "confidence": item.confidence,
+                    "source": item.source,
+                }
+                for item in section.items
+            ],
+        }
+        for section in event_sections
+    ]
+
+
+def _group_status(items: list[dict[str, Any]], *, fallback: str = "compatible") -> str:
+    if not items:
+        return fallback
+    statuses = [item.get("status") for item in items if item.get("status")]
+    if "degraded" in statuses:
+        return "degraded"
+    if "live" in statuses:
+        return "live"
+    if "sample" in statuses:
+        return "sample"
+    return statuses[0] if statuses else fallback
 
 
 def _build_trend_points(

@@ -1,8 +1,12 @@
 """Dashboard service that provides shared view models for web and push layers."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import os
+import threading
+import time
 from typing import List
 
 from ..domain.external_data import NewsCategory
@@ -171,6 +175,19 @@ class DashboardService:
     ) -> None:
         self._prefer_live_data = prefer_live_data
         self._news_mode = self._resolve_news_mode(news_mode)
+        self._snapshot_ttl_seconds = max(
+            0.0,
+            float(
+                os.getenv(
+                    "DASHBOARD_SNAPSHOT_TTL_SECONDS",
+                    "15" if prefer_live_data else "0",
+                )
+            ),
+        )
+        self._snapshot_cache: dict[str, tuple[float, DashboardSnapshot]] = {}
+        self._snapshot_lock = threading.Lock()
+        self._module_cache: dict[str, tuple[float, object]] = {}
+        self._module_lock = threading.Lock()
         self._news_provider = None
         self._search_provider = None
         self._macro_provider = None
@@ -215,6 +232,216 @@ class DashboardService:
     def build_snapshot(self, *, news_mode: str | None = None) -> DashboardSnapshot:
         """Return a structured dashboard snapshot composed from service outputs."""
         effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
+        cached = self._get_cached_snapshot(effective_news_mode)
+        if cached is not None:
+            return cached
+
+        with self._snapshot_lock:
+            cached = self._get_cached_snapshot(effective_news_mode)
+            if cached is not None:
+                return cached
+            snapshot = self._build_snapshot_uncached(effective_news_mode=effective_news_mode)
+            self._set_cached_snapshot(effective_news_mode, snapshot)
+            return snapshot
+
+    def build_news_module(self, *, news_mode: str | None = None) -> tuple[str, str, List[NewsSectionView], DataStatusItem]:
+        """Build one frontend-ready news module without waiting on unrelated modules."""
+        effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
+        cache_key = f"module:news:{effective_news_mode}"
+        cached = self._get_cached_module(cache_key)
+        if cached is not None:
+            return cached
+
+        with self._module_lock:
+            cached = self._get_cached_module(cache_key)
+            if cached is not None:
+                return cached
+            module = self._build_news_module_uncached(effective_news_mode=effective_news_mode)
+            self._set_cached_module(cache_key, module)
+            return module
+
+    def build_macro_module(self) -> tuple[str, List[MetricCard]]:
+        """Build one frontend-ready macro module."""
+        cache_key = "module:macro"
+        cached = self._get_cached_module(cache_key)
+        if cached is not None:
+            return cached
+
+        with self._module_lock:
+            cached = self._get_cached_module(cache_key)
+            if cached is not None:
+                return cached
+            module = self._build_macro_module_uncached()
+            self._set_cached_module(cache_key, module)
+            return module
+
+    def build_market_module(self) -> tuple[str, List[MarketCard]]:
+        """Build one frontend-ready market module."""
+        cache_key = "module:market"
+        cached = self._get_cached_module(cache_key)
+        if cached is not None:
+            return cached
+
+        with self._module_lock:
+            cached = self._get_cached_module(cache_key)
+            if cached is not None:
+                return cached
+            module = self._build_market_module_uncached()
+            self._set_cached_module(cache_key, module)
+            return module
+
+    def build_events_module(self) -> tuple[str, List[EventSectionView]]:
+        """Build one frontend-ready events module."""
+        cache_key = "module:events"
+        cached = self._get_cached_module(cache_key)
+        if cached is not None:
+            return cached
+
+        with self._module_lock:
+            cached = self._get_cached_module(cache_key)
+            if cached is not None:
+                return cached
+            module = self._build_events_module_uncached()
+            self._set_cached_module(cache_key, module)
+            return module
+
+    def build_status_module(self, *, news_mode: str | None = None) -> tuple[str, List[DataStatusItem], str]:
+        """Build the lightweight status module used by the shell chrome."""
+        effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
+        cache_key = f"module:status:{effective_news_mode}"
+        cached = self._get_cached_module(cache_key)
+        if cached is not None:
+            return cached
+
+        with self._module_lock:
+            cached = self._get_cached_module(cache_key)
+            if cached is not None:
+                return cached
+            module = self._build_status_module_uncached(effective_news_mode=effective_news_mode)
+            self._set_cached_module(cache_key, module)
+            return module
+
+    def _build_snapshot_uncached(self, *, effective_news_mode: str) -> DashboardSnapshot:
+        """Build one dashboard snapshot without consulting the short-lived cache."""
+        news_service, news_provider, search_provider = self._resolve_news_runtime(effective_news_mode)
+
+        generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            news_future = executor.submit(news_service.build_snapshot)
+            macro_future = executor.submit(self._macro_service.build_snapshot)
+            market_future = executor.submit(self._market_service.build_snapshot)
+            events_future = executor.submit(self._events_service.build_snapshot)
+            news_snapshot = news_future.result()
+            macro_snapshot = macro_future.result()
+            market_snapshot = market_future.result()
+            events_snapshot = events_future.result()
+        data_status = self._build_data_status(news_provider=news_provider, search_provider=search_provider)
+
+        summary = SummaryBlock(
+            title="财经与政策情报仪表盘",
+            subtitle="聚合财经、政策、宏观与市场监控的首页概览。",
+            as_of_label=generated_at,
+            coverage_note=self._coverage_note(data_status),
+            highlights=self._summary_highlights(data_status),
+        )
+
+        news_sections = self._build_news_sections_from_snapshot(news_snapshot)
+        macro_sections = self._build_macro_sections_from_snapshot(macro_snapshot)
+        market_sections = self._build_market_sections_from_snapshot(market_snapshot)
+        event_sections = self._build_event_sections_from_snapshot(events_snapshot)
+
+        sections = [
+            DashboardSection("news", "新闻情报", data_status[0].status, "三类新闻管道已接入服务化视图模型。"),
+            DashboardSection("macro", "宏观指标", data_status[1].status, "宏观卡片基于指标注册表生成，包含来源和新鲜度信息。"),
+            DashboardSection("market", "市场模型", data_status[2].status, "Fishbowl 与 MA20 输出可复现，并按指数独立计算。"),
+            DashboardSection("events", "事件与政策展望", data_status[3].status, "展望窗口会过滤低置信度和弱来源条目。"),
+            DashboardSection("push", "推送自动化", "compatible", "推送报告已复用共享的仪表盘快照。"),
+        ]
+
+        return DashboardSnapshot(
+            generated_at=generated_at,
+            news_mode=effective_news_mode,
+            title=summary.title,
+            summary=summary.subtitle,
+            sections=sections,
+            dashboard_summary=summary,
+            news_sections=news_sections,
+            macro_sections=macro_sections,
+            market_sections=market_sections,
+            event_sections=event_sections,
+            data_status=data_status,
+        )
+
+    def _build_news_module_uncached(self, *, effective_news_mode: str) -> tuple[str, str, List[NewsSectionView], DataStatusItem]:
+        generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        news_service, news_provider, search_provider = self._resolve_news_runtime(effective_news_mode)
+        news_snapshot = news_service.build_snapshot()
+        news_sections = self._build_news_sections_from_snapshot(news_snapshot)
+        news_status = self._build_data_status(news_provider=news_provider, search_provider=search_provider)[0]
+        return generated_at, effective_news_mode, news_sections, news_status
+
+    def _build_macro_module_uncached(self) -> tuple[str, List[MetricCard]]:
+        generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        macro_snapshot = self._macro_service.build_snapshot()
+        return generated_at, self._build_macro_sections_from_snapshot(macro_snapshot)
+
+    def _build_market_module_uncached(self) -> tuple[str, List[MarketCard]]:
+        generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        market_snapshot = self._market_service.build_snapshot()
+        return generated_at, self._build_market_sections_from_snapshot(market_snapshot)
+
+    def _build_events_module_uncached(self) -> tuple[str, List[EventSectionView]]:
+        generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        events_snapshot = self._events_service.build_snapshot()
+        return generated_at, self._build_event_sections_from_snapshot(events_snapshot)
+
+    def _build_status_module_uncached(self, *, effective_news_mode: str) -> tuple[str, List[DataStatusItem], str]:
+        generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        _, news_provider, search_provider = self._resolve_news_runtime(effective_news_mode)
+        data_status = self._build_data_status(news_provider=news_provider, search_provider=search_provider)
+        return generated_at, data_status, self._coverage_note(data_status)
+
+    def _get_cached_snapshot(self, news_mode: str) -> DashboardSnapshot | None:
+        if self._snapshot_ttl_seconds <= 0:
+            return None
+        cached = self._snapshot_cache.get(news_mode)
+        if cached is None:
+            return None
+        expires_at, snapshot = cached
+        if time.monotonic() >= expires_at:
+            self._snapshot_cache.pop(news_mode, None)
+            return None
+        return snapshot
+
+    def _set_cached_snapshot(self, news_mode: str, snapshot: DashboardSnapshot) -> None:
+        if self._snapshot_ttl_seconds <= 0:
+            return
+        self._snapshot_cache[news_mode] = (
+            time.monotonic() + self._snapshot_ttl_seconds,
+            snapshot,
+        )
+
+    def _get_cached_module(self, key: str):
+        if self._snapshot_ttl_seconds <= 0:
+            return None
+        cached = self._module_cache.get(key)
+        if cached is None:
+            return None
+        expires_at, payload = cached
+        if time.monotonic() >= expires_at:
+            self._module_cache.pop(key, None)
+            return None
+        return payload
+
+    def _set_cached_module(self, key: str, payload: object) -> None:
+        if self._snapshot_ttl_seconds <= 0:
+            return
+        self._module_cache[key] = (
+            time.monotonic() + self._snapshot_ttl_seconds,
+            payload,
+        )
+
+    def _resolve_news_runtime(self, effective_news_mode: str):
         news_service = self._news_service
         news_provider = self._news_provider
         search_provider = self._search_provider
@@ -227,28 +454,15 @@ class DashboardService:
                 news_provider=news_provider,
                 search_provider=search_provider,
             )
+        return news_service, news_provider, search_provider
 
-        generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        news_snapshot = news_service.build_snapshot()
-        macro_snapshot = self._macro_service.build_snapshot()
-        market_snapshot = self._market_service.build_snapshot()
-        events_snapshot = self._events_service.build_snapshot()
-        data_status = self._build_data_status(news_provider=news_provider, search_provider=search_provider)
-
-        summary = SummaryBlock(
-            title="财经与政策情报仪表盘",
-            subtitle="聚合财经、政策、宏观与市场监控的首页概览。",
-            as_of_label=generated_at,
-            coverage_note=self._coverage_note(data_status),
-            highlights=self._summary_highlights(data_status),
-        )
-
+    def _build_news_sections_from_snapshot(self, news_snapshot) -> List[NewsSectionView]:
         title_by_category = {
             NewsCategory.TECHNOLOGY: "科技新闻",
             NewsCategory.FINANCE: "财经新闻",
             NewsCategory.POLICY: "政策新闻",
         }
-        news_sections = [
+        return [
             NewsSectionView(
                 key=digest.category.value,
                 title=title_by_category[digest.category],
@@ -272,7 +486,8 @@ class DashboardService:
             for digest in news_snapshot.domains
         ]
 
-        macro_sections = [
+    def _build_macro_sections_from_snapshot(self, macro_snapshot) -> List[MetricCard]:
+        return [
             MetricCard(
                 key=item.key,
                 label=item.label,
@@ -289,7 +504,8 @@ class DashboardService:
             for item in macro_snapshot.indicators
         ]
 
-        market_sections = [
+    def _build_market_sections_from_snapshot(self, market_snapshot) -> List[MarketCard]:
+        return [
             MarketCard(
                 key=item.key,
                 label=item.label,
@@ -305,7 +521,8 @@ class DashboardService:
             for item in market_snapshot.items
         ]
 
-        event_sections = [
+    def _build_event_sections_from_snapshot(self, events_snapshot) -> List[EventSectionView]:
+        return [
             EventSectionView(
                 key=window.key,
                 title=window.title,
@@ -322,28 +539,6 @@ class DashboardService:
             )
             for window in events_snapshot.windows
         ]
-
-        sections = [
-            DashboardSection("news", "新闻情报", data_status[0].status, "三类新闻管道已接入服务化视图模型。"),
-            DashboardSection("macro", "宏观指标", data_status[1].status, "宏观卡片基于指标注册表生成，包含来源和新鲜度信息。"),
-            DashboardSection("market", "市场模型", data_status[2].status, "Fishbowl 与 MA20 输出可复现，并按指数独立计算。"),
-            DashboardSection("events", "事件与政策展望", data_status[3].status, "展望窗口会过滤低置信度和弱来源条目。"),
-            DashboardSection("push", "推送自动化", "compatible", "推送报告已复用共享的仪表盘快照。"),
-        ]
-
-        return DashboardSnapshot(
-            generated_at=generated_at,
-            news_mode=effective_news_mode,
-            title=summary.title,
-            summary=summary.subtitle,
-            sections=sections,
-            dashboard_summary=summary,
-            news_sections=news_sections,
-            macro_sections=macro_sections,
-            market_sections=market_sections,
-            event_sections=event_sections,
-            data_status=data_status,
-        )
 
     def _build_news_providers(self, *, prefer_live_data: bool, news_mode: str):
         if not prefer_live_data:
