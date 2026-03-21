@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 import re
 from typing import Any
 
+from ...providers.newsnow_provider import get_upstream_service_status
 from ...services.dashboard_service import DashboardSnapshot
 
-NEWS_ITEMS_PER_CATEGORY = 10
 MACRO_TREND_MONTHS = 12
 
 
@@ -16,6 +16,13 @@ def build_frontend_payload(snapshot: DashboardSnapshot) -> dict[str, Any]:
     generated_at = snapshot.generated_at
     return {
         "generated_at": generated_at,
+        "news_mode": snapshot.news_mode,
+        "news_mode_options": [
+            {"value": "hybrid", "label": "Hybrid"},
+            {"value": "api", "label": "API"},
+            {"value": "upstream", "label": "Upstream"},
+        ],
+        "upstream_service_status": get_upstream_service_status(),
         "title": snapshot.dashboard_summary.title,
         "subtitle": snapshot.dashboard_summary.subtitle,
         "coverage_note": snapshot.dashboard_summary.coverage_note,
@@ -74,29 +81,20 @@ def _build_news_sections(snapshot: DashboardSnapshot) -> list[dict[str, Any]]:
                 "rank": index + 1,
                 "title": item.title,
                 "source": item.source,
+                "url": item.url,
                 "published_at": item.published_at,
                 "tag": item.tag,
                 "is_placeholder": False,
             }
-            for index, item in enumerate(section.items[:NEWS_ITEMS_PER_CATEGORY])
+            for index, item in enumerate(section.items)
         ]
-        while len(ranked_items) < NEWS_ITEMS_PER_CATEGORY:
-            ranked_items.append(
-                {
-                    "rank": len(ranked_items) + 1,
-                    "title": "暂无更多热点",
-                    "source": "系统补位",
-                    "published_at": snapshot.generated_at,
-                    "tag": "placeholder",
-                    "is_placeholder": True,
-                }
-            )
         sections.append(
             {
                 "key": section.key,
                 "title": section.title,
                 "status": section.status,
                 "description": section.description,
+                "item_count": len(ranked_items),
                 "items": ranked_items,
             }
         )
@@ -196,3 +194,4 @@ def _extract_unit(text: str) -> str:
     unit = re.sub(r"[-+]?\d+(?:\.\d+)?", "", text)
     unit = unit.replace("+", "").replace("-", "").strip()
     return unit
+

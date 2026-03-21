@@ -3,80 +3,95 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>财经与政策情报仪表盘</title>
+    <title>财经与政策情报终端</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <div class="background-glow"></div>
-    <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <p class="eyebrow">FRONTEND APP</p>
-          <h1>财经与政策情报中心</h1>
-          <p id="generatedAt" class="muted">加载中...</p>
+    <div class="page-frame">
+      <header class="masthead reveal">
+        <div>
+          <p class="kicker">MARKETS + POLICY DESK</p>
+          <h1 id="heroTitle">财经与政策情报终端</h1>
+          <p id="heroSubtitle" class="subtitle">正在连接后端数据接口...</p>
         </div>
-        <nav class="module-nav">
-          <a href="#newsModule">热点新闻</a>
-          <a href="#macroModule">宏观趋势</a>
-          <a href="#marketModule">市场模型</a>
-          <a href="#eventsModule">事件展望</a>
-          <a href="#statusModule">数据状态</a>
-        </nav>
-        <section class="sidebar-note">
-          <h2>说明</h2>
-          <p id="coverageNote">正在读取后端数据...</p>
-        </section>
-      </aside>
-
-      <main class="content">
-        <section class="hero-card">
-          <p class="eyebrow">SEPARATED FRONTEND</p>
-          <h2 id="heroTitle">正在连接后端接口...</h2>
-          <p id="heroSubtitle" class="muted">请稍候</p>
-          <ul id="highlights" class="highlights"></ul>
-        </section>
-
-        <section id="newsModule" class="module">
-          <div class="module-head">
-            <h3>热点新闻</h3>
-            <span class="chip">每类 10 条</span>
+        <div class="masthead-right">
+          <p id="generatedAt" class="timestamp">更新时间: -</p>
+          <div id="newsModeSwitch" class="mode-switch"></div>
+          <div class="quick-links">
+            <a href="/api/frontend/dashboard" target="_blank" rel="noreferrer">Frontend API</a>
+            <a href="/api/dashboard" target="_blank" rel="noreferrer">Legacy API</a>
+            <a href="/legacy" target="_blank" rel="noreferrer">Legacy Page</a>
           </div>
-          <div id="newsGrid" class="news-grid"></div>
-        </section>
+        </div>
+      </header>
 
-        <section id="macroModule" class="module">
-          <div class="module-head">
-            <h3>宏观指标（近 1 年）</h3>
-            <span class="chip">折线图</span>
-          </div>
-          <div id="macroGrid" class="macro-grid"></div>
-        </section>
+      <section id="marketTicker" class="ticker reveal">
+        <span class="ticker-empty">行情条加载中...</span>
+      </section>
 
-        <section id="marketModule" class="module">
-          <div class="module-head">
-            <h3>市场模型</h3>
-            <span class="chip">独立模块</span>
-          </div>
-          <div id="marketGrid" class="card-grid"></div>
-        </section>
+      <div class="workspace">
+        <aside class="left-rail reveal">
+          <nav class="rail-nav">
+            <a href="#newsModule">热点新闻</a>
+            <a href="#macroModule">宏观指标</a>
+            <a href="#marketModule">市场模型</a>
+            <a href="#eventsModule">事件展望</a>
+            <a href="#statusModule">数据状态</a>
+          </nav>
+          <section class="rail-section">
+            <h2>覆盖说明</h2>
+            <p id="coverageNote">正在读取运行状态...</p>
+          </section>
+          <section class="rail-section">
+            <h2>关键提示</h2>
+            <ul id="highlights" class="highlights"></ul>
+          </section>
+        </aside>
 
-        <section id="eventsModule" class="module">
-          <div class="module-head">
-            <h3>事件展望</h3>
-            <span class="chip">独立模块</span>
-          </div>
-          <div id="eventsGrid" class="card-grid"></div>
-        </section>
+        <main class="main-grid">
+          <section id="newsModule" class="panel reveal">
+            <div class="panel-head">
+              <h3>热点新闻追踪</h3>
+              <span id="newsModeTag" class="tag">Hybrid</span>
+            </div>
+            <div id="newsGrid" class="news-grid"></div>
+          </section>
 
-        <section id="statusModule" class="module">
-          <div class="module-head">
-            <h3>数据状态</h3>
-            <span class="chip">后端健康</span>
-          </div>
-          <ul id="statusList" class="status-list"></ul>
-        </section>
-      </main>
+          <section id="macroModule" class="panel reveal">
+            <div class="panel-head">
+              <h3>宏观指标趋势</h3>
+              <span class="tag">近 12 个月</span>
+            </div>
+            <div id="macroGrid" class="macro-grid"></div>
+          </section>
+
+          <section id="marketModule" class="panel reveal">
+            <div class="panel-head">
+              <h3>市场模型</h3>
+              <span class="tag">指数信号</span>
+            </div>
+            <div id="marketGrid" class="card-grid"></div>
+          </section>
+
+          <section id="eventsModule" class="panel reveal">
+            <div class="panel-head">
+              <h3>事件展望</h3>
+              <span class="tag">时间窗口</span>
+            </div>
+            <div id="eventsGrid" class="card-grid"></div>
+          </section>
+
+          <section id="statusModule" class="panel reveal">
+            <div class="panel-head">
+              <h3>数据状态</h3>
+              <span class="tag">运行健康</span>
+            </div>
+            <ul id="statusList" class="status-list"></ul>
+          </section>
+        </main>
+      </div>
     </div>
+
     <script src="/static/app.js" defer></script>
   </body>
 </html>

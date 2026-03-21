@@ -55,3 +55,4 @@ local/
 .pip-cache/
 .uv-cache/
 .uv-python/
+.local*

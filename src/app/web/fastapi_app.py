@@ -30,9 +30,9 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
         return {"status": "ok"}
 
     @app.get("/api/dashboard")
-    def dashboard_payload() -> JSONResponse:
+    def dashboard_payload(news_mode: str | None = None) -> JSONResponse:
         try:
-            snapshot = service.build_snapshot()
+            snapshot = service.build_snapshot(news_mode=news_mode)
             return JSONResponse(build_dashboard_payload(snapshot))
         except Exception:
             return JSONResponse(
@@ -41,9 +41,9 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
             )
 
     @app.get("/api/frontend/dashboard")
-    def frontend_dashboard_payload() -> JSONResponse:
+    def frontend_dashboard_payload(news_mode: str | None = None) -> JSONResponse:
         try:
-            snapshot = service.build_snapshot()
+            snapshot = service.build_snapshot(news_mode=news_mode)
             return JSONResponse(build_frontend_payload(snapshot))
         except Exception:
             return JSONResponse(
@@ -56,9 +56,9 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
         return FileResponse(static_dir / "index.html")
 
     @app.get("/legacy", response_class=HTMLResponse)
-    def legacy_homepage() -> HTMLResponse:
+    def legacy_homepage(news_mode: str | None = None) -> HTMLResponse:
         try:
-            snapshot = service.build_snapshot()
+            snapshot = service.build_snapshot(news_mode=news_mode)
             return HTMLResponse(render_dashboard_html(snapshot))
         except Exception:
             return HTMLResponse(

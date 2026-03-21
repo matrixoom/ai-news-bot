@@ -10,12 +10,15 @@ from ..providers import (
     AkshareMacroDataProvider,
     AkshareMarketDataProvider,
     ArkResearchProvider,
+    CompositeNewsProvider,
     FallbackMacroProvider,
     FallbackMarketDataProvider,
     FallbackNewsProvider,
     FallbackResearchProvider,
     FallbackSearchProvider,
     GoogleNewsSearchProvider,
+    NewsNowModeProvider,
+    NewsNowSourceMode,
     ProviderAvailability,
     PublicRssNewsProvider,
     SampleMacroProvider,
@@ -57,6 +60,7 @@ class NewsItemView:
 
     title: str
     source: str
+    url: str
     published_at: str
     tag: str
 
@@ -140,6 +144,7 @@ class DashboardSnapshot:
     """Structured dashboard data shared across the web and push entrypoints."""
 
     generated_at: str
+    news_mode: str
     title: str
     summary: str
     sections: List[DashboardSection]
@@ -162,8 +167,10 @@ class DashboardService:
         events_service: EventsOutlookService | None = None,
         *,
         prefer_live_data: bool = False,
+        news_mode: str = NewsNowSourceMode.HYBRID.value,
     ) -> None:
         self._prefer_live_data = prefer_live_data
+        self._news_mode = self._resolve_news_mode(news_mode)
         self._news_provider = None
         self._search_provider = None
         self._macro_provider = None
@@ -171,7 +178,10 @@ class DashboardService:
         self._research_provider = None
 
         if news_service is None:
-            news_provider, search_provider = self._build_news_providers(prefer_live_data=prefer_live_data)
+            news_provider, search_provider = self._build_news_providers(
+                prefer_live_data=prefer_live_data,
+                news_mode=self._news_mode,
+            )
             self._news_provider = news_provider
             self._search_provider = search_provider
             self._news_service = NewsPipelineService(
@@ -202,14 +212,28 @@ class DashboardService:
         else:
             self._events_service = events_service
 
-    def build_snapshot(self) -> DashboardSnapshot:
+    def build_snapshot(self, *, news_mode: str | None = None) -> DashboardSnapshot:
         """Return a structured dashboard snapshot composed from service outputs."""
+        effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
+        news_service = self._news_service
+        news_provider = self._news_provider
+        search_provider = self._search_provider
+        if self._prefer_live_data and effective_news_mode != self._news_mode:
+            news_provider, search_provider = self._build_news_providers(
+                prefer_live_data=True,
+                news_mode=effective_news_mode,
+            )
+            news_service = NewsPipelineService(
+                news_provider=news_provider,
+                search_provider=search_provider,
+            )
+
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        news_snapshot = self._news_service.build_snapshot()
+        news_snapshot = news_service.build_snapshot()
         macro_snapshot = self._macro_service.build_snapshot()
         market_snapshot = self._market_service.build_snapshot()
         events_snapshot = self._events_service.build_snapshot()
-        data_status = self._build_data_status()
+        data_status = self._build_data_status(news_provider=news_provider, search_provider=search_provider)
 
         summary = SummaryBlock(
             title="财经与政策情报仪表盘",
@@ -238,10 +262,11 @@ class DashboardService:
                     NewsItemView(
                         title=item.title,
                         source=item.source_name,
+                        url=item.url,
                         published_at=item.published_at or "暂无数据",
                         tag=item.source_type.value,
                     )
-                    for item in digest.items[:10]
+                    for item in digest.items
                 ],
             )
             for digest in news_snapshot.domains
@@ -308,6 +333,7 @@ class DashboardService:
 
         return DashboardSnapshot(
             generated_at=generated_at,
+            news_mode=effective_news_mode,
             title=summary.title,
             summary=summary.subtitle,
             sections=sections,
@@ -319,11 +345,20 @@ class DashboardService:
             data_status=data_status,
         )
 
-    def _build_news_providers(self, *, prefer_live_data: bool):
+    def _build_news_providers(self, *, prefer_live_data: bool, news_mode: str):
         if not prefer_live_data:
             return SampleNewsProvider(), SampleSearchProvider()
+        selected_news_provider = NewsNowModeProvider(mode=news_mode)
         return (
-            FallbackNewsProvider(PublicRssNewsProvider(), SampleNewsProvider()),
+            FallbackNewsProvider(
+                CompositeNewsProvider(
+                    (
+                        selected_news_provider,
+                        PublicRssNewsProvider(),
+                    )
+                ),
+                SampleNewsProvider(),
+            ),
             FallbackSearchProvider(GoogleNewsSearchProvider(), SampleSearchProvider()),
         )
 
@@ -342,7 +377,7 @@ class DashboardService:
             return SampleResearchProvider()
         return FallbackResearchProvider(ArkResearchProvider, SampleResearchProvider())
 
-    def _build_data_status(self) -> List[DataStatusItem]:
+    def _build_data_status(self, *, news_provider=None, search_provider=None) -> List[DataStatusItem]:
         if not self._prefer_live_data:
             return [
                 DataStatusItem("news", "新闻管道", "sample", "当前展示样例 RSS 与搜索数据，便于本地开发。"),
@@ -355,8 +390,8 @@ class DashboardService:
             key="news",
             label="新闻管道",
             statuses=[
-                self._news_provider.healthcheck() if self._news_provider else None,
-                self._search_provider.healthcheck() if self._search_provider else None,
+                news_provider.healthcheck() if news_provider else (self._news_provider.healthcheck() if self._news_provider else None),
+                search_provider.healthcheck() if search_provider else (self._search_provider.healthcheck() if self._search_provider else None),
             ],
         )
         macro_status = self._single_status("macro", "宏观监控", self._macro_provider)
@@ -407,3 +442,10 @@ class DashboardService:
         else:
             base.append("最近一次刷新中，所有数据源分组均返回正常状态。")
         return base
+
+    def _resolve_news_mode(self, value: str | NewsNowSourceMode) -> str:
+        try:
+            return NewsNowSourceMode(str(value)).value
+        except ValueError:
+            return NewsNowSourceMode.HYBRID.value
+
