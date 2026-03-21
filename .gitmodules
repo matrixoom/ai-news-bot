@@ -1,0 +1,3 @@
+[submodule ".third_part_newsnow"]
+	path = .third_part_newsnow
+	url = https://github.com/ourongxing/newsnow
