@@ -59,10 +59,14 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> bytes:
             + "".join(
                 (
                     "<li>"
-                    f"<strong>{escape(item['title'])}</strong>"
-                    f"<span>{escape(item['source'])}</span>"
-                    f"<span>{escape(item['published_at'])}</span>"
-                    f"<em>{escape(item['tag'])}</em>"
+                    + (
+                        f"<strong><a href=\"{escape(item.get('url', '#'))}\" target=\"_blank\" rel=\"noreferrer\">{escape(item['title'])}</a></strong>"
+                        if item.get("url")
+                        else f"<strong>{escape(item['title'])}</strong>"
+                    )
+                    + f"<span>{escape(item['source'])}</span>"
+                    + f"<span>{escape(item['published_at'])}</span>"
+                    + f"<em>{escape(item['tag'])}</em>"
                     "</li>"
                 )
                 for item in section["items"]

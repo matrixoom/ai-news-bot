@@ -22,6 +22,12 @@ from .live_data import (
     ProviderConfigurationError,
     PublicRssNewsProvider,
 )
+from .newsnow_provider import (
+    CompositeNewsProvider,
+    NewsNowAggregatedNewsProvider,
+    NewsNowModeProvider,
+    NewsNowSourceMode,
+)
 from .sample_data import (
     SampleMacroProvider,
     SampleMarketDataProvider,
@@ -42,6 +48,7 @@ __all__ = [
     "AkshareMarketDataProvider",
     "ArkResearchProvider",
     "CategoryStrategy",
+    "CompositeNewsProvider",
     "FeasibilityLevel",
     "FallbackMacroProvider",
     "FallbackMarketDataProvider",
@@ -56,6 +63,9 @@ __all__ = [
     "ProviderConfigurationError",
     "ProviderStatus",
     "PublicRssNewsProvider",
+    "NewsNowAggregatedNewsProvider",
+    "NewsNowModeProvider",
+    "NewsNowSourceMode",
     "ResearchProvider",
     "SampleMacroProvider",
     "SampleMarketDataProvider",
