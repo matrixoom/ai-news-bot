@@ -102,6 +102,7 @@ class SampleMarketDataProvider:
             "CSI1000": 6124.0,
             "SSE": 3084.0,
             "CHINEXT": 1918.0,
+            "HSTECH": 3926.0,
         }
         snapshots = []
         for symbol in symbols:
@@ -114,7 +115,7 @@ class SampleMarketDataProvider:
                     display_name=symbol,
                     trade_date=trade_date,
                     close_price=current[symbol],
-                    currency="CNY",
+                    currency="HKD" if symbol == "HSTECH" else "CNY",
                     source_url="https://akshare.akfamily.xyz/",
                     lookback_closes=history[symbol],
                 )

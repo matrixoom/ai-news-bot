@@ -1,5 +1,40 @@
 # AI News Bot
 
+## Python 虚拟环境约定
+
+本仓库统一使用 `uv` 管理项目根目录下的虚拟环境。
+
+- Python 版本：`3.12`
+- 虚拟环境目录：`.venv`
+- 依赖来源：`pyproject.toml`
+- 锁文件：`uv.lock`
+
+重要约定：
+
+- 日常运行请优先使用 `uv run ...`，它会自动选中项目自己的 `.venv`
+- 如果需要直接调用解释器，在 Windows 上使用 `.venv\Scripts\python.exe`
+- 不要默认系统里的 `python` 就是本项目环境
+- 如果解释器用错了，常见现象是误报缺少 `fastapi`、`feedparser`、`pytest` 等包
+
+环境自检：
+
+```powershell
+uv run python --version
+uv run python -c "import sys; print(sys.executable)"
+```
+
+如果需要重新同步环境：
+
+```powershell
+uv sync --python 3.12
+```
+
+如果 `.venv` 已存在，但包不完整，请把依赖装进这个虚拟环境本身，而不是系统 Python：
+
+```powershell
+uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+```
+
 本项目提供两类运行能力：
 
 - 一个前后端分离的 FastAPI Web 应用

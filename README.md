@@ -33,6 +33,41 @@ The CLI entrypoint is `main.py`:
 - `web`: starts the FastAPI app
 - `push`: runs the push-report job
 
+## Python Environment Baseline
+
+This repository is standardized on a project-local virtual environment managed by `uv`.
+
+- Python version: `3.12`
+- Environment path: `.venv`
+- Dependency source of truth: `pyproject.toml`
+- Lock file: `uv.lock`
+
+Important:
+
+- Use `uv run ...` for normal commands so the repo-local `.venv` is selected automatically.
+- If you need to call the interpreter directly, use `.venv\Scripts\python.exe` on Windows.
+- Do not assume the system `python` points at this project's environment.
+- If you run commands with the wrong interpreter, you may see false "missing package" errors for modules such as `fastapi`, `feedparser`, or `pytest`.
+
+Quick checks:
+
+```powershell
+uv run python --version
+uv run python -c "import sys; print(sys.executable)"
+```
+
+If you need to repair or resync the environment from the repository root:
+
+```powershell
+uv sync --python 3.12
+```
+
+If `.venv` exists but is missing packages, install into that exact environment instead of the system Python:
+
+```powershell
+uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+```
+
 ## Quick Start
 
 ### 1. Python
@@ -45,6 +80,8 @@ The CLI entrypoint is `main.py`:
 uv python install 3.12
 uv sync --python 3.12
 ```
+
+This creates or refreshes the project-local environment at `.venv`.
 
 If `uv` hits a Windows cache permission issue, use a project-local cache:
 

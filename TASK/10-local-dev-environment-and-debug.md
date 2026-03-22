@@ -18,6 +18,29 @@ Standardize this repository on a stable local Python environment managed by `uv`
 
 Python `3.14` is available on this machine, but this project is pinned to `3.12` to avoid dependency breakage on very new interpreter releases.
 
+## Operational Rule
+
+Treat the repository-local [`.venv`](/d:/E/documents/gitspaces/ai-news-bot/.venv) as the only supported runtime environment for this project.
+
+- Preferred command pattern: `uv run ...`
+- Direct interpreter path on Windows: [`.venv\Scripts\python.exe`](/d:/E/documents/gitspaces/ai-news-bot/.venv/Scripts/python.exe)
+- Do not rely on the system `python` executable when running the app or tests
+- If commands report missing modules such as `fastapi`, `feedparser`, or `pytest`, first verify that the command is using `.venv`
+
+Quick verification:
+
+```powershell
+uv run python --version
+uv run python -c "import sys; print(sys.executable)"
+```
+
+Environment repair:
+
+```powershell
+uv sync --python 3.12
+uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+```
+
 ## One-Time Setup
 
 Run these commands from the repository root:

@@ -589,6 +589,39 @@ class LiveProviderResilienceTests(unittest.TestCase):
         self.assertEqual([item.symbol for item in snapshots], ["CSI300"])
         self.assertEqual(snapshots[0].close_price, 4001.0)
 
+    def test_market_provider_fetches_hstech_with_resolved_hk_index_code(self):
+        provider = AkshareMarketDataProvider()
+
+        class FakeAkshare:
+            @staticmethod
+            def stock_hk_index_spot_em():
+                return pd.DataFrame(
+                    [
+                        {"代码": "HSI", "名称": "恒生指数"},
+                        {"代码": "HSTECF2L", "名称": "恒生科技指数"},
+                    ]
+                )
+
+            @staticmethod
+            def stock_hk_index_daily_em(symbol: str):
+                self.assertEqual(symbol, "HSTECF2L")
+                return pd.DataFrame(
+                    [
+                        {"date": "2026-03-20", "latest": 3918.0},
+                        {"date": "2026-03-21", "latest": 3932.0},
+                    ]
+                )
+
+        with patch.object(provider, "_load_akshare", return_value=FakeAkshare()):
+            snapshots = provider.fetch_index_snapshots(
+                symbols=["HSTECH"],
+                trade_date=date(2026, 3, 21),
+            )
+
+        self.assertEqual([item.symbol for item in snapshots], ["HSTECH"])
+        self.assertEqual(snapshots[0].close_price, 3932.0)
+        self.assertEqual(snapshots[0].currency, "HKD")
+
 
 if __name__ == "__main__":
     unittest.main()

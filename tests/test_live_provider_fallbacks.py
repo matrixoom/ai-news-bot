@@ -52,13 +52,14 @@ class LiveProviderFallbackTests(unittest.TestCase):
         provider = FallbackMarketDataProvider(PartialMarketProvider(), SampleMarketDataProvider())
 
         snapshots = provider.fetch_index_snapshots(
-            symbols=["CSI300", "CSI500"],
+            symbols=["CSI300", "HSTECH"],
             trade_date=date(2026, 3, 15),
         )
 
-        self.assertEqual({item.symbol for item in snapshots}, {"CSI300", "CSI500"})
+        self.assertEqual({item.symbol for item in snapshots}, {"CSI300", "HSTECH"})
+        self.assertEqual(next(item for item in snapshots if item.symbol == "HSTECH").currency, "HKD")
         self.assertEqual(provider.healthcheck().availability.value, "degraded")
-        self.assertIn("CSI500", provider.healthcheck().detail)
+        self.assertIn("HSTECH", provider.healthcheck().detail)
 
     def test_research_provider_falls_back_to_sample_on_exception(self):
         provider = FallbackResearchProvider(lambda: RaisingResearchProvider(), SampleResearchProvider())
