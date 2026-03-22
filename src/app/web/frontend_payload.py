@@ -239,6 +239,7 @@ def _build_news_sections_from_views(news_sections: list[NewsSectionView]) -> lis
                 "url": item.url,
                 "published_at": item.published_at,
                 "tag": item.tag,
+                "summary": item.summary,
                 "is_placeholder": False,
             }
             for index, item in enumerate(section.items)
@@ -404,4 +405,3 @@ def _extract_unit(text: str) -> str:
     unit = re.sub(r"[-+]?\d+(?:\.\d+)?", "", text)
     unit = unit.replace("+", "").replace("-", "").strip()
     return unit
-
