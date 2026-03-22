@@ -490,6 +490,44 @@ class DashboardServiceCacheTests(unittest.TestCase):
 
         self.assertEqual(sections[0].items[0].source, "IT之家")
         self.assertEqual(sections[0].items[0].tag, "live")
+        self.assertEqual(sections[0].items[0].summary, "")
+
+    def test_news_view_falls_back_to_raw_summary_from_pipeline_items(self):
+        from src.services.dashboard_service import DashboardService
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            enable_background_refresh=False,
+        )
+
+        sections = service._build_news_sections_from_snapshot(
+            SimpleNamespace(
+                domains=[
+                    SimpleNamespace(
+                        category=NewsCategory.TECHNOLOGY,
+                        candidate_count=1,
+                        merged_duplicate_count=0,
+                        dropped_outdated_count=0,
+                        items=[
+                            SimpleNamespace(
+                                title="headline",
+                                source_name="IT之家",
+                                url="https://example.com/news",
+                                published_at="2026-03-22T00:00:00Z",
+                                source_type=SimpleNamespace(value="rss"),
+                                source_tag="realtime",
+                                raw_summary="pipeline summary",
+                            )
+                        ],
+                    )
+                ]
+            )
+        )
+
+        self.assertEqual(sections[0].items[0].summary, "pipeline summary")
 
 
 class NewsNowUpstreamManagerTests(unittest.TestCase):

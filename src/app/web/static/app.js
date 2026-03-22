@@ -5,7 +5,7 @@ const stateBadgeMap = {
   unavailable: "不可用",
   unknown: "未知",
   compatible: "兼容",
-  loading: "加载中",
+  loading: "加载中...",
 };
 
 const confidenceMap = { high: "高", medium: "中", low: "低" };
@@ -141,7 +141,7 @@ function normalizeSummaryText(value, maxChars = 100) {
   return Array.from(compact).slice(0, maxChars).join("");
 }
 
-function loadingSpinner(label = "加载中", inline = false) {
+function loadingSpinner(label = "加载中...", inline = false) {
   return `<span class="loading-spinner ${inline ? "loading-spinner-inline" : ""}" aria-hidden="true"></span><span>${escapeHtml(label)}</span>`;
 }
 
@@ -409,7 +409,7 @@ function renderModeSwitch(meta = {}) {
       </div>
       <div class="mode-status mode-status-${escapeHtml(upstreamStatus.status)}">
         <span class="mode-status-label">Upstream</span>
-        <span class="mode-status-text">${upstreamStatus.status === "loading" ? loadingSpinner("加载中", true) : escapeHtml(upstreamStatus.status)}</span>
+        <span class="mode-status-text">${upstreamStatus.status === "loading" ? loadingSpinner("加载中...", true) : escapeHtml(upstreamStatus.status)}</span>
         <span class="mode-status-detail">${escapeHtml(upstreamStatus.detail || "")}</span>
       </div>
     </div>
@@ -523,6 +523,9 @@ function renderTable(headers, rows, options = {}) {
   if (options.compact) {
     classes.push("compact");
   }
+  if (options.tableClass) {
+    classes.push(options.tableClass);
+  }
   const rowStyle = options.columnsTemplate ? ` style="grid-template-columns:${escapeHtml(options.columnsTemplate)};"` : "";
   return `
     <div class="${classes.join(" ")}">
@@ -553,8 +556,8 @@ function renderNewsTable(section) {
     const url = normalizeNewsUrl(item.url);
     const summary = normalizeSummaryText(item.summary);
     const title = url
-      ? `<a class="headline-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>`
-      : `<span class="headline-link disabled">${escapeHtml(item.title)}</span>`;
+      ? `<a class="headline-link news-title-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</a>`
+      : `<span class="headline-link news-title-link disabled" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span>`;
     const metaParts = [];
     if (item.source) {
       metaParts.push(`<span class="news-title-meta-item">${escapeHtml(item.source)}</span>`);
@@ -576,20 +579,21 @@ function renderNewsTable(section) {
       : `<span class="news-summary-empty">-</span>`;
     return [
       { text: String(item.rank), className: "cell-mono cell-rank" },
-      { html: titleCell, className: "cell-grow" },
+      { html: titleCell, className: "cell-title" },
       { html: summaryCell, className: "cell-summary" },
     ];
   });
   return renderTable(
     [
       { label: "Rank", className: "cell-mono cell-rank" },
-      { label: "Title", className: "cell-grow" },
+      { label: "Title", className: "cell-title" },
       { label: "Summary", className: "cell-summary" },
     ],
     rows,
     {
       emptyText: "暂无新闻内容",
-      columnsTemplate: "56px minmax(360px, 1.8fr) minmax(320px, 1.2fr)",
+      columnsTemplate: "56px minmax(0, 1fr) minmax(0, 2fr)",
+      tableClass: "news-table",
     },
   );
 }
@@ -754,7 +758,7 @@ function renderModulePanel() {
   document.getElementById("moduleStatus").innerHTML = `${statusBadge(module.loading ? "loading" : module.error ? "unavailable" : module.status)}<span class="tab-note">${escapeHtml(module.note || "")}</span><button type="button" class="module-refresh-button" data-refresh-module="${escapeHtml(module.id)}">手动刷新</button>`;
 
   if (module.loading && !module.loaded) {
-    document.getElementById("activeModuleTitle").textContent = `${module.label} / 加载中`;
+    document.getElementById("activeModuleTitle").textContent = `${module.label} / 加载中...`;
     document.getElementById("detailTabs").innerHTML = "";
     document.getElementById("contentStage").innerHTML = renderLoadingCard(module.loadingMessage);
     bindContentActions();
@@ -979,7 +983,7 @@ function revealPanels() {
 function renderShell() {
   const route = parseHash();
   viewState.activeModuleId = route.moduleId;
-  document.getElementById("generatedAt").textContent = "更新时间: 加载中";
+  document.getElementById("generatedAt").textContent = "更新时间: 加载中...";
   updateCoverageNote("");
   renderModeSwitch({
     news_mode: getRequestedNewsMode(),
