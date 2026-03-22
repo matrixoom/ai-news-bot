@@ -231,6 +231,7 @@ class DashboardServiceCacheTests(unittest.TestCase):
                 market_service=market_service,
                 events_service=events_service,
                 prefer_live_data=True,
+                enable_background_refresh=False,
             )
             first = service.build_snapshot()
             second = service.build_snapshot()
@@ -240,6 +241,212 @@ class DashboardServiceCacheTests(unittest.TestCase):
         self.assertEqual(macro_service.calls, 1)
         self.assertEqual(market_service.calls, 1)
         self.assertEqual(events_service.calls, 1)
+
+    def test_news_module_uses_cached_payload_until_force_refresh(self):
+        from src.services.dashboard_service import DashboardService
+
+        class CountingNewsService:
+            def __init__(self):
+                self.calls = 0
+
+            def build_snapshot(self):
+                self.calls += 1
+                return SimpleNamespace(domains=[])
+
+        service = DashboardService(
+            news_service=CountingNewsService(),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            enable_background_refresh=False,
+        )
+
+        first = service.build_news_module()
+        second = service.build_news_module()
+        third = service.build_news_module(force_refresh=True)
+
+        self.assertIs(first, second)
+        self.assertIsNot(first, third)
+        self.assertEqual(service._news_service.calls, 2)
+
+    def test_market_module_uses_cached_payload_until_force_refresh(self):
+        from src.services.dashboard_service import DashboardService
+
+        class CountingMarketService:
+            def __init__(self):
+                self.calls = 0
+
+            def build_snapshot(self):
+                self.calls += 1
+                return SimpleNamespace(items=[])
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=CountingMarketService(),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            enable_background_refresh=False,
+        )
+
+        first = service.build_market_module()
+        second = service.build_market_module()
+        third = service.build_market_module(force_refresh=True)
+
+        self.assertIs(first, second)
+        self.assertIsNot(first, third)
+        self.assertEqual(service._market_service.calls, 2)
+
+    def test_macro_module_uses_cached_payload_until_force_refresh(self):
+        from src.services.dashboard_service import DashboardService
+
+        class CountingMacroService:
+            def __init__(self):
+                self.calls = 0
+
+            def build_snapshot(self):
+                self.calls += 1
+                return SimpleNamespace(indicators=[])
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=CountingMacroService(),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            enable_background_refresh=False,
+        )
+
+        first = service.build_macro_module()
+        second = service.build_macro_module()
+        third = service.build_macro_module(force_refresh=True)
+
+        self.assertIs(first, second)
+        self.assertIsNot(first, third)
+        self.assertEqual(service._macro_service.calls, 2)
+
+    def test_events_module_uses_cached_payload_until_force_refresh(self):
+        from src.services.dashboard_service import DashboardService
+
+        class CountingEventsService:
+            def __init__(self):
+                self.calls = 0
+
+            def build_snapshot(self):
+                self.calls += 1
+                return SimpleNamespace(windows=[])
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=CountingEventsService(),
+            enable_background_refresh=False,
+        )
+
+        first = service.build_events_module()
+        second = service.build_events_module()
+        third = service.build_events_module(force_refresh=True)
+
+        self.assertIs(first, second)
+        self.assertIsNot(first, third)
+        self.assertEqual(service._events_service.calls, 2)
+
+    def test_status_module_uses_cached_payload_until_force_refresh(self):
+        from src.services.dashboard_service import DashboardService
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            enable_background_refresh=False,
+        )
+
+        first = service.build_status_module()
+        second = service.build_status_module()
+        third = service.build_status_module(force_refresh=True)
+
+        self.assertIs(first, second)
+        self.assertIsNot(first, third)
+
+    def test_live_service_primes_caches_on_startup_before_background_refresh(self):
+        from src.services.dashboard_service import DashboardService
+
+        with (
+            patch.object(DashboardService, "prime_caches") as prime_caches,
+            patch.object(DashboardService, "_start_background_refresh") as start_background_refresh,
+        ):
+            DashboardService(prefer_live_data=True)
+
+        prime_caches.assert_called_once_with()
+        start_background_refresh.assert_called_once_with()
+
+    def test_prime_caches_warms_all_module_variants(self):
+        from src.services.dashboard_service import DashboardService
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            prefer_live_data=True,
+            enable_background_refresh=False,
+        )
+
+        calls = []
+
+        def fake_build_news_module(*, news_mode=None, force_refresh=False):
+            calls.append(("news", news_mode, force_refresh))
+            return (
+                "2026-03-21T08:00:00Z",
+                news_mode or "hybrid",
+                [],
+                DataStatusItem(key="news", label="News", status="unknown", detail="ok"),
+            )
+
+        def fake_build_status_module(*, news_mode=None, force_refresh=False):
+            calls.append(("status", news_mode, force_refresh))
+            return (
+                "2026-03-21T08:00:00Z",
+                [DataStatusItem(key="news", label="News", status="unknown", detail="ok")],
+                "ok",
+            )
+
+        def fake_build_macro_module(*, force_refresh=False):
+            calls.append(("macro", None, force_refresh))
+            return ("2026-03-21T08:00:00Z", [])
+
+        def fake_build_market_module(*, force_refresh=False):
+            calls.append(("market", None, force_refresh))
+            return ("2026-03-21T08:00:00Z", [])
+
+        def fake_build_events_module(*, force_refresh=False):
+            calls.append(("events", None, force_refresh))
+            return ("2026-03-21T08:00:00Z", [])
+
+        service.build_news_module = fake_build_news_module
+        service.build_status_module = fake_build_status_module
+        service.build_macro_module = fake_build_macro_module
+        service.build_market_module = fake_build_market_module
+        service.build_events_module = fake_build_events_module
+
+        service.prime_caches()
+
+        self.assertEqual(
+            sorted(calls),
+            sorted(
+                [
+                    ("news", "hybrid", False),
+                    ("news", "api", False),
+                    ("news", "upstream", False),
+                    ("status", "hybrid", False),
+                    ("status", "api", False),
+                    ("status", "upstream", False),
+                    ("macro", None, False),
+                    ("market", None, False),
+                    ("events", None, False),
+                ]
+            ),
+        )
 
 
 class NewsNowUpstreamManagerTests(unittest.TestCase):

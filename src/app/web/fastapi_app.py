@@ -36,10 +36,14 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
     def healthcheck() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.on_event("shutdown")
+    def shutdown_background_refresh() -> None:
+        service.stop_background_refresh()
+
     @app.get("/api/dashboard")
-    def dashboard_payload(news_mode: str | None = None) -> JSONResponse:
+    def dashboard_payload(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
         try:
-            snapshot = service.build_snapshot(news_mode=news_mode)
+            snapshot = service.build_snapshot(news_mode=news_mode, force_refresh=refresh)
             return JSONResponse(build_dashboard_payload(snapshot))
         except Exception:
             return JSONResponse(
@@ -48,9 +52,9 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
             )
 
     @app.get("/api/frontend/dashboard")
-    def frontend_dashboard_payload(news_mode: str | None = None) -> JSONResponse:
+    def frontend_dashboard_payload(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
         try:
-            snapshot = service.build_snapshot(news_mode=news_mode)
+            snapshot = service.build_snapshot(news_mode=news_mode, force_refresh=refresh)
             return JSONResponse(build_frontend_payload(snapshot))
         except Exception:
             return JSONResponse(
@@ -59,9 +63,12 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
             )
 
     @app.get("/api/frontend/modules/news")
-    def frontend_news_module(news_mode: str | None = None) -> JSONResponse:
+    def frontend_news_module(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
         try:
-            generated_at, effective_news_mode, news_sections, news_status = service.build_news_module(news_mode=news_mode)
+            generated_at, effective_news_mode, news_sections, news_status = service.build_news_module(
+                news_mode=news_mode,
+                force_refresh=refresh,
+            )
             return JSONResponse(
                 build_frontend_news_module_payload(
                     generated_at=generated_at,
@@ -77,9 +84,9 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
             )
 
     @app.get("/api/frontend/modules/macro")
-    def frontend_macro_module() -> JSONResponse:
+    def frontend_macro_module(refresh: bool = False) -> JSONResponse:
         try:
-            generated_at, macro_sections = service.build_macro_module()
+            generated_at, macro_sections = service.build_macro_module(force_refresh=refresh)
             return JSONResponse(
                 build_frontend_macro_module_payload(
                     generated_at=generated_at,
@@ -93,9 +100,9 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
             )
 
     @app.get("/api/frontend/modules/market")
-    def frontend_market_module() -> JSONResponse:
+    def frontend_market_module(refresh: bool = False) -> JSONResponse:
         try:
-            generated_at, market_sections = service.build_market_module()
+            generated_at, market_sections = service.build_market_module(force_refresh=refresh)
             return JSONResponse(
                 build_frontend_market_module_payload(
                     generated_at=generated_at,
@@ -109,9 +116,9 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
             )
 
     @app.get("/api/frontend/modules/events")
-    def frontend_events_module() -> JSONResponse:
+    def frontend_events_module(refresh: bool = False) -> JSONResponse:
         try:
-            generated_at, event_sections = service.build_events_module()
+            generated_at, event_sections = service.build_events_module(force_refresh=refresh)
             return JSONResponse(
                 build_frontend_events_module_payload(
                     generated_at=generated_at,
@@ -125,9 +132,12 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
             )
 
     @app.get("/api/frontend/modules/status")
-    def frontend_status_module(news_mode: str | None = None) -> JSONResponse:
+    def frontend_status_module(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
         try:
-            generated_at, data_status, coverage_note = service.build_status_module(news_mode=news_mode)
+            generated_at, data_status, coverage_note = service.build_status_module(
+                news_mode=news_mode,
+                force_refresh=refresh,
+            )
             return JSONResponse(
                 build_frontend_status_module_payload(
                     generated_at=generated_at,
