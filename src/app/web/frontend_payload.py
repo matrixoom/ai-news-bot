@@ -320,11 +320,22 @@ def _build_event_sections_from_views(event_sections: list[EventSectionView]) -> 
             "items": [
                 {
                     "title": item.title,
+                    "region": item.region,
+                    "expected_date": item.expected_date,
                     "time_window": item.time_window,
                     "confidence": item.confidence,
+                    "impact_summary": item.impact_summary,
                     "source": item.source,
                 }
                 for item in section.items
+            ],
+            "official_links": [
+                {
+                    "region": link.region,
+                    "label": link.label,
+                    "url": link.url,
+                }
+                for link in section.official_links
             ],
         }
         for section in event_sections

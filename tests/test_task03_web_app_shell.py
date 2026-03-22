@@ -219,7 +219,8 @@ class DashboardServiceCacheTests(unittest.TestCase):
             def __init__(self):
                 self.calls = 0
 
-            def build_snapshot(self):
+            def build_snapshot(self, refresh_store=False):
+                _ = refresh_store
                 self.calls += 1
                 return SimpleNamespace(windows=[])
 

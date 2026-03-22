@@ -635,6 +635,8 @@ class ArkResearchProvider:
             f"As of date: {as_of.isoformat()}\n"
             f"Horizon: {horizon.value}\n"
             f"Topics: {', '.join(topics)}\n"
+            "Focus only on China, United States, Euro Area, and Japan.\n"
+            "Prioritize official calendars, policy meeting schedules, and official statistical release calendars.\n"
             "Only include medium or high confidence events that can be backed by official or top-tier source links."
         )
 
@@ -643,6 +645,30 @@ class ArkResearchProvider:
             provider_key=self.provider_key,
             availability=ProviderAvailability.LIVE,
             detail="火山引擎 Ark 研究数据源已配置。",
+            checked_at=_checked_at(),
+        )
+
+
+class UnavailableResearchProvider:
+    """Return no event findings so missing event data remains visible."""
+
+    provider_key = "unavailable-research"
+
+    def collect_outlook(
+        self,
+        *,
+        horizon: EventHorizon,
+        topics: Sequence[str],
+        as_of: date,
+    ) -> Sequence[ResearchFinding]:
+        _ = horizon, topics, as_of
+        return []
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            provider_key=self.provider_key,
+            availability=ProviderAvailability.UNAVAILABLE,
+            detail="事件展望未接入样例回退数据，当前无可展示事件。",
             checked_at=_checked_at(),
         )
 

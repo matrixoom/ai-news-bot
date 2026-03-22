@@ -3,17 +3,30 @@ import unittest
 from unittest.mock import patch
 
 from src.domain.external_data import EventHorizon
-from src.providers.live_data import (
-    FallbackMacroProvider,
-    FallbackMarketDataProvider,
-    FallbackResearchProvider,
-)
-from src.providers.sample_data import (
-    SampleMacroProvider,
-    SampleMarketDataProvider,
-    SampleResearchProvider,
-)
-from src.services import DashboardService
+
+
+try:
+    from src.providers.live_data import (
+        FallbackMacroProvider,
+        FallbackMarketDataProvider,
+        FallbackResearchProvider,
+        UnavailableResearchProvider,
+    )
+    from src.providers.sample_data import (
+        SampleMacroProvider,
+        SampleMarketDataProvider,
+    )
+    from src.services import DashboardService
+    _IMPORT_ERROR = None
+except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
+    FallbackMacroProvider = None
+    FallbackMarketDataProvider = None
+    FallbackResearchProvider = None
+    UnavailableResearchProvider = None
+    SampleMacroProvider = None
+    SampleMarketDataProvider = None
+    DashboardService = None
+    _IMPORT_ERROR = exc
 
 
 class RaisingMacroProvider:
@@ -38,6 +51,7 @@ class RaisingResearchProvider:
         raise RuntimeError("missing ark key")
 
 
+@unittest.skipIf(_IMPORT_ERROR is not None, f"Missing optional dependency: {_IMPORT_ERROR}")
 class LiveProviderFallbackTests(unittest.TestCase):
     def test_macro_provider_falls_back_to_sample_on_exception(self):
         provider = FallbackMacroProvider(RaisingMacroProvider(), SampleMacroProvider())
@@ -61,8 +75,8 @@ class LiveProviderFallbackTests(unittest.TestCase):
         self.assertEqual(provider.healthcheck().availability.value, "degraded")
         self.assertIn("HSTECH", provider.healthcheck().detail)
 
-    def test_research_provider_falls_back_to_sample_on_exception(self):
-        provider = FallbackResearchProvider(lambda: RaisingResearchProvider(), SampleResearchProvider())
+    def test_research_provider_falls_back_to_empty_on_exception(self):
+        provider = FallbackResearchProvider(lambda: RaisingResearchProvider(), UnavailableResearchProvider())
 
         findings = provider.collect_outlook(
             horizon=EventHorizon.NEXT_7_DAYS,
@@ -70,24 +84,26 @@ class LiveProviderFallbackTests(unittest.TestCase):
             as_of=date(2026, 3, 15),
         )
 
-        self.assertGreaterEqual(len(findings), 1)
+        self.assertEqual(findings, [])
         self.assertEqual(provider.healthcheck().availability.value, "degraded")
+        self.assertIn("实时事件研究不可用", provider.healthcheck().detail)
 
     @patch("src.providers.live_data.PublicRssNewsProvider.fetch_latest", side_effect=RuntimeError("rss down"))
     @patch("src.providers.live_data.GoogleNewsSearchProvider.search", side_effect=RuntimeError("search down"))
     @patch("src.providers.live_data.AkshareMacroDataProvider.fetch_latest_readings", side_effect=RuntimeError("akshare missing"))
     @patch("src.providers.live_data.AkshareMarketDataProvider.fetch_index_snapshots", side_effect=RuntimeError("akshare missing"))
     @patch("src.providers.live_data.ArkResearchProvider.__init__", side_effect=RuntimeError("ark key missing"))
-    def test_dashboard_live_mode_uses_sample_fallbacks_when_live_providers_fail(
+    def test_dashboard_live_mode_keeps_events_empty_when_research_provider_fails(
         self,
         *_mocks,
     ):
-        snapshot = DashboardService(prefer_live_data=True).build_snapshot()
+        snapshot = DashboardService(prefer_live_data=True).build_snapshot(force_refresh=True)
 
         self.assertEqual(len(snapshot.news_sections), 3)
         self.assertEqual(len(snapshot.market_sections), 6)
         self.assertEqual(len(snapshot.event_sections), 4)
         self.assertTrue(any(section.items for section in snapshot.news_sections))
+        self.assertTrue(all(not section.items for section in snapshot.event_sections))
         self.assertTrue(any(item.status == "degraded" for item in snapshot.data_status))
         self.assertEqual(snapshot.dashboard_summary.coverage_note, "")
 
