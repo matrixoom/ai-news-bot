@@ -765,6 +765,7 @@ li {
 .news-title-cell {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .news-title-meta {
@@ -795,11 +796,20 @@ li {
 .news-summary-text,
 .news-summary-empty {
   display: block;
+  min-width: 0;
   width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.76rem;
+}
+
+.news-title-link {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .news-summary-text {
@@ -979,8 +989,13 @@ li {
   padding-right: 8px;
 }
 
+.cell-title,
 .cell-summary {
-  min-width: 280px;
+  min-width: 0;
+}
+
+.table-scroll .terminal-table.news-table .terminal-row {
+  min-width: 0;
 }
 
 .cell-mono {
