@@ -610,7 +610,7 @@ function renderMarketSummaryTable(module, detail) {
         <h4>大盘指数汇总</h4>
         <span class="tab-note">${escapeHtml(`${module.details.length} 个指数`)}</span>
       </div>
-      <p class="card-meta">收盘点位、M20 均线与乖离率随市场模型刷新自动同步。</p>
+      <p class="card-meta">鱼盆模型跟踪</p>
       <div class="table-scroll">
         <div class="terminal-table compact">
           <div class="terminal-row terminal-row-header" style="grid-template-columns:minmax(140px, 1.5fr) repeat(3, minmax(110px, 1fr));">
