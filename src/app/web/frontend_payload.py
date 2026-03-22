@@ -306,6 +306,9 @@ def _build_market_sections_from_views(market_sections: list[MarketCard]) -> list
             "trade_date": section.trade_date,
             "source_label": section.source_label,
             "explanation": section.explanation,
+            "data_window_label": section.data_window_label,
+            "history_warning": section.history_warning,
+            "chart_points": list(section.chart_points),
         }
         for section in market_sections
     ]

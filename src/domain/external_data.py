@@ -1,5 +1,5 @@
 """Canonical external-data models shared by provider contracts and services."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 
@@ -66,6 +66,14 @@ class SearchResultItem:
 
 
 @dataclass(frozen=True)
+class MarketIndexHistoryPoint:
+    """One historical close used for market monitoring and charting."""
+
+    trade_date: date
+    close_price: float
+
+
+@dataclass(frozen=True)
 class MarketIndexSnapshot:
     """Raw market snapshot for a broad index on a trading day."""
 
@@ -77,6 +85,7 @@ class MarketIndexSnapshot:
     currency: str
     source_url: str
     lookback_closes: tuple[float, ...] = ()
+    history_points: tuple[MarketIndexHistoryPoint, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -156,7 +156,7 @@ class EventsOutlookServiceTests(unittest.TestCase):
                 now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
             )
 
-            snapshot = service.build_snapshot(as_of=date(2026, 3, 15))
+            snapshot = service.build_snapshot(as_of=date(2026, 3, 15), refresh_store=True)
 
             next_7 = snapshot.windows[0]
             self.assertEqual(next_7.title, "未来 7 天")
@@ -171,7 +171,7 @@ class EventsOutlookServiceTests(unittest.TestCase):
                 now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
             )
 
-            snapshot = service.build_snapshot(as_of=date(2026, 3, 15))
+            snapshot = service.build_snapshot(as_of=date(2026, 3, 15), refresh_store=True)
 
             self.assertEqual([window.key for window in snapshot.windows], ["7d", "30d", "90d", "180d"])
 
@@ -218,7 +218,7 @@ class EventsOutlookServiceTests(unittest.TestCase):
                 now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
             )
 
-            snapshot = service.build_snapshot(as_of=date(2026, 3, 15))
+            snapshot = service.build_snapshot(as_of=date(2026, 3, 15), refresh_store=True)
 
             self.assertEqual([item.title for item in snapshot.windows[0].items], ["Valid event"])
 
@@ -230,7 +230,7 @@ class EventsOutlookServiceTests(unittest.TestCase):
                 now_factory=lambda: datetime(2026, 3, 22, tzinfo=UTC),
             )
 
-            snapshot = service.build_snapshot(as_of=date(2026, 3, 22))
+            snapshot = service.build_snapshot(as_of=date(2026, 3, 22), refresh_store=True)
 
             self.assertEqual(snapshot.windows[0].items[0].expected_date, "2026-03-24")
             self.assertEqual(snapshot.windows[1].items[0].expected_date, "2026-04-05")
@@ -259,7 +259,7 @@ class EventsOutlookServiceTests(unittest.TestCase):
                 now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
             )
 
-            first = service.build_snapshot(as_of=date(2026, 3, 15))
+            first = service.build_snapshot(as_of=date(2026, 3, 15), refresh_store=True)
             second = service.build_snapshot(as_of=date(2026, 3, 15))
 
             self.assertTrue(store.has_records())
@@ -268,7 +268,36 @@ class EventsOutlookServiceTests(unittest.TestCase):
             self.assertEqual(len(second.windows[0].items), 1)
             self.assertEqual(first.windows[0].items[0].title, "FOMC window")
 
-    def test_unavailable_provider_returns_empty_windows_even_if_store_has_records(self):
+    def test_build_snapshot_does_not_auto_refresh_when_store_is_empty(self):
+        provider = FakeResearchProvider(
+            {
+                EventHorizon.NEXT_7_DAYS: (
+                    ResearchFinding(
+                        "fake",
+                        EventHorizon.NEXT_7_DAYS,
+                        "Should not auto fetch",
+                        "US",
+                        "2026-03-18",
+                        "Only refresh on demand.",
+                        ConfidenceLevel.HIGH,
+                        (SourceReference("Fed", "https://example.com/fed"),),
+                    ),
+                )
+            }
+        )
+        with isolated_events_store() as (store, _db_path):
+            service = EventsOutlookService(
+                research_provider=provider,
+                store=store,
+                now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
+            )
+
+            snapshot = service.build_snapshot(as_of=date(2026, 3, 15))
+
+            self.assertEqual(provider.calls, 0)
+            self.assertTrue(all(not window.items for window in snapshot.windows))
+
+    def test_unavailable_provider_reuses_stored_findings_when_store_has_records(self):
         with isolated_events_store() as (store, _db_path):
             store.upsert_findings(
                 (
@@ -285,6 +314,19 @@ class EventsOutlookServiceTests(unittest.TestCase):
                 ),
                 collected_at="2026-03-15T08:00:00Z",
             )
+            service = EventsOutlookService(
+                research_provider=UnavailableResearchProvider(),
+                store=store,
+                now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
+            )
+
+            snapshot = service.build_snapshot(as_of=date(2026, 3, 15))
+
+            self.assertEqual([item.title for item in snapshot.windows[0].items], ["Stale stored event"])
+            self.assertTrue(all(window.status == "degraded" for window in snapshot.windows))
+
+    def test_unavailable_provider_returns_empty_windows_when_store_is_empty(self):
+        with isolated_events_store() as (store, _db_path):
             service = EventsOutlookService(
                 research_provider=UnavailableResearchProvider(),
                 store=store,

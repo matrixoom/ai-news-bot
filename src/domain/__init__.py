@@ -5,6 +5,7 @@ from .external_data import (
     ConfidenceLevel,
     EventHorizon,
     MacroIndicatorReading,
+    MarketIndexHistoryPoint,
     MarketIndexSnapshot,
     NewsCategory,
     NewsItem,
@@ -22,6 +23,7 @@ from .macro_monitoring import (
 )
 from .market_monitoring import (
     FishbowlState,
+    MarketChartPoint,
     MarketModelView,
     MarketMonitoringSnapshot,
     TrackedIndexDefinition,
@@ -47,6 +49,8 @@ __all__ = [
     "MacroIndicatorReading",
     "MacroIndicatorView",
     "MacroMonitoringSnapshot",
+    "MarketChartPoint",
+    "MarketIndexHistoryPoint",
     "MarketIndexSnapshot",
     "MarketModelView",
     "MarketMonitoringSnapshot",

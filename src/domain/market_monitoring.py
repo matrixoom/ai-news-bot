@@ -25,6 +25,16 @@ class TrackedIndexDefinition:
 
 
 @dataclass(frozen=True)
+class MarketChartPoint:
+    """Chart-ready market history point."""
+
+    trade_date: str
+    close_price: float
+    ma20_price: float | None
+    deviation_pct: float | None
+
+
+@dataclass(frozen=True)
 class MarketModelView:
     """Dashboard-facing market model card."""
 
@@ -38,6 +48,9 @@ class MarketModelView:
     explanation: str
     source_label: str
     status: str
+    data_window_label: str = ""
+    history_warning: str = ""
+    chart_points: List[MarketChartPoint] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

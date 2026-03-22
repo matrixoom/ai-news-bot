@@ -23,6 +23,12 @@ const NEWS_MODE_OPTIONS = [
   { value: "api", label: "API" },
   { value: "upstream", label: "Upstream" },
 ];
+const MARKET_CHART_RANGE_OPTIONS = [
+  { key: "7d", label: "1周", days: 7, minCoverageDays: 4 },
+  { key: "30d", label: "1月", days: 30, minCoverageDays: 20 },
+  { key: "90d", label: "3月", days: 90, minCoverageDays: 75 },
+  { key: "180d", label: "6月", days: 180, minCoverageDays: 150 },
+];
 
 const MODULE_CONFIGS = [
   {
@@ -69,6 +75,7 @@ const viewState = {
   })),
   activeModuleId: "news",
   activeDetailByModule: {},
+  activeMarketChartRangeByDetail: {},
   pendingRequestByModule: {},
   refreshTimerByModule: {},
   generatedAt: "",
@@ -76,6 +83,7 @@ const viewState = {
 };
 
 let legacyDashboardPromise = null;
+const marketChartInstances = new Map();
 
 function getCurrentTheme() {
   const theme = document.documentElement.getAttribute("data-theme");
@@ -106,6 +114,11 @@ function applyTheme(theme, { persist = true } = {}) {
     persistTheme(theme === "light" ? "light" : "dark");
   }
   renderThemeToggle();
+  const module = currentModule();
+  const detail = currentDetail(module);
+  if (detail?.kind === "market") {
+    renderMarketTrendChart(detail.section, getActiveMarketChartRange(detail.id, detail.section));
+  }
 }
 
 function initThemeToggle() {
@@ -369,6 +382,90 @@ function currentDetail(module) {
   return module.details.find((detail) => detail.id === detailId) || module.details[0];
 }
 
+function parseTradeDate(value) {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return null;
+  }
+  const parsed = new Date(`${text}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getMarketRangeOption(rangeKey) {
+  return MARKET_CHART_RANGE_OPTIONS.find((option) => option.key === rangeKey) || MARKET_CHART_RANGE_OPTIONS[2];
+}
+
+function filterMarketChartPointsByRange(points, rangeKey) {
+  const option = getMarketRangeOption(rangeKey);
+  const datedPoints = (Array.isArray(points) ? points : []).filter((point) => parseTradeDate(point.trade_date));
+  if (!datedPoints.length) {
+    return [];
+  }
+  const latestDate = parseTradeDate(datedPoints[datedPoints.length - 1].trade_date);
+  if (!latestDate) {
+    return datedPoints;
+  }
+  const startDate = new Date(latestDate.getTime() - ((option.days - 1) * 24 * 60 * 60 * 1000));
+  const filtered = datedPoints.filter((point) => {
+    const tradeDate = parseTradeDate(point.trade_date);
+    return tradeDate && tradeDate >= startDate;
+  });
+  return filtered.length >= 2 ? filtered : datedPoints;
+}
+
+function getAvailableMarketChartRanges(points) {
+  const datedPoints = (Array.isArray(points) ? points : []).filter((point) => parseTradeDate(point.trade_date));
+  if (!datedPoints.length) {
+    return MARKET_CHART_RANGE_OPTIONS.map((option) => ({ ...option, available: false }));
+  }
+  const firstDate = parseTradeDate(datedPoints[0].trade_date);
+  const lastDate = parseTradeDate(datedPoints[datedPoints.length - 1].trade_date);
+  const coverageDays = firstDate && lastDate ? Math.max(0, Math.round((lastDate - firstDate) / (24 * 60 * 60 * 1000))) : 0;
+  return MARKET_CHART_RANGE_OPTIONS.map((option) => ({
+    ...option,
+    available: coverageDays >= option.minCoverageDays && filterMarketChartPointsByRange(datedPoints, option.key).length >= 2,
+  }));
+}
+
+function getActiveMarketChartRange(detailId, section) {
+  const points = Array.isArray(section?.chart_points) ? section.chart_points : [];
+  const rangeOptions = getAvailableMarketChartRanges(points);
+  const saved = viewState.activeMarketChartRangeByDetail[detailId];
+  if (saved && rangeOptions.some((option) => option.key === saved && option.available)) {
+    return saved;
+  }
+  const preferred = ["90d", "30d", "7d", "180d"];
+  const fallback = preferred.find((key) => rangeOptions.some((option) => option.key === key && option.available))
+    || rangeOptions.find((option) => option.available)?.key
+    || "30d";
+  viewState.activeMarketChartRangeByDetail[detailId] = fallback;
+  return fallback;
+}
+
+function renderMarketChartRangeSwitch(detailId, section) {
+  const points = Array.isArray(section?.chart_points) ? section.chart_points : [];
+  const rangeOptions = getAvailableMarketChartRanges(points);
+  if (!rangeOptions.some((option) => option.available)) {
+    return "";
+  }
+  const activeRange = getActiveMarketChartRange(detailId, section);
+  return `
+    <div class="chart-range-switch" role="group" aria-label="历史范围切换">
+      ${rangeOptions
+        .map((option) => `
+          <button
+            type="button"
+            class="chart-range-button ${option.key === activeRange ? "active" : ""}"
+            data-market-range="${escapeHtml(option.key)}"
+            ${option.available ? "" : "disabled"}
+            title="${escapeHtml(option.available ? `切换到${option.label}` : `${option.label}数据不足，暂不可切换`)}"
+          >${escapeHtml(option.label)}</button>
+        `)
+        .join("")}
+    </div>
+  `;
+}
+
 function updateGeneratedAt(value) {
   if (!value) {
     return;
@@ -501,6 +598,151 @@ function buildLineChart(points) {
   const path = valid.map((point, index) => `${index === 0 ? "M" : "L"} ${toX(index).toFixed(2)} ${toY(point.value).toFixed(2)}`).join(" ");
   const area = `${path} L ${toX(valid.length - 1).toFixed(2)} ${toY(min).toFixed(2)} L ${toX(0).toFixed(2)} ${toY(min).toFixed(2)} Z`;
   return `<svg class="chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"><path d="${area}" fill="rgba(47, 93, 98, 0.10)"></path><path d="${path}" fill="none" stroke="#2f5d62" stroke-width="2.4"></path></svg>`;
+}
+
+function disposeMarketCharts() {
+  marketChartInstances.forEach((chart) => {
+    try {
+      chart.dispose();
+    } catch (error) {}
+  });
+  marketChartInstances.clear();
+}
+
+function marketChartEmptyState(message) {
+  return `<div class="chart-empty market-chart-empty">${escapeHtml(message)}</div>`;
+}
+
+function renderMarketTrendChart(section, rangeKey = "30d") {
+  const root = document.getElementById("marketTrendChart");
+  if (!root) {
+    disposeMarketCharts();
+    return;
+  }
+  const points = Array.isArray(section?.chart_points) ? section.chart_points : [];
+  const filteredPoints = filterMarketChartPointsByRange(points, rangeKey);
+  if (!filteredPoints.length) {
+    disposeMarketCharts();
+    root.innerHTML = marketChartEmptyState("暂无可绘制历史数据");
+    return;
+  }
+  if (!window.echarts) {
+    disposeMarketCharts();
+    root.innerHTML = marketChartEmptyState("ECharts 未加载，无法绘制历史趋势图");
+    return;
+  }
+
+  root.innerHTML = "";
+  const computedStyle = window.getComputedStyle(document.documentElement);
+  const ink = (computedStyle.getPropertyValue("--ink") || "#e7edf5").trim();
+  const muted = (computedStyle.getPropertyValue("--muted") || "#91a0b1").trim();
+  const line = (computedStyle.getPropertyValue("--line") || "rgba(140, 160, 180, 0.18)").trim();
+  const accent = (computedStyle.getPropertyValue("--accent") || "#f6a313").trim();
+  const accent2 = (computedStyle.getPropertyValue("--accent-2") || "#31b8c4").trim();
+  const ok = (computedStyle.getPropertyValue("--ok") || "#37c48d").trim();
+  const danger = (computedStyle.getPropertyValue("--danger") || "#ff5f72").trim();
+
+  const chart = window.echarts.getInstanceByDom(root) || window.echarts.init(root);
+  marketChartInstances.set("marketTrendChart", chart);
+
+  chart.setOption(
+    {
+      animation: false,
+      color: [accent, accent2, danger],
+      grid: { left: 52, right: 54, top: 40, bottom: 42 },
+      legend: {
+        top: 8,
+        textStyle: { color: muted, fontSize: 11 },
+        data: ["Close", "M20", "Deviation"],
+      },
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: getCurrentTheme() === "light" ? "rgba(255,255,255,0.95)" : "rgba(10,13,17,0.96)",
+        borderColor: line,
+        textStyle: { color: ink },
+        valueFormatter(value) {
+          if (typeof value !== "number") {
+            return value;
+          }
+          return Number.isInteger(value) ? `${value}` : value.toFixed(2);
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: filteredPoints.map((point) => point.trade_date),
+        boundaryGap: false,
+        axisLabel: { color: muted, fontSize: 10, hideOverlap: true },
+        axisLine: { lineStyle: { color: line } },
+      },
+      yAxis: [
+        {
+          type: "value",
+          scale: true,
+          axisLabel: { color: muted, fontSize: 10 },
+          splitLine: { lineStyle: { color: line, type: "dashed" } },
+        },
+        {
+          type: "value",
+          scale: true,
+          axisLabel: {
+            color: muted,
+            fontSize: 10,
+            formatter(value) {
+              return `${value}%`;
+            },
+          },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: "Close",
+          type: "line",
+          yAxisIndex: 0,
+          showSymbol: false,
+          smooth: false,
+          lineStyle: { width: 2 },
+          data: filteredPoints.map((point) => point.close_price),
+        },
+        {
+          name: "M20",
+          type: "line",
+          yAxisIndex: 0,
+          showSymbol: false,
+          smooth: false,
+          connectNulls: false,
+          lineStyle: { width: 1.8, type: "dashed" },
+          data: filteredPoints.map((point) => point.ma20_price),
+        },
+        {
+          name: "Deviation",
+          type: "bar",
+          yAxisIndex: 1,
+          barMaxWidth: 10,
+          itemStyle: {
+            color(params) {
+              const value = Number(params.value || 0);
+              if (value > 0) {
+                return danger;
+              }
+              if (value < 0) {
+                return ok;
+              }
+              return muted;
+            },
+          },
+          markLine: {
+            symbol: "none",
+            lineStyle: { color: line, type: "dashed" },
+            data: [{ yAxis: 0 }],
+          },
+          data: filteredPoints.map((point) => point.deviation_pct),
+        },
+      ],
+    },
+    true,
+  );
+  chart.resize();
 }
 
 function renderMacroCard(section) {
@@ -701,7 +943,14 @@ function renderModuleContent(module, detail) {
     )}</div>`;
   }
   if (detail.kind === "market") {
-    return `<div class="content-stack">${renderTable(
+    const historyWindow = detail.section.data_window_label || "最近可用窗口";
+    const activeRange = getActiveMarketChartRange(detail.id, detail.section);
+    const activeRangeLabel = getMarketRangeOption(activeRange).label;
+    const rangeSwitch = renderMarketChartRangeSwitch(detail.id, detail.section);
+    const historyWarning = detail.section.history_warning
+      ? `<p class="market-warning">${escapeHtml(detail.section.history_warning)}</p>`
+      : "";
+    return `<div class="content-stack"><article class="info-card market-chart-panel"><div class="card-head"><h4>${escapeHtml(detail.label)} Trend</h4><div class="market-chart-tools">${rangeSwitch}${statusBadge(detail.section.status)}</div></div><p class="card-meta">显示范围: ${escapeHtml(activeRangeLabel)} | 历史覆盖: ${escapeHtml(historyWindow)} | 组合图展示收盘价、M20 与乖离率。</p><div id="marketTrendChart" class="market-trend-chart" aria-label="${escapeHtml(`${detail.label} 历史趋势图`)}"></div>${historyWarning}</article>${renderTable(
       [
         { label: "Field" },
         { label: "Value", className: "cell-grow" },
@@ -712,6 +961,7 @@ function renderModuleContent(module, detail) {
         [{ text: "模型信号", className: "cell-tight cell-cyan" }, { text: signalMap[detail.section.signal] || detail.section.signal, className: "cell-grow" }],
         [{ text: "偏离", className: "cell-tight cell-cyan" }, { text: detail.section.deviation_pct, className: "cell-grow cell-mono" }],
         [{ text: "交易日", className: "cell-tight cell-cyan" }, { text: detail.section.trade_date, className: "cell-grow cell-mono" }],
+        [{ text: "历史窗口", className: "cell-tight cell-cyan" }, { text: historyWindow, className: "cell-grow" }],
         [{ text: "说明", className: "cell-tight cell-cyan" }, { text: detail.section.explanation, className: "cell-grow cell-muted" }],
       ],
     )}${renderMarketSummaryTable(module, detail)}</div>`;
@@ -761,11 +1011,30 @@ function bindContentActions() {
   document.querySelectorAll("[data-refresh-module]").forEach((node) => {
     node.addEventListener("click", () => loadModule(node.getAttribute("data-refresh-module"), { forceRefresh: true }));
   });
+  document.querySelectorAll("[data-market-range]").forEach((node) => {
+    node.addEventListener("click", () => {
+      if (node.disabled) {
+        return;
+      }
+      const module = currentModule();
+      const detail = currentDetail(module);
+      if (!detail || detail.kind !== "market") {
+        return;
+      }
+      const rangeKey = node.getAttribute("data-market-range");
+      if (!rangeKey) {
+        return;
+      }
+      viewState.activeMarketChartRangeByDetail[detail.id] = rangeKey;
+      renderModulePanel();
+    });
+  });
 }
 
 function renderModulePanel() {
   const module = currentModule();
   const detail = currentDetail(module);
+  disposeMarketCharts();
   document.getElementById("activeModuleEyebrow").textContent = module.label;
   document.getElementById("activeModuleDescription").textContent = module.description;
   document.getElementById("moduleStatus").innerHTML = `${statusBadge(module.loading ? "loading" : module.error ? "unavailable" : module.status)}<span class="tab-note">${escapeHtml(module.note || "")}</span><button type="button" class="module-refresh-button" data-refresh-module="${escapeHtml(module.id)}">手动刷新</button>`;
@@ -806,6 +1075,9 @@ function renderModulePanel() {
       : "";
   document.getElementById("contentStage").innerHTML = renderModuleContent(module, detail);
   bindContentActions();
+  if (detail.kind === "market") {
+    renderMarketTrendChart(detail.section, getActiveMarketChartRange(detail.id, detail.section));
+  }
 }
 
 function applyRoute(moduleId, detailId) {
@@ -1016,6 +1288,14 @@ function loadAllModules() {
 window.addEventListener("hashchange", () => {
   const route = parseHash();
   applyRoute(route.moduleId, route.detailId);
+});
+
+window.addEventListener("resize", () => {
+  marketChartInstances.forEach((chart) => {
+    try {
+      chart.resize();
+    } catch (error) {}
+  });
 });
 
 applyTheme(getCurrentTheme(), { persist: false });
