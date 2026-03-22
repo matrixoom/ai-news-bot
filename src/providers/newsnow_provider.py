@@ -22,7 +22,7 @@ import requests
 from ..domain.external_data import NewsCategory, NewsItem
 from ..logger import setup_logger
 from .contracts import ProviderAvailability, ProviderStatus
-from .newsnow_sources import NEWSNOW_ACTIVE_SOURCE_SPECS, NewsNowSource
+from .newsnow_sources import NEWSNOW_ACTIVE_SOURCE_SPECS, NewsNowSource, display_name_for_source
 
 
 logger = setup_logger(__name__)
@@ -582,12 +582,13 @@ class NewsNowAggregatedNewsProvider:
             raise RuntimeError(f"unsupported source column: {source.column}")
         return NewsItem(
             provider=self.provider_key,
-            source_name=source.source_id,
+            source_name=display_name_for_source(source.source_id),
             category=category,
             title=title,
             url=url,
             published_at=published_at,
             summary=summary,
+            source_tag=source.source_type,
         )
 
     def _fetch_native_source_items(self, *, source: NewsNowSource, now_ms: int) -> list[NewsItem]:

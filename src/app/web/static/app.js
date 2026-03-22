@@ -28,31 +28,31 @@ const MODULE_CONFIGS = [
   {
     id: "news",
     label: "新闻情报",
-    description: "科技、财经、政策新闻按频道组织，细项切换放到右侧。",
+    description: "科技、财经、政策新闻",
     loadingMessage: "新闻频道正在后台加载...",
   },
   {
     id: "macro",
     label: "宏观指标",
-    description: "趋势、来源和变动说明集中到右侧模块区。",
+    description: "宏观数据",
     loadingMessage: "宏观指标正在后台加载...",
   },
   {
     id: "market",
     label: "市场模型",
-    description: "收盘、MA20、模型信号等内容在右侧展开。",
+    description: "技术指标",
     loadingMessage: "市场模型正在后台加载...",
   },
   {
     id: "events",
     label: "事件展望",
-    description: "未来事件按时间窗口切换查看。",
+    description: "未来展望",
     loadingMessage: "事件展望正在后台加载...",
   },
   {
     id: "status",
     label: "数据状态",
-    description: "所有链路状态集中在一个模块内查看。",
+    description: "状态监控",
     loadingMessage: "数据状态正在后台加载...",
   },
 ];
@@ -70,6 +70,7 @@ const viewState = {
   activeModuleId: "news",
   activeDetailByModule: {},
   pendingRequestByModule: {},
+  refreshTimerByModule: {},
   generatedAt: "",
   coverageNote: "",
 };
@@ -231,7 +232,7 @@ function modulePayloadFromLegacy(payload, moduleId) {
         id: "news",
         label: "新闻情报",
         note: `${sections.length} 个频道`,
-        description: "科技、财经、政策新闻按频道组织，细项切换放到右侧。",
+        description: "科技、财经、政策新闻",
         status: groupStatus(sections),
         details: sections.map((section) => ({
           id: section.key,
@@ -252,7 +253,7 @@ function modulePayloadFromLegacy(payload, moduleId) {
         id: "macro",
         label: "宏观指标",
         note: `${sections.length} 个指标`,
-        description: "趋势、来源和变动说明集中到右侧模块区。",
+        description: "宏观数据",
         status: groupStatus(sections),
         details: sections.map((section) => ({
           id: section.key,
@@ -273,7 +274,7 @@ function modulePayloadFromLegacy(payload, moduleId) {
         id: "market",
         label: "市场模型",
         note: `${sections.length} 个模型`,
-        description: "收盘、MA20、模型信号等内容在右侧展开。",
+        description: "技术指标",
         status: groupStatus(sections),
         details: sections.map((section) => ({
           id: section.key,
@@ -294,7 +295,7 @@ function modulePayloadFromLegacy(payload, moduleId) {
         id: "events",
         label: "事件展望",
         note: `${sections.length} 个窗口`,
-        description: "未来事件按时间窗口切换查看。",
+        description: "未来展望",
         status: groupStatus(sections),
         details: sections.map((section) => ({
           id: section.key,
@@ -315,7 +316,7 @@ function modulePayloadFromLegacy(payload, moduleId) {
       id: "status",
       label: "数据状态",
       note: `${sections.length} 个模块`,
-      description: "所有链路状态集中在一个模块内查看。",
+      description: "状态监控",
       status: groupStatus(sections),
       details: sections.map((section) => ({
         id: section.key,
@@ -369,11 +370,13 @@ function updateGeneratedAt(value) {
 }
 
 function updateCoverageNote(value) {
-  if (!value) {
+  const note = document.getElementById("coverageNote");
+  if (!note) {
     return;
   }
-  viewState.coverageNote = value;
-  document.getElementById("coverageNote").textContent = value;
+  viewState.coverageNote = value || "";
+  note.textContent = value || "";
+  note.hidden = !value;
 }
 
 function renderModeSwitch(meta = {}) {
@@ -759,11 +762,28 @@ function replaceModule(nextModule) {
   };
 }
 
+function clearScheduledModuleReload(moduleId) {
+  const timerId = viewState.refreshTimerByModule[moduleId];
+  if (timerId) {
+    window.clearTimeout(timerId);
+    delete viewState.refreshTimerByModule[moduleId];
+  }
+}
+
+function scheduleModuleReload(moduleId, delayMs) {
+  clearScheduledModuleReload(moduleId);
+  viewState.refreshTimerByModule[moduleId] = window.setTimeout(() => {
+    delete viewState.refreshTimerByModule[moduleId];
+    loadModule(moduleId);
+  }, Math.max(500, Number(delayMs) || 2000));
+}
+
 function setModuleLoading(moduleId, resetContent) {
   const module = viewState.modules.find((item) => item.id === moduleId);
   if (!module) {
     return;
   }
+  clearScheduledModuleReload(moduleId);
   replaceModule({
     id: moduleId,
     loading: true,
@@ -776,6 +796,7 @@ function setModuleLoading(moduleId, resetContent) {
 }
 
 function setModuleError(moduleId, message) {
+  clearScheduledModuleReload(moduleId);
   replaceModule({
     id: moduleId,
     loading: false,
@@ -791,16 +812,22 @@ function applyModulePayload(payload) {
   if (!payload?.module?.id) {
     return;
   }
+  const isLoadingModule = Boolean(payload.module.loading);
+  if (isLoadingModule && payload.refresh_after_ms) {
+    scheduleModuleReload(payload.module.id, payload.refresh_after_ms);
+  } else {
+    clearScheduledModuleReload(payload.module.id);
+  }
   replaceModule({
     ...payload.module,
-    loading: false,
-    loaded: true,
+    loading: isLoadingModule,
+    loaded: !isLoadingModule,
     error: "",
   });
-  updateGeneratedAt(payload.generated_at);
-  if (payload.coverage_note) {
-    updateCoverageNote(payload.coverage_note);
+  if (!isLoadingModule) {
+    updateGeneratedAt(payload.generated_at);
   }
+  updateCoverageNote(payload.coverage_note || "");
   if (payload.news_mode || payload.upstream_service_status) {
     renderModeSwitch(payload);
   }
@@ -888,7 +915,7 @@ function renderShell() {
   const route = parseHash();
   viewState.activeModuleId = route.moduleId;
   document.getElementById("generatedAt").textContent = "更新时间: 加载中";
-  document.getElementById("coverageNote").textContent = "页面框架已渲染，各模块数据正在后台异步加载。";
+  updateCoverageNote("");
   renderModeSwitch({
     news_mode: getRequestedNewsMode(),
     news_mode_options: NEWS_MODE_OPTIONS,

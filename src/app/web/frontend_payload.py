@@ -56,6 +56,8 @@ def build_frontend_news_module_payload(
     news_mode: str,
     news_sections: list[NewsSectionView],
     news_status: DataStatusItem,
+    module_loading: bool = False,
+    loading_note: str | None = None,
 ) -> dict[str, Any]:
     sections = _build_news_sections_from_views(news_sections)
     return {
@@ -71,8 +73,9 @@ def build_frontend_news_module_payload(
             "id": "news",
             "label": "新闻情报",
             "note": f"{len(sections)} 个频道",
-            "description": "科技、财经、政策新闻按频道组织，细项切换放到右侧。",
-            "status": _group_status(sections, fallback=news_status.status),
+            "description": "科技、财经、政策新闻",
+            "status": "loading" if module_loading else _group_status(sections, fallback=news_status.status),
+            "loading": module_loading,
             "details": [
                 {
                     "id": section["key"],
@@ -87,7 +90,13 @@ def build_frontend_news_module_payload(
     }
 
 
-def build_frontend_macro_module_payload(*, generated_at: str, macro_sections: list[MetricCard]) -> dict[str, Any]:
+def build_frontend_macro_module_payload(
+    *,
+    generated_at: str,
+    macro_sections: list[MetricCard],
+    module_loading: bool = False,
+    loading_note: str | None = None,
+) -> dict[str, Any]:
     sections = _build_macro_sections_from_views(macro_sections, generated_at)
     return {
         "generated_at": generated_at,
@@ -95,8 +104,9 @@ def build_frontend_macro_module_payload(*, generated_at: str, macro_sections: li
             "id": "macro",
             "label": "宏观指标",
             "note": f"{len(sections)} 个指标",
-            "description": "趋势、来源和变动说明集中到右侧模块区。",
-            "status": _group_status(sections),
+            "description": "宏观数据",
+            "status": "loading" if module_loading else _group_status(sections),
+            "loading": module_loading,
             "details": [
                 {
                     "id": section["key"],
@@ -111,7 +121,13 @@ def build_frontend_macro_module_payload(*, generated_at: str, macro_sections: li
     }
 
 
-def build_frontend_market_module_payload(*, generated_at: str, market_sections: list[MarketCard]) -> dict[str, Any]:
+def build_frontend_market_module_payload(
+    *,
+    generated_at: str,
+    market_sections: list[MarketCard],
+    module_loading: bool = False,
+    loading_note: str | None = None,
+) -> dict[str, Any]:
     sections = _build_market_sections_from_views(market_sections)
     return {
         "generated_at": generated_at,
@@ -119,8 +135,9 @@ def build_frontend_market_module_payload(*, generated_at: str, market_sections: 
             "id": "market",
             "label": "市场模型",
             "note": f"{len(sections)} 个模型",
-            "description": "收盘、MA20、模型信号等内容在右侧展开。",
-            "status": _group_status(sections),
+            "description": "技术指标",
+            "status": "loading" if module_loading else _group_status(sections),
+            "loading": module_loading,
             "details": [
                 {
                     "id": section["key"],
@@ -135,7 +152,13 @@ def build_frontend_market_module_payload(*, generated_at: str, market_sections: 
     }
 
 
-def build_frontend_events_module_payload(*, generated_at: str, event_sections: list[EventSectionView]) -> dict[str, Any]:
+def build_frontend_events_module_payload(
+    *,
+    generated_at: str,
+    event_sections: list[EventSectionView],
+    module_loading: bool = False,
+    loading_note: str | None = None,
+) -> dict[str, Any]:
     sections = _build_event_sections_from_views(event_sections)
     return {
         "generated_at": generated_at,
@@ -143,8 +166,9 @@ def build_frontend_events_module_payload(*, generated_at: str, event_sections: l
             "id": "events",
             "label": "事件展望",
             "note": f"{len(sections)} 个窗口",
-            "description": "未来事件按时间窗口切换查看。",
-            "status": _group_status(sections),
+            "description": "未来展望",
+            "status": "loading" if module_loading else _group_status(sections),
+            "loading": module_loading,
             "details": [
                 {
                     "id": section["key"],
@@ -164,6 +188,8 @@ def build_frontend_status_module_payload(
     generated_at: str,
     data_status: list[DataStatusItem],
     coverage_note: str,
+    module_loading: bool = False,
+    loading_note: str | None = None,
 ) -> dict[str, Any]:
     sections = [
         {
@@ -181,8 +207,9 @@ def build_frontend_status_module_payload(
             "id": "status",
             "label": "数据状态",
             "note": f"{len(sections)} 个模块",
-            "description": "所有链路状态集中在一个模块内查看。",
-            "status": _group_status(sections),
+            "description": "状态监控",
+            "status": "loading" if module_loading else _group_status(sections),
+            "loading": module_loading,
             "details": [
                 {
                     "id": section["key"],

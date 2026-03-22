@@ -101,6 +101,7 @@ class FastAPIWebShellTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["module"]["id"], "status")
         self.assertIn("coverage_note", payload)
+        self.assertEqual(payload["coverage_note"], "")
         self.assertIn("details", payload["module"])
 
     def test_frontend_market_module_endpoint_returns_module_payload(self):
@@ -115,10 +116,11 @@ class FastAPIWebShellTests(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("信息终端", response.text)
+        self.assertIn("Infomation", response.text)
         self.assertIn("一级模块导航", response.text)
         self.assertIn("contentStage", response.text)
         self.assertIn("loading-spinner", response.text)
+        self.assertNotIn("正在连接后端数据接口", response.text)
 
     def test_unknown_route_returns_custom_not_found_page(self):
         response = self.client.get("/missing")
@@ -368,17 +370,19 @@ class DashboardServiceCacheTests(unittest.TestCase):
         self.assertIs(first, second)
         self.assertIsNot(first, third)
 
-    def test_live_service_primes_caches_on_startup_before_background_refresh(self):
+    def test_live_service_marks_modules_loading_and_starts_background_refresh(self):
         from src.services.dashboard_service import DashboardService
 
         with (
             patch.object(DashboardService, "prime_caches") as prime_caches,
             patch.object(DashboardService, "_start_background_refresh") as start_background_refresh,
         ):
-            DashboardService(prefer_live_data=True)
+            service = DashboardService(prefer_live_data=True)
 
-        prime_caches.assert_called_once_with()
+        prime_caches.assert_not_called()
         start_background_refresh.assert_called_once_with()
+        self.assertTrue(service.should_serve_loading_module("news"))
+        self.assertTrue(service.should_serve_loading_module("macro"))
 
     def test_prime_caches_warms_all_module_variants(self):
         from src.services.dashboard_service import DashboardService
@@ -447,6 +451,43 @@ class DashboardServiceCacheTests(unittest.TestCase):
                 ]
             ),
         )
+
+    def test_news_view_uses_media_name_and_provider_specific_tag(self):
+        from src.services.dashboard_service import DashboardService
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            enable_background_refresh=False,
+        )
+
+        sections = service._build_news_sections_from_snapshot(
+            SimpleNamespace(
+                domains=[
+                    SimpleNamespace(
+                        category=NewsCategory.TECHNOLOGY,
+                        candidate_count=1,
+                        merged_duplicate_count=0,
+                        dropped_outdated_count=0,
+                        items=[
+                            SimpleNamespace(
+                                title="headline",
+                                source_name="IT之家",
+                                url="https://example.com/news",
+                                published_at="2026-03-22T00:00:00Z",
+                                source_type=SimpleNamespace(value="rss"),
+                                source_tag="realtime",
+                            )
+                        ],
+                    )
+                ]
+            )
+        )
+
+        self.assertEqual(sections[0].items[0].source, "IT之家")
+        self.assertEqual(sections[0].items[0].tag, "live")
 
 
 class NewsNowUpstreamManagerTests(unittest.TestCase):

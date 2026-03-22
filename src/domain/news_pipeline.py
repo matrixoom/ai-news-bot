@@ -56,6 +56,7 @@ class NewsPipelineItem:
     source_weight: int
     corroboration_count: int
     score: int
+    source_tag: str | None = None
     supporting_sources: Tuple[str, ...] = ()
 
 

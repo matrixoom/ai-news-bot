@@ -651,7 +651,7 @@ class FallbackNewsProvider(_FallbackStatusMixin):
     """Fallback wrapper for real-to-sample news ingestion."""
 
     def __init__(self, primary, fallback) -> None:
-        super().__init__("news-live-fallback", "已配置实时 RSS 新闻，并在失败时回退到样例数据。")
+        super().__init__("news-live-fallback", "实时 RSS 新闻")
         self._primary = primary
         self._fallback = fallback
         self._primary_failed = False
@@ -661,14 +661,14 @@ class FallbackNewsProvider(_FallbackStatusMixin):
             return list(self._fallback.fetch_latest(category=category, published_on=published_on, limit=limit))
         try:
             items = list(self._primary.fetch_latest(category=category, published_on=published_on, limit=limit))
-            self._set_state(ProviderAvailability.LIVE, f"已通过 {self._primary.provider_key} 加载实时新闻。")
+            self._set_state(ProviderAvailability.LIVE, f"实时新闻：{self._primary.provider_key}")
             return items
         except Exception as exc:
             self._primary_failed = True
             logger.warning("News provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
-                f"实时新闻数据源失败（{exc}）；当前改为展示样例新闻。",
+                f"实时新闻不可用（{exc}）",
             )
             return list(self._fallback.fetch_latest(category=category, published_on=published_on, limit=limit))
 
@@ -677,7 +677,7 @@ class FallbackSearchProvider(_FallbackStatusMixin):
     """Fallback wrapper for real-to-sample search enrichment."""
 
     def __init__(self, primary, fallback) -> None:
-        super().__init__("search-live-fallback", "已配置实时搜索补充，并在失败时回退到样例数据。")
+        super().__init__("search-live-fallback", "实时搜索补充")
         self._primary = primary
         self._fallback = fallback
         self._primary_failed = False
@@ -687,14 +687,14 @@ class FallbackSearchProvider(_FallbackStatusMixin):
             return list(self._fallback.search(query=query, published_on=published_on, limit=limit))
         try:
             items = list(self._primary.search(query=query, published_on=published_on, limit=limit))
-            self._set_state(ProviderAvailability.LIVE, f"已通过 {self._primary.provider_key} 加载实时搜索补充。")
+            self._set_state(ProviderAvailability.LIVE, f"实时搜索补充：{self._primary.provider_key}")
             return items
         except Exception as exc:
             self._primary_failed = True
             logger.warning("Search provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
-                f"实时搜索补充失败（{exc}）；当前改为展示样例补充结果。",
+                f"实时搜索补充不可用（{exc}）",
             )
             return list(self._fallback.search(query=query, published_on=published_on, limit=limit))
 
@@ -703,7 +703,7 @@ class FallbackMacroProvider(_FallbackStatusMixin):
     """Fallback wrapper for live macro collection with partial sample backfill."""
 
     def __init__(self, primary, fallback) -> None:
-        super().__init__("macro-live-fallback", "已配置实时宏观读数，并在失败时回退到样例数据。")
+        super().__init__("macro-live-fallback", "实时宏观读数")
         self._primary = primary
         self._fallback = fallback
         self._primary_failed = False
@@ -719,20 +719,20 @@ class FallbackMacroProvider(_FallbackStatusMixin):
             logger.warning("Macro provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
-                f"实时宏观数据源失败（{exc}）；当前改为展示样例指标值。",
+                f"实时宏观数据不可用（{exc}）",
             )
             return list(self._fallback.fetch_latest_readings(indicator_codes=requested))
 
         primary_by_code = {item.indicator_code: item for item in primary_items}
         missing_codes = [code for code in requested if code not in primary_by_code]
         if not missing_codes:
-            self._set_state(ProviderAvailability.LIVE, f"已通过 {self._primary.provider_key} 加载实时宏观读数。")
+            self._set_state(ProviderAvailability.LIVE, f"实时宏观读数：{self._primary.provider_key}")
             return primary_items
 
         fallback_items = list(self._fallback.fetch_latest_readings(indicator_codes=missing_codes))
         self._set_state(
             ProviderAvailability.DEGRADED,
-            "实时宏观读数已加载，以下指标使用样例回退：" + ", ".join(missing_codes),
+            "缺少指标：" + ", ".join(missing_codes),
         )
         return [*primary_items, *fallback_items]
 
@@ -741,7 +741,7 @@ class FallbackMarketDataProvider(_FallbackStatusMixin):
     """Fallback wrapper for live market snapshots with partial sample backfill."""
 
     def __init__(self, primary, fallback) -> None:
-        super().__init__("market-live-fallback", "已配置实时市场快照，并在失败时回退到样例数据。")
+        super().__init__("market-live-fallback", "实时市场快照")
         self._primary = primary
         self._fallback = fallback
         self._primary_failed = False
@@ -757,20 +757,20 @@ class FallbackMarketDataProvider(_FallbackStatusMixin):
             logger.warning("Market provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
-                f"实时市场数据源失败（{exc}）；当前改为展示样例指数数据。",
+                f"实时市场数据不可用（{exc}）",
             )
             return list(self._fallback.fetch_index_snapshots(symbols=requested, trade_date=trade_date))
 
         primary_by_symbol = {item.symbol: item for item in primary_items}
         missing_symbols = [symbol for symbol in requested if symbol not in primary_by_symbol]
         if not missing_symbols:
-            self._set_state(ProviderAvailability.LIVE, f"已通过 {self._primary.provider_key} 加载实时市场快照。")
+            self._set_state(ProviderAvailability.LIVE, f"实时市场快照：{self._primary.provider_key}")
             return primary_items
 
         fallback_items = list(self._fallback.fetch_index_snapshots(symbols=missing_symbols, trade_date=trade_date))
         self._set_state(
             ProviderAvailability.DEGRADED,
-            "实时市场快照已加载，以下指数使用样例回退：" + ", ".join(missing_symbols),
+            "缺少指数：" + ", ".join(missing_symbols),
         )
         return [*primary_items, *fallback_items]
 
@@ -779,7 +779,7 @@ class FallbackResearchProvider(_FallbackStatusMixin):
     """Fallback wrapper for live research with sample backfill."""
 
     def __init__(self, primary_factory: Callable[[], Any], fallback) -> None:
-        super().__init__("research-live-fallback", "已配置实时事件研究，并在失败时回退到样例数据。")
+        super().__init__("research-live-fallback", "实时事件研究")
         self._primary_factory = primary_factory
         self._fallback = fallback
         self._primary = None
@@ -798,14 +798,14 @@ class FallbackResearchProvider(_FallbackStatusMixin):
             if self._primary is None:
                 self._primary = self._primary_factory()
             items = list(self._primary.collect_outlook(horizon=horizon, topics=topics, as_of=as_of))
-            self._set_state(ProviderAvailability.LIVE, f"已通过 {self._primary.provider_key} 加载实时事件展望研究。")
+            self._set_state(ProviderAvailability.LIVE, f"实时事件研究：{self._primary.provider_key}")
             return items
         except ProviderConfigurationError as exc:
             self._primary_failed = True
             logger.warning("Research provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
-                f"实时事件研究失败（{exc}）；当前改为展示样例展望条目。",
+                f"实时事件研究不可用（{exc}）",
             )
             return list(self._fallback.collect_outlook(horizon=horizon, topics=topics, as_of=as_of))
         except Exception as exc:
@@ -813,6 +813,6 @@ class FallbackResearchProvider(_FallbackStatusMixin):
             logger.warning("Research provider fallback triggered: %s", exc)
             self._set_state(
                 ProviderAvailability.DEGRADED,
-                f"实时事件研究失败（{exc}）；当前改为展示样例展望条目。",
+                f"实时事件研究不可用（{exc}）",
             )
             return list(self._fallback.collect_outlook(horizon=horizon, topics=topics, as_of=as_of))

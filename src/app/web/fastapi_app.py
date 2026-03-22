@@ -1,13 +1,14 @@
 """FastAPI entrypoint for the separated frontend and backend dashboard."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ...services.dashboard_service import DashboardService
+from ...services.dashboard_service import DashboardService, DataStatusItem
 from .app import build_dashboard_payload, render_dashboard_html, render_error_html
 from .frontend_payload import (
     build_frontend_events_module_payload,
@@ -31,6 +32,17 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
 
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    def _generated_at_now() -> str:
+        return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    def _loading_response(payload: dict[str, object], detail: str) -> JSONResponse:
+        module = payload.get("module")
+        if isinstance(module, dict):
+            module["loading"] = True
+            module["note"] = detail
+        payload["refresh_after_ms"] = 2000
+        return JSONResponse(payload, status_code=202)
 
     @app.get("/healthz")
     def healthcheck() -> dict[str, str]:
@@ -65,6 +77,18 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
     @app.get("/api/frontend/modules/news")
     def frontend_news_module(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
         try:
+            if not refresh and service.should_serve_loading_module("news", news_mode=news_mode):
+                _, detail = service.get_module_bootstrap_state("news", news_mode=news_mode)
+                return _loading_response(
+                    build_frontend_news_module_payload(
+                        generated_at=_generated_at_now(),
+                        news_mode=news_mode or "hybrid",
+                        news_sections=[],
+                        news_status=DataStatusItem("news", "新闻情报", "loading", detail),
+                        module_loading=True,
+                    ),
+                    detail,
+                )
             generated_at, effective_news_mode, news_sections, news_status = service.build_news_module(
                 news_mode=news_mode,
                 force_refresh=refresh,
@@ -86,6 +110,16 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
     @app.get("/api/frontend/modules/macro")
     def frontend_macro_module(refresh: bool = False) -> JSONResponse:
         try:
+            if not refresh and service.should_serve_loading_module("macro"):
+                _, detail = service.get_module_bootstrap_state("macro")
+                return _loading_response(
+                    build_frontend_macro_module_payload(
+                        generated_at=_generated_at_now(),
+                        macro_sections=[],
+                        module_loading=True,
+                    ),
+                    detail,
+                )
             generated_at, macro_sections = service.build_macro_module(force_refresh=refresh)
             return JSONResponse(
                 build_frontend_macro_module_payload(
@@ -102,6 +136,16 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
     @app.get("/api/frontend/modules/market")
     def frontend_market_module(refresh: bool = False) -> JSONResponse:
         try:
+            if not refresh and service.should_serve_loading_module("market"):
+                _, detail = service.get_module_bootstrap_state("market")
+                return _loading_response(
+                    build_frontend_market_module_payload(
+                        generated_at=_generated_at_now(),
+                        market_sections=[],
+                        module_loading=True,
+                    ),
+                    detail,
+                )
             generated_at, market_sections = service.build_market_module(force_refresh=refresh)
             return JSONResponse(
                 build_frontend_market_module_payload(
@@ -118,6 +162,16 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
     @app.get("/api/frontend/modules/events")
     def frontend_events_module(refresh: bool = False) -> JSONResponse:
         try:
+            if not refresh and service.should_serve_loading_module("events"):
+                _, detail = service.get_module_bootstrap_state("events")
+                return _loading_response(
+                    build_frontend_events_module_payload(
+                        generated_at=_generated_at_now(),
+                        event_sections=[],
+                        module_loading=True,
+                    ),
+                    detail,
+                )
             generated_at, event_sections = service.build_events_module(force_refresh=refresh)
             return JSONResponse(
                 build_frontend_events_module_payload(
@@ -134,6 +188,17 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
     @app.get("/api/frontend/modules/status")
     def frontend_status_module(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
         try:
+            if not refresh and service.should_serve_loading_module("status", news_mode=news_mode):
+                _, detail = service.get_module_bootstrap_state("status", news_mode=news_mode)
+                return _loading_response(
+                    build_frontend_status_module_payload(
+                        generated_at=_generated_at_now(),
+                        data_status=[],
+                        coverage_note="",
+                        module_loading=True,
+                    ),
+                    detail,
+                )
             generated_at, data_status, coverage_note = service.build_status_module(
                 news_mode=news_mode,
                 force_refresh=refresh,
