@@ -310,6 +310,7 @@ class AkshareMarketDataProvider:
             ("stock_zh_index_daily", {"symbol": "sz399006"}),
         ),
         "HSTECH": (
+            ("stock_hk_index_daily_sina", {"symbol": "HSTECH"}),
             ("stock_hk_index_daily_em", {"symbol": "HSTECF2L"}),
         ),
     }
@@ -363,11 +364,6 @@ class AkshareMarketDataProvider:
         return ak
 
     def _load_market_frame(self, *, akshare, symbol: str, trade_date: date):
-        if symbol == "HSTECH":
-            frame = self._load_hstech_market_frame(akshare=akshare)
-            if frame is not None:
-                return frame
-
         candidates = self._SYMBOL_CONFIG.get(symbol, ())
         start_date = (trade_date - timedelta(days=90)).strftime("%Y%m%d")
         end_date = trade_date.strftime("%Y%m%d")
@@ -391,33 +387,6 @@ class AkshareMarketDataProvider:
         if last_error is not None:
             raise last_error
         return None
-
-    def _load_hstech_market_frame(self, *, akshare):
-        if not hasattr(akshare, "stock_hk_index_spot_em") or not hasattr(akshare, "stock_hk_index_daily_em"):
-            return None
-
-        spot_frame = self._call_akshare_function(
-            function=getattr(akshare, "stock_hk_index_spot_em"),
-            call_kwargs={},
-        )
-        if spot_frame is None or getattr(spot_frame, "empty", True):
-            return None
-
-        target_code: str | None = None
-        for row in spot_frame.to_dict(orient="records"):
-            name = str(_pick_first(row, ("名称", "name", "Name")) or "").strip()
-            code = str(_pick_first(row, ("代码", "symbol", "Symbol", "code")) or "").strip()
-            if name in {"恒生科技", "恒生科技指数"} or code in {"HSTECH", "HSTECF2L"}:
-                target_code = code or "HSTECF2L"
-                break
-
-        if not target_code:
-            target_code = "HSTECF2L"
-
-        return self._call_akshare_function(
-            function=getattr(akshare, "stock_hk_index_daily_em"),
-            call_kwargs={"symbol": target_code},
-        )
 
     def _call_akshare_function(self, *, function, call_kwargs: dict[str, Any]):
         try:
