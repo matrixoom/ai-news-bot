@@ -592,6 +592,43 @@ function renderEventsTable(items) {
   );
 }
 
+function renderMarketSummaryTable(module, detail) {
+  const rows = (module.details || [])
+    .map((item) => `
+      <div class="terminal-row market-summary-row" style="grid-template-columns:minmax(140px, 1.5fr) repeat(3, minmax(110px, 1fr));">
+        <div class="terminal-cell cell-grow ${item.id === detail.id ? "cell-accent" : ""}">${escapeHtml(item.label)}</div>
+        <div class="terminal-cell cell-mono">${escapeHtml(item.section.close_value)}</div>
+        <div class="terminal-cell cell-mono">${escapeHtml(item.section.ma20_value)}</div>
+        <div class="terminal-cell cell-mono">${escapeHtml(item.section.deviation_pct)}</div>
+      </div>
+    `)
+    .join("");
+
+  return `
+    <article class="info-card market-summary-card">
+      <div class="card-head">
+        <h4>大盘指数汇总</h4>
+        <span class="tab-note">${escapeHtml(`${module.details.length} 个指数`)}</span>
+      </div>
+      <p class="card-meta">收盘点位、M20 均线与乖离率随市场模型刷新自动同步。</p>
+      <div class="table-scroll">
+        <div class="terminal-table compact">
+          <div class="terminal-row terminal-row-header" style="grid-template-columns:minmax(140px, 1.5fr) repeat(3, minmax(110px, 1fr));">
+            <div class="terminal-cell cell-grow">指数</div>
+            <div class="terminal-cell cell-mono">收盘点位</div>
+            <div class="terminal-cell cell-mono">M20</div>
+            <div class="terminal-cell cell-mono">乖离率</div>
+          </div>
+          ${
+            rows
+              || `<div class="terminal-row terminal-row-empty"><div class="terminal-cell">暂无大盘指数汇总数据</div></div>`
+          }
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function renderLoadingCard(message) {
   return `<article class="info-card loading-card"><div class="card-head"><h4>数据加载中</h4>${statusBadge("loading")}</div><div class="loading-card-copy">${loadingSpinner(message || "模块数据正在加载...", false)}</div></article>`;
 }
@@ -619,7 +656,7 @@ function renderModuleContent(module, detail) {
     )}</div>`;
   }
   if (detail.kind === "market") {
-    return renderTable(
+    return `<div class="content-stack">${renderTable(
       [
         { label: "Field" },
         { label: "Value", className: "cell-grow" },
@@ -632,7 +669,7 @@ function renderModuleContent(module, detail) {
         [{ text: "交易日", className: "cell-tight cell-cyan" }, { text: detail.section.trade_date, className: "cell-grow cell-mono" }],
         [{ text: "说明", className: "cell-tight cell-cyan" }, { text: detail.section.explanation, className: "cell-grow cell-muted" }],
       ],
-    );
+    )}${renderMarketSummaryTable(module, detail)}</div>`;
   }
   if (detail.kind === "events") {
     return `<div class="content-stack"><article class="info-card"><div class="card-head"><h4>${escapeHtml(detail.section.title)}</h4>${statusBadge(detail.section.status)}</div><p class="detail-copy">当前窗口收录 ${(detail.section.items || []).length} 条事件。</p></article>${renderEventsTable([detail.section])}</div>`;

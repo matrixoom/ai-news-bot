@@ -858,6 +858,19 @@ li {
   background: #090c11;
 }
 
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table-scroll .terminal-table {
+  min-width: 100%;
+}
+
+.table-scroll .terminal-row {
+  min-width: max-content;
+}
+
 :root[data-theme="light"] .terminal-table {
   background: #f2f6fa;
 }
