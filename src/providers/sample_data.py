@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from ..domain.external_data import (
     MacroIndicatorReading,
+    MarketIndexHistoryPoint,
     MarketIndexSnapshot,
     NewsCategory,
     NewsItem,
@@ -235,14 +236,33 @@ class SampleMacroProvider:
 class SampleMarketDataProvider:
     provider_key = "sample-market"
 
+    def _build_history_points(self, *, trade_date: date, start_value: float, drift: float) -> tuple[MarketIndexHistoryPoint, ...]:
+        points: list[MarketIndexHistoryPoint] = []
+        cursor = trade_date - timedelta(days=210)
+        value = start_value
+        step = 0
+        while cursor < trade_date:
+            if cursor.weekday() < 5:
+                wave = ((step % 6) - 2.5) * drift * 0.2
+                points.append(
+                    MarketIndexHistoryPoint(
+                        trade_date=cursor,
+                        close_price=round(value + wave, 2),
+                    )
+                )
+                value += drift
+                step += 1
+            cursor += timedelta(days=1)
+        return tuple(points)
+
     def fetch_index_snapshots(self, *, symbols, trade_date: date):
         history = {
-            "CSI300": (3590.0, 3588.0, 3592.0, 3595.0, 3597.0, 3600.0, 3602.0, 3605.0, 3604.0, 3606.0, 3608.0, 3610.0, 3611.0, 3613.0, 3615.0, 3616.0, 3618.0, 3620.0, 3621.0),
-            "CSI500": (5470.0, 5472.0, 5475.0, 5478.0, 5480.0, 5482.0, 5485.0, 5484.0, 5486.0, 5488.0, 5490.0, 5492.0, 5494.0, 5495.0, 5498.0, 5500.0, 5502.0, 5505.0, 5507.0),
-            "CSI1000": (6070.0, 6073.0, 6075.0, 6078.0, 6080.0, 6082.0, 6084.0, 6086.0, 6088.0, 6090.0, 6093.0, 6095.0, 6096.0, 6098.0, 6100.0, 6103.0, 6105.0, 6107.0, 6109.0),
-            "SSE": (3050.0, 3052.0, 3051.0, 3053.0, 3054.0, 3056.0, 3058.0, 3057.0, 3059.0, 3060.0, 3062.0, 3064.0, 3065.0, 3067.0, 3068.0, 3070.0, 3072.0, 3073.0, 3075.0),
-            "CHINEXT": (1880.0, 1882.0, 1884.0, 1886.0, 1888.0, 1889.0, 1891.0, 1893.0, 1892.0, 1894.0, 1896.0, 1898.0, 1899.0, 1901.0, 1902.0, 1904.0, 1906.0, 1907.0, 1909.0),
-            "HSTECH": (3810.0, 3814.0, 3818.0, 3822.0, 3825.0, 3829.0, 3833.0, 3838.0, 3840.0, 3844.0, 3849.0, 3852.0, 3855.0, 3858.0, 3862.0, 3865.0, 3868.0, 3871.0, 3874.0),
+            "CSI300": self._build_history_points(trade_date=trade_date, start_value=3520.0, drift=1.7),
+            "CSI500": self._build_history_points(trade_date=trade_date, start_value=5400.0, drift=2.0),
+            "CSI1000": self._build_history_points(trade_date=trade_date, start_value=5980.0, drift=2.4),
+            "SSE": self._build_history_points(trade_date=trade_date, start_value=3010.0, drift=1.0),
+            "CHINEXT": self._build_history_points(trade_date=trade_date, start_value=1830.0, drift=1.2),
+            "HSTECH": self._build_history_points(trade_date=trade_date, start_value=3720.0, drift=2.6),
         }
         current = {
             "CSI300": 3632.0,
@@ -265,7 +285,8 @@ class SampleMarketDataProvider:
                     close_price=current[symbol],
                     currency="HKD" if symbol == "HSTECH" else "CNY",
                     source_url="https://akshare.akfamily.xyz/",
-                    lookback_closes=history[symbol],
+                    lookback_closes=tuple(point.close_price for point in history[symbol][-19:]),
+                    history_points=history[symbol],
                 )
             )
         return snapshots

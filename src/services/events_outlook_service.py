@@ -46,10 +46,14 @@ class EventsOutlookService:
         current_time = self._now_factory()
         effective_as_of = as_of or current_time.date()
         effective_topics = tuple(topics or ("policy", "macro", "meeting"))
-        if self._provider_is_unavailable():
+        provider_not_live = self._provider_is_not_live()
+        if refresh_store:
+            refreshed = self.refresh_store(as_of=effective_as_of, topics=effective_topics)
+            has_stored_records = self._store.has_records()
+            if refreshed == 0 and not has_stored_records and provider_not_live:
+                return self._empty_snapshot(current_time=current_time)
+        elif not self._store.has_records():
             return self._empty_snapshot(current_time=current_time)
-        if refresh_store or not self._store.has_records():
-            self.refresh_store(as_of=effective_as_of, topics=effective_topics)
 
         max_expected_date = effective_as_of + timedelta(days=self._days_for_horizon(EventHorizon.NEXT_180_DAYS))
         stored_findings = self._store.load_future_findings(
@@ -76,7 +80,7 @@ class EventsOutlookService:
                 OutlookWindowView(
                     key=horizon.value,
                     title=self._title_for_horizon(horizon),
-                    status="live" if filtered else "degraded",
+                    status="degraded" if provider_not_live else ("live" if filtered else "degraded"),
                     items=[
                         OutlookEventView(
                             title=finding.title,
@@ -163,13 +167,13 @@ class EventsOutlookService:
         }
         return days[horizon]
 
-    def _provider_is_unavailable(self) -> bool:
+    def _provider_is_not_live(self) -> bool:
         try:
             status = self._research_provider.healthcheck()
         except Exception:
             return False
         availability = getattr(status, "availability", None)
-        return availability == ProviderAvailability.UNAVAILABLE or str(availability) == ProviderAvailability.UNAVAILABLE.value
+        return availability != ProviderAvailability.LIVE and str(availability) != ProviderAvailability.LIVE.value
 
     def _empty_snapshot(self, *, current_time: datetime) -> EventsOutlookSnapshot:
         official_links = list(build_default_outlook_official_links())

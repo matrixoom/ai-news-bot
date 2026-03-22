@@ -111,6 +111,8 @@ class FastAPIWebShellTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["module"]["id"], "market")
         self.assertIn("details", payload["module"])
+        self.assertGreaterEqual(len(payload["module"]["details"]), 1)
+        self.assertIn("chart_points", payload["module"]["details"][0]["section"])
 
     def test_root_renders_named_dashboard_panels(self):
         response = self.client.get("/")
@@ -386,6 +388,8 @@ class DashboardServiceCacheTests(unittest.TestCase):
         start_background_refresh.assert_called_once_with()
         self.assertTrue(service.should_serve_loading_module("news"))
         self.assertTrue(service.should_serve_loading_module("macro"))
+        self.assertFalse(service.should_serve_loading_module("market"))
+        self.assertFalse(service.should_serve_loading_module("events"))
 
     def test_prime_caches_warms_all_module_variants(self):
         from src.services.dashboard_service import DashboardService
@@ -454,6 +458,28 @@ class DashboardServiceCacheTests(unittest.TestCase):
                 ]
             ),
         )
+
+    def test_background_refresh_uses_non_forced_startup_prime(self):
+        from src.services.dashboard_service import DashboardService
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            prefer_live_data=True,
+            enable_background_refresh=False,
+        )
+        service._prime_live_caches_on_startup = True
+
+        with (
+            patch.object(service, "prime_caches") as prime_caches,
+            patch.object(service._refresh_stop_event, "is_set", side_effect=[False, True]),
+            patch.object(service._refresh_stop_event, "wait", return_value=True),
+        ):
+            service._background_refresh_loop()
+
+        prime_caches.assert_called_once_with(force_refresh=False)
 
     def test_news_view_uses_media_name_and_provider_specific_tag(self):
         from src.services.dashboard_service import DashboardService
@@ -608,7 +634,7 @@ class LiveProviderResilienceTests(unittest.TestCase):
             @staticmethod
             def stock_zh_index_daily_em(symbol: str, start_date: str, end_date: str):
                 self.assertEqual(symbol, "sh000300")
-                self.assertEqual(start_date, "20251221")
+                self.assertEqual(start_date, "20250922")
                 self.assertEqual(end_date, "20260321")
                 return pd.DataFrame(
                     [
@@ -629,6 +655,7 @@ class LiveProviderResilienceTests(unittest.TestCase):
 
         self.assertEqual([item.symbol for item in snapshots], ["CSI300"])
         self.assertEqual(snapshots[0].close_price, 4001.0)
+        self.assertEqual(len(snapshots[0].history_points), 2)
 
     def test_market_provider_fetches_hstech_from_sina_daily_source(self):
         provider = AkshareMarketDataProvider()
@@ -653,6 +680,7 @@ class LiveProviderResilienceTests(unittest.TestCase):
         self.assertEqual([item.symbol for item in snapshots], ["HSTECH"])
         self.assertEqual(snapshots[0].close_price, 3932.0)
         self.assertEqual(snapshots[0].currency, "HKD")
+        self.assertEqual(len(snapshots[0].history_points), 2)
 
 
 if __name__ == "__main__":

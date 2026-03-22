@@ -18,6 +18,7 @@ from ..domain.external_data import (
     ConfidenceLevel,
     EventHorizon,
     MacroIndicatorReading,
+    MarketIndexHistoryPoint,
     MarketIndexSnapshot,
     NewsCategory,
     NewsItem,
@@ -340,6 +341,13 @@ class AkshareMarketDataProvider:
             eligible.sort(key=lambda item: item["trade_date"])
             current_record = eligible[-1]
             lookback = tuple(item["close_price"] for item in eligible[-20:-1])
+            history_points = tuple(
+                MarketIndexHistoryPoint(
+                    trade_date=item["trade_date"],
+                    close_price=item["close_price"],
+                )
+                for item in eligible
+            )
             snapshots.append(
                 MarketIndexSnapshot(
                     provider=self.provider_key,
@@ -350,6 +358,7 @@ class AkshareMarketDataProvider:
                     currency="HKD" if symbol == "HSTECH" else "CNY",
                     source_url="https://akshare.akfamily.xyz/data/index/index.html",
                     lookback_closes=lookback,
+                    history_points=history_points,
                 )
             )
         return snapshots
@@ -365,7 +374,7 @@ class AkshareMarketDataProvider:
 
     def _load_market_frame(self, *, akshare, symbol: str, trade_date: date):
         candidates = self._SYMBOL_CONFIG.get(symbol, ())
-        start_date = (trade_date - timedelta(days=90)).strftime("%Y%m%d")
+        start_date = (trade_date - timedelta(days=180)).strftime("%Y%m%d")
         end_date = trade_date.strftime("%Y%m%d")
 
         last_error: Exception | None = None

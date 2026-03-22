@@ -116,6 +116,9 @@ class MarketCard:
     deviation_pct: str = "暂无数据"
     source_label: str = "暂无数据"
     explanation: str = "暂无数据"
+    data_window_label: str = ""
+    history_warning: str = ""
+    chart_points: List[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -203,7 +206,8 @@ class DashboardService:
         self._snapshot_cache: dict[str, _CachedValue] = {}
         self._snapshot_lock = threading.Lock()
         self._module_cache: dict[str, _CachedValue] = {}
-        self._module_lock = threading.Lock()
+        self._module_locks: dict[str, threading.Lock] = {}
+        self._module_lock_registry_lock = threading.Lock()
         self._module_refresh_state: dict[str, str] = {}
         self._module_refresh_detail: dict[str, str] = {}
         self._module_refresh_state_lock = threading.Lock()
@@ -282,8 +286,6 @@ class DashboardService:
     def _build_background_managed_module_keys(self) -> set[str]:
         return {
             "module:macro",
-            "module:market",
-            "module:events",
             f"module:news:{NewsNowSourceMode.HYBRID.value}",
             f"module:news:{NewsNowSourceMode.API.value}",
             f"module:news:{NewsNowSourceMode.UPSTREAM.value}",
@@ -341,7 +343,11 @@ class DashboardService:
 
     def build_market_module(self, *, force_refresh: bool = False) -> tuple[str, List[MarketCard]]:
         """Build one frontend-ready market module."""
-        return self._get_or_build_module("module:market", self._build_market_module_uncached, force_refresh=force_refresh)
+        return self._get_or_build_module(
+            "module:market",
+            lambda: self._build_market_module_uncached(force_refresh=force_refresh),
+            force_refresh=force_refresh,
+        )
 
     def build_events_module(self, *, force_refresh: bool = False) -> tuple[str, List[EventSectionView]]:
         """Build one frontend-ready events module."""
@@ -374,8 +380,8 @@ class DashboardService:
         with ThreadPoolExecutor(max_workers=4) as executor:
             news_future = executor.submit(news_service.build_snapshot)
             macro_future = executor.submit(self._macro_service.build_snapshot)
-            market_future = executor.submit(self._market_service.build_snapshot)
-            events_future = executor.submit(self._events_service.build_snapshot, refresh_store=force_refresh)
+            market_future = executor.submit(self._build_market_service_snapshot, force_refresh=force_refresh)
+            events_future = executor.submit(self._build_events_service_snapshot, force_refresh=force_refresh)
             news_snapshot = news_future.result()
             macro_snapshot = macro_future.result()
             market_snapshot = market_future.result()
@@ -430,14 +436,14 @@ class DashboardService:
         macro_snapshot = self._macro_service.build_snapshot()
         return generated_at, self._build_macro_sections_from_snapshot(macro_snapshot)
 
-    def _build_market_module_uncached(self) -> tuple[str, List[MarketCard]]:
+    def _build_market_module_uncached(self, *, force_refresh: bool = False) -> tuple[str, List[MarketCard]]:
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        market_snapshot = self._market_service.build_snapshot()
+        market_snapshot = self._build_market_service_snapshot(force_refresh=force_refresh)
         return generated_at, self._build_market_sections_from_snapshot(market_snapshot)
 
     def _build_events_module_uncached(self, *, force_refresh: bool = False) -> tuple[str, List[EventSectionView]]:
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        events_snapshot = self._events_service.build_snapshot(refresh_store=force_refresh)
+        events_snapshot = self._build_events_service_snapshot(force_refresh=force_refresh)
         return generated_at, self._build_event_sections_from_snapshot(events_snapshot)
 
     def _build_status_module_uncached(self, *, effective_news_mode: str) -> tuple[str, List[DataStatusItem], str]:
@@ -467,7 +473,7 @@ class DashboardService:
             if cached is not None:
                 return cached
 
-        with self._module_lock:
+        with self._get_module_lock(cache_key):
             if not force_refresh:
                 cached = self._get_cached_module(cache_key)
                 if cached is not None:
@@ -475,6 +481,14 @@ class DashboardService:
             payload = builder()
             self._set_cached_module(cache_key, payload)
             return payload
+
+    def _get_module_lock(self, cache_key: str) -> threading.Lock:
+        with self._module_lock_registry_lock:
+            lock = self._module_locks.get(cache_key)
+            if lock is None:
+                lock = threading.Lock()
+                self._module_locks[cache_key] = lock
+            return lock
 
     def prime_caches(self, *, force_refresh: bool = False) -> None:
         """Warm module caches so the frontend can switch views without live refetches."""
@@ -555,7 +569,7 @@ class DashboardService:
 
     def _background_refresh_loop(self) -> None:
         if self._prime_live_caches_on_startup:
-            self.prime_caches(force_refresh=True)
+            self.prime_caches(force_refresh=False)
         while not self._refresh_stop_event.is_set():
             if self._refresh_stop_event.wait(self._refresh_check_interval_seconds):
                 break
@@ -739,9 +753,36 @@ class DashboardService:
                 deviation_pct=item.deviation_pct,
                 source_label=item.source_label,
                 explanation=item.explanation,
+                data_window_label=getattr(item, "data_window_label", ""),
+                history_warning=getattr(item, "history_warning", ""),
+                chart_points=[
+                    {
+                        "trade_date": point.trade_date,
+                        "close_price": point.close_price,
+                        "ma20_price": point.ma20_price,
+                        "deviation_pct": point.deviation_pct,
+                    }
+                    for point in getattr(item, "chart_points", [])
+                ],
             )
             for item in market_snapshot.items
         ]
+
+    def _build_market_service_snapshot(self, *, force_refresh: bool):
+        try:
+            return self._market_service.build_snapshot(refresh_store=force_refresh)
+        except TypeError as error:
+            if "refresh_store" not in str(error):
+                raise
+            return self._market_service.build_snapshot()
+
+    def _build_events_service_snapshot(self, *, force_refresh: bool):
+        try:
+            return self._events_service.build_snapshot(refresh_store=force_refresh)
+        except TypeError as error:
+            if "refresh_store" not in str(error):
+                raise
+            return self._events_service.build_snapshot()
 
     def _build_event_sections_from_snapshot(self, events_snapshot) -> List[EventSectionView]:
         return [
