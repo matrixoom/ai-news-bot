@@ -437,22 +437,11 @@ function renderTickerFromState() {
   const root = document.getElementById("marketTicker");
   const lines = [];
   const marketModule = viewState.modules.find((module) => module.id === "market");
-  const macroModule = viewState.modules.find((module) => module.id === "macro");
-
   if (marketModule?.loaded && !marketModule.error) {
-    for (const detail of marketModule.details.slice(0, 4)) {
+    for (const detail of marketModule.details.slice(0, 6)) {
       lines.push({
         name: detail.label,
         value: `${detail.section.close_value} / ${signalMap[detail.section.signal] || detail.section.signal}`,
-      });
-    }
-  }
-
-  if (macroModule?.loaded && !macroModule.error) {
-    for (const detail of macroModule.details.slice(0, 2)) {
-      lines.push({
-        name: detail.label,
-        value: detail.section.latest_value,
       });
     }
   }
@@ -603,9 +592,10 @@ function renderEventsTable(items) {
   for (const section of items || []) {
     for (const item of section.items || []) {
       rows.push([
-        { text: section.title, className: "cell-tight cell-cyan" },
+        { text: item.expected_date || section.title, className: "cell-mono" },
+        { text: item.region || "-", className: "cell-tight cell-cyan" },
         { text: item.title, className: "cell-grow" },
-        { text: item.time_window, className: "cell-mono" },
+        { text: item.impact_summary || "-", className: "cell-grow cell-muted" },
         { text: confidenceMap[item.confidence] || item.confidence, className: "cell-tight" },
         { text: item.source, className: "cell-muted" },
       ]);
@@ -613,15 +603,38 @@ function renderEventsTable(items) {
   }
   return renderTable(
     [
-      { label: "Window" },
+      { label: "Date", className: "cell-mono" },
+      { label: "Region" },
       { label: "Event", className: "cell-grow" },
-      { label: "Time", className: "cell-mono" },
+      { label: "Summary", className: "cell-grow" },
       { label: "Confidence" },
       { label: "Source" },
     ],
     rows,
     { emptyText: "暂无事件展望数据" },
   );
+}
+
+function renderOfficialLinkCard(links) {
+  if (!links?.length) {
+    return "";
+  }
+  return `
+    <article class="info-card">
+      <div class="card-head">
+        <h4>Official Links</h4>
+        <span class="tab-note">${escapeHtml(`${links.length} sources`)}</span>
+      </div>
+      <div class="quick-links">
+        ${links
+          .map(
+            (link) =>
+              `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(link.url)}">${escapeHtml(`${link.region} · ${link.label}`)}</a>`,
+          )
+          .join("")}
+      </div>
+    </article>
+  `;
 }
 
 function renderMarketSummaryTable(module, detail) {
@@ -704,7 +717,7 @@ function renderModuleContent(module, detail) {
     )}${renderMarketSummaryTable(module, detail)}</div>`;
   }
   if (detail.kind === "events") {
-    return `<div class="content-stack"><article class="info-card"><div class="card-head"><h4>${escapeHtml(detail.section.title)}</h4>${statusBadge(detail.section.status)}</div><p class="detail-copy">当前窗口收录 ${(detail.section.items || []).length} 条事件。</p></article>${renderEventsTable([detail.section])}</div>`;
+    return `<div class="content-stack"><article class="info-card"><div class="card-head"><h4>${escapeHtml(detail.section.title)}</h4>${statusBadge(detail.section.status)}</div><p class="detail-copy">当前窗口收录 ${(detail.section.items || []).length} 条事件。</p></article>${renderEventsTable([detail.section])}${renderOfficialLinkCard(detail.section.official_links || [])}</div>`;
   }
   if (detail.kind === "status") {
     return renderTable(

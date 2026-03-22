@@ -29,8 +29,8 @@ from ..providers import (
     SampleMacroProvider,
     SampleMarketDataProvider,
     SampleNewsProvider,
-    SampleResearchProvider,
     SampleSearchProvider,
+    UnavailableResearchProvider,
 )
 from .events_outlook_service import EventsOutlookService
 from .macro_monitoring_service import MacroMonitoringService
@@ -123,9 +123,21 @@ class EventItemView:
     """Single upcoming event row."""
 
     title: str
+    region: str
+    expected_date: str
     time_window: str
     confidence: str
+    impact_summary: str
     source: str
+
+
+@dataclass(frozen=True)
+class EventOfficialLinkView:
+    """Official external source link for the events module."""
+
+    region: str
+    label: str
+    url: str
 
 
 @dataclass(frozen=True)
@@ -136,6 +148,7 @@ class EventSectionView:
     title: str
     status: str
     items: List[EventItemView] = field(default_factory=list)
+    official_links: List[EventOfficialLinkView] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -303,7 +316,7 @@ class DashboardService:
         effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
         return self._get_or_build_snapshot(
             effective_news_mode,
-            lambda: self._build_snapshot_uncached(effective_news_mode=effective_news_mode),
+            lambda: self._build_snapshot_uncached(effective_news_mode=effective_news_mode, force_refresh=force_refresh),
             force_refresh=force_refresh,
         )
 
@@ -332,7 +345,11 @@ class DashboardService:
 
     def build_events_module(self, *, force_refresh: bool = False) -> tuple[str, List[EventSectionView]]:
         """Build one frontend-ready events module."""
-        return self._get_or_build_module("module:events", self._build_events_module_uncached, force_refresh=force_refresh)
+        return self._get_or_build_module(
+            "module:events",
+            lambda: self._build_events_module_uncached(force_refresh=force_refresh),
+            force_refresh=force_refresh,
+        )
 
     def build_status_module(
         self,
@@ -349,7 +366,7 @@ class DashboardService:
             force_refresh=force_refresh,
         )
 
-    def _build_snapshot_uncached(self, *, effective_news_mode: str) -> DashboardSnapshot:
+    def _build_snapshot_uncached(self, *, effective_news_mode: str, force_refresh: bool = False) -> DashboardSnapshot:
         """Build one dashboard snapshot without consulting the short-lived cache."""
         news_service, news_provider, search_provider = self._resolve_news_runtime(effective_news_mode)
 
@@ -358,7 +375,7 @@ class DashboardService:
             news_future = executor.submit(news_service.build_snapshot)
             macro_future = executor.submit(self._macro_service.build_snapshot)
             market_future = executor.submit(self._market_service.build_snapshot)
-            events_future = executor.submit(self._events_service.build_snapshot)
+            events_future = executor.submit(self._events_service.build_snapshot, refresh_store=force_refresh)
             news_snapshot = news_future.result()
             macro_snapshot = macro_future.result()
             market_snapshot = market_future.result()
@@ -418,9 +435,9 @@ class DashboardService:
         market_snapshot = self._market_service.build_snapshot()
         return generated_at, self._build_market_sections_from_snapshot(market_snapshot)
 
-    def _build_events_module_uncached(self) -> tuple[str, List[EventSectionView]]:
+    def _build_events_module_uncached(self, *, force_refresh: bool = False) -> tuple[str, List[EventSectionView]]:
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        events_snapshot = self._events_service.build_snapshot()
+        events_snapshot = self._events_service.build_snapshot(refresh_store=force_refresh)
         return generated_at, self._build_event_sections_from_snapshot(events_snapshot)
 
     def _build_status_module_uncached(self, *, effective_news_mode: str) -> tuple[str, List[DataStatusItem], str]:
@@ -735,11 +752,18 @@ class DashboardService:
                 items=[
                     EventItemView(
                         title=item.title,
+                        region=item.region,
+                        expected_date=item.expected_date,
                         time_window=item.time_window,
                         confidence=item.confidence.value,
+                        impact_summary=item.impact_summary,
                         source=item.source,
                     )
                     for item in window.items
+                ],
+                official_links=[
+                    EventOfficialLinkView(region=link.region, label=link.label, url=link.url)
+                    for link in getattr(events_snapshot, "official_links", [])
                 ],
             )
             for window in events_snapshot.windows
@@ -774,8 +798,8 @@ class DashboardService:
 
     def _build_research_provider(self, *, prefer_live_data: bool):
         if not prefer_live_data:
-            return SampleResearchProvider()
-        return FallbackResearchProvider(ArkResearchProvider, SampleResearchProvider())
+            return UnavailableResearchProvider()
+        return FallbackResearchProvider(ArkResearchProvider, UnavailableResearchProvider())
 
     def _build_data_status(self, *, news_provider=None, search_provider=None) -> List[DataStatusItem]:
         if not self._prefer_live_data:
@@ -783,7 +807,7 @@ class DashboardService:
                 DataStatusItem("news", "新闻管道", "sample", "当前展示样例 RSS 与搜索数据，便于本地开发。"),
                 DataStatusItem("macro", "宏观监控", "sample", "当前为样例宏观卡片，因为实时模式未开启。"),
                 DataStatusItem("market", "市场模型", "sample", "当前为样例市场快照，因为实时模式未开启。"),
-                DataStatusItem("events", "事件展望", "sample", "当前为样例事件展望，因为实时模式未开启。"),
+                DataStatusItem("events", "事件展望", "unavailable", "事件展望未接入样例数据，当前为空。"),
             ]
 
         news_status = self._combine_statuses(
