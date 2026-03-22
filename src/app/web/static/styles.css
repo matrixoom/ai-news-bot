@@ -550,6 +550,22 @@ li {
   flex-wrap: wrap;
 }
 
+.module-refresh-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: var(--panel-2);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.module-refresh-button:hover {
+  background: var(--panel-hover);
+}
+
 .detail-tabs {
   display: flex;
   gap: 6px;

@@ -4,6 +4,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import logging
 import os
 import threading
 import time
@@ -35,6 +36,9 @@ from .events_outlook_service import EventsOutlookService
 from .macro_monitoring_service import MacroMonitoringService
 from .market_monitoring_service import MarketMonitoringService
 from .news_pipeline_service import NewsPipelineService
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -160,6 +164,12 @@ class DashboardSnapshot:
     data_status: List[DataStatusItem]
 
 
+@dataclass
+class _CachedValue:
+    payload: object
+    refreshed_at: float
+
+
 class DashboardService:
     """Compose the dashboard from news, macro, market, and events services."""
 
@@ -172,27 +182,42 @@ class DashboardService:
         *,
         prefer_live_data: bool = False,
         news_mode: str = NewsNowSourceMode.HYBRID.value,
+        enable_background_refresh: bool = True,
     ) -> None:
         self._prefer_live_data = prefer_live_data
         self._news_mode = self._resolve_news_mode(news_mode)
-        self._snapshot_ttl_seconds = max(
-            0.0,
-            float(
-                os.getenv(
-                    "DASHBOARD_SNAPSHOT_TTL_SECONDS",
-                    "15" if prefer_live_data else "0",
-                )
-            ),
-        )
-        self._snapshot_cache: dict[str, tuple[float, DashboardSnapshot]] = {}
+        self._snapshot_cache: dict[str, _CachedValue] = {}
         self._snapshot_lock = threading.Lock()
-        self._module_cache: dict[str, tuple[float, object]] = {}
+        self._module_cache: dict[str, _CachedValue] = {}
         self._module_lock = threading.Lock()
+        self._enable_background_refresh = enable_background_refresh
+        self._refresh_intervals_seconds = {
+            "news": float(os.getenv("DASHBOARD_NEWS_REFRESH_SECONDS", "3600")),
+            "macro": float(os.getenv("DASHBOARD_MACRO_REFRESH_SECONDS", "86400")),
+            "market": float(os.getenv("DASHBOARD_MARKET_REFRESH_SECONDS", "900")),
+            "events": float(os.getenv("DASHBOARD_EVENTS_REFRESH_SECONDS", "86400")),
+            "status": float(os.getenv("DASHBOARD_STATUS_REFRESH_SECONDS", "900")),
+            "snapshot": float(os.getenv("DASHBOARD_SNAPSHOT_REFRESH_SECONDS", "900")),
+        }
+        self._refresh_check_interval_seconds = max(
+            5.0,
+            float(os.getenv("DASHBOARD_BACKGROUND_REFRESH_CHECK_SECONDS", "60")),
+        )
+        self._refresh_stop_event = threading.Event()
+        self._refresh_thread: threading.Thread | None = None
         self._news_provider = None
         self._search_provider = None
         self._macro_provider = None
         self._market_provider = None
         self._research_provider = None
+        self._prime_live_caches_on_startup = (
+            self._prefer_live_data
+            and self._enable_background_refresh
+            and news_service is None
+            and macro_service is None
+            and market_service is None
+            and events_service is None
+        )
 
         if news_service is None:
             news_provider, search_provider = self._build_news_providers(
@@ -229,97 +254,62 @@ class DashboardService:
         else:
             self._events_service = events_service
 
-    def build_snapshot(self, *, news_mode: str | None = None) -> DashboardSnapshot:
+        if self._prime_live_caches_on_startup:
+            self.prime_caches()
+
+        if self._prefer_live_data and self._enable_background_refresh:
+            self._start_background_refresh()
+
+    def build_snapshot(self, *, news_mode: str | None = None, force_refresh: bool = False) -> DashboardSnapshot:
         """Return a structured dashboard snapshot composed from service outputs."""
         effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
-        cached = self._get_cached_snapshot(effective_news_mode)
-        if cached is not None:
-            return cached
+        return self._get_or_build_snapshot(
+            effective_news_mode,
+            lambda: self._build_snapshot_uncached(effective_news_mode=effective_news_mode),
+            force_refresh=force_refresh,
+        )
 
-        with self._snapshot_lock:
-            cached = self._get_cached_snapshot(effective_news_mode)
-            if cached is not None:
-                return cached
-            snapshot = self._build_snapshot_uncached(effective_news_mode=effective_news_mode)
-            self._set_cached_snapshot(effective_news_mode, snapshot)
-            return snapshot
-
-    def build_news_module(self, *, news_mode: str | None = None) -> tuple[str, str, List[NewsSectionView], DataStatusItem]:
+    def build_news_module(
+        self,
+        *,
+        news_mode: str | None = None,
+        force_refresh: bool = False,
+    ) -> tuple[str, str, List[NewsSectionView], DataStatusItem]:
         """Build one frontend-ready news module without waiting on unrelated modules."""
         effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
         cache_key = f"module:news:{effective_news_mode}"
-        cached = self._get_cached_module(cache_key)
-        if cached is not None:
-            return cached
+        return self._get_or_build_module(
+            cache_key,
+            lambda: self._build_news_module_uncached(effective_news_mode=effective_news_mode),
+            force_refresh=force_refresh,
+        )
 
-        with self._module_lock:
-            cached = self._get_cached_module(cache_key)
-            if cached is not None:
-                return cached
-            module = self._build_news_module_uncached(effective_news_mode=effective_news_mode)
-            self._set_cached_module(cache_key, module)
-            return module
-
-    def build_macro_module(self) -> tuple[str, List[MetricCard]]:
+    def build_macro_module(self, *, force_refresh: bool = False) -> tuple[str, List[MetricCard]]:
         """Build one frontend-ready macro module."""
-        cache_key = "module:macro"
-        cached = self._get_cached_module(cache_key)
-        if cached is not None:
-            return cached
+        return self._get_or_build_module("module:macro", self._build_macro_module_uncached, force_refresh=force_refresh)
 
-        with self._module_lock:
-            cached = self._get_cached_module(cache_key)
-            if cached is not None:
-                return cached
-            module = self._build_macro_module_uncached()
-            self._set_cached_module(cache_key, module)
-            return module
-
-    def build_market_module(self) -> tuple[str, List[MarketCard]]:
+    def build_market_module(self, *, force_refresh: bool = False) -> tuple[str, List[MarketCard]]:
         """Build one frontend-ready market module."""
-        cache_key = "module:market"
-        cached = self._get_cached_module(cache_key)
-        if cached is not None:
-            return cached
+        return self._get_or_build_module("module:market", self._build_market_module_uncached, force_refresh=force_refresh)
 
-        with self._module_lock:
-            cached = self._get_cached_module(cache_key)
-            if cached is not None:
-                return cached
-            module = self._build_market_module_uncached()
-            self._set_cached_module(cache_key, module)
-            return module
-
-    def build_events_module(self) -> tuple[str, List[EventSectionView]]:
+    def build_events_module(self, *, force_refresh: bool = False) -> tuple[str, List[EventSectionView]]:
         """Build one frontend-ready events module."""
-        cache_key = "module:events"
-        cached = self._get_cached_module(cache_key)
-        if cached is not None:
-            return cached
+        return self._get_or_build_module("module:events", self._build_events_module_uncached, force_refresh=force_refresh)
 
-        with self._module_lock:
-            cached = self._get_cached_module(cache_key)
-            if cached is not None:
-                return cached
-            module = self._build_events_module_uncached()
-            self._set_cached_module(cache_key, module)
-            return module
-
-    def build_status_module(self, *, news_mode: str | None = None) -> tuple[str, List[DataStatusItem], str]:
+    def build_status_module(
+        self,
+        *,
+        news_mode: str | None = None,
+        force_refresh: bool = False,
+    ) -> tuple[str, List[DataStatusItem], str]:
         """Build the lightweight status module used by the shell chrome."""
         effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
         cache_key = f"module:status:{effective_news_mode}"
-        cached = self._get_cached_module(cache_key)
-        if cached is not None:
-            return cached
-
-        with self._module_lock:
-            cached = self._get_cached_module(cache_key)
-            if cached is not None:
-                return cached
-            module = self._build_status_module_uncached(effective_news_mode=effective_news_mode)
-            self._set_cached_module(cache_key, module)
-            return module
+        return self._get_or_build_module(
+            cache_key,
+            lambda: self._build_status_module_uncached(effective_news_mode=effective_news_mode),
+            force_refresh=force_refresh,
+        )
 
     def _build_snapshot_uncached(self, *, effective_news_mode: str) -> DashboardSnapshot:
         """Build one dashboard snapshot without consulting the short-lived cache."""
@@ -401,44 +391,183 @@ class DashboardService:
         data_status = self._build_data_status(news_provider=news_provider, search_provider=search_provider)
         return generated_at, data_status, self._coverage_note(data_status)
 
-    def _get_cached_snapshot(self, news_mode: str) -> DashboardSnapshot | None:
-        if self._snapshot_ttl_seconds <= 0:
-            return None
-        cached = self._snapshot_cache.get(news_mode)
+    def _get_or_build_snapshot(self, cache_key: str, builder, *, force_refresh: bool = False):
+        if not force_refresh:
+            cached = self._get_cached_snapshot(cache_key)
+            if cached is not None:
+                return cached
+
+        with self._snapshot_lock:
+            if not force_refresh:
+                cached = self._get_cached_snapshot(cache_key)
+                if cached is not None:
+                    return cached
+            payload = builder()
+            self._set_cached_snapshot(cache_key, payload)
+            return payload
+
+    def _get_or_build_module(self, cache_key: str, builder, *, force_refresh: bool = False):
+        if not force_refresh:
+            cached = self._get_cached_module(cache_key)
+            if cached is not None:
+                return cached
+
+        with self._module_lock:
+            if not force_refresh:
+                cached = self._get_cached_module(cache_key)
+                if cached is not None:
+                    return cached
+            payload = builder()
+            self._set_cached_module(cache_key, payload)
+            return payload
+
+    def prime_caches(self, *, force_refresh: bool = False) -> None:
+        """Warm module caches so the frontend can switch views without live refetches."""
+        tasks = [
+            (
+                f"module:news:{NewsNowSourceMode.HYBRID.value}",
+                lambda: self.build_news_module(
+                    news_mode=NewsNowSourceMode.HYBRID.value,
+                    force_refresh=force_refresh,
+                ),
+            ),
+            (
+                f"module:news:{NewsNowSourceMode.API.value}",
+                lambda: self.build_news_module(
+                    news_mode=NewsNowSourceMode.API.value,
+                    force_refresh=force_refresh,
+                ),
+            ),
+            (
+                f"module:news:{NewsNowSourceMode.UPSTREAM.value}",
+                lambda: self.build_news_module(
+                    news_mode=NewsNowSourceMode.UPSTREAM.value,
+                    force_refresh=force_refresh,
+                ),
+            ),
+            (
+                f"module:status:{NewsNowSourceMode.HYBRID.value}",
+                lambda: self.build_status_module(
+                    news_mode=NewsNowSourceMode.HYBRID.value,
+                    force_refresh=force_refresh,
+                ),
+            ),
+            (
+                f"module:status:{NewsNowSourceMode.API.value}",
+                lambda: self.build_status_module(
+                    news_mode=NewsNowSourceMode.API.value,
+                    force_refresh=force_refresh,
+                ),
+            ),
+            (
+                f"module:status:{NewsNowSourceMode.UPSTREAM.value}",
+                lambda: self.build_status_module(
+                    news_mode=NewsNowSourceMode.UPSTREAM.value,
+                    force_refresh=force_refresh,
+                ),
+            ),
+            ("module:macro", lambda: self.build_macro_module(force_refresh=force_refresh)),
+            ("module:market", lambda: self.build_market_module(force_refresh=force_refresh)),
+            ("module:events", lambda: self.build_events_module(force_refresh=force_refresh)),
+        ]
+
+        with ThreadPoolExecutor(max_workers=min(4, len(tasks))) as executor:
+            futures = [(cache_key, executor.submit(task)) for cache_key, task in tasks]
+            for cache_key, future in futures:
+                try:
+                    future.result()
+                except Exception as error:
+                    logger.warning("startup cache warm failed for %s: %s", cache_key, error)
+
+    def _start_background_refresh(self) -> None:
+        if self._refresh_thread is not None:
+            return
+        self._refresh_thread = threading.Thread(
+            target=self._background_refresh_loop,
+            name="dashboard-cache-refresh",
+            daemon=True,
+        )
+        self._refresh_thread.start()
+
+    def stop_background_refresh(self) -> None:
+        self._refresh_stop_event.set()
+        if self._refresh_thread is not None:
+            self._refresh_thread.join(timeout=2)
+            self._refresh_thread = None
+
+    def _background_refresh_loop(self) -> None:
+        while not self._refresh_stop_event.is_set():
+            self._refresh_due_caches()
+            self._refresh_stop_event.wait(self._refresh_check_interval_seconds)
+
+    def _refresh_due_caches(self) -> None:
+        news_modes = (
+            NewsNowSourceMode.HYBRID.value,
+            NewsNowSourceMode.API.value,
+            NewsNowSourceMode.UPSTREAM.value,
+        )
+        for mode in news_modes:
+            self._refresh_module_if_due(
+                cache_key=f"module:news:{mode}",
+                interval_key="news",
+                refresher=lambda mode=mode: self.build_news_module(news_mode=mode, force_refresh=True),
+            )
+            self._refresh_module_if_due(
+                cache_key=f"module:status:{mode}",
+                interval_key="status",
+                refresher=lambda mode=mode: self.build_status_module(news_mode=mode, force_refresh=True),
+            )
+
+        self._refresh_module_if_due(
+            cache_key="module:macro",
+            interval_key="macro",
+            refresher=lambda: self.build_macro_module(force_refresh=True),
+        )
+        self._refresh_module_if_due(
+            cache_key="module:market",
+            interval_key="market",
+            refresher=lambda: self.build_market_module(force_refresh=True),
+        )
+        self._refresh_module_if_due(
+            cache_key="module:events",
+            interval_key="events",
+            refresher=lambda: self.build_events_module(force_refresh=True),
+        )
+
+    def _refresh_module_if_due(self, *, cache_key: str, interval_key: str, refresher) -> None:
+        if not self._is_cache_due(self._module_cache.get(cache_key), interval_key):
+            return
+        try:
+            refresher()
+        except Exception as error:
+            logger.warning("background refresh failed for %s: %s", cache_key, error)
+
+    def _is_cache_due(self, cached: _CachedValue | None, interval_key: str) -> bool:
         if cached is None:
-            return None
-        expires_at, snapshot = cached
-        if time.monotonic() >= expires_at:
-            self._snapshot_cache.pop(news_mode, None)
-            return None
-        return snapshot
+            return True
+        interval_seconds = max(0.0, self._refresh_intervals_seconds.get(interval_key, 0.0))
+        if interval_seconds <= 0:
+            return False
+        return (time.monotonic() - cached.refreshed_at) >= interval_seconds
+
+    def _get_cached_snapshot(self, news_mode: str) -> DashboardSnapshot | None:
+        cached = self._snapshot_cache.get(news_mode)
+        return cached.payload if cached is not None else None
 
     def _set_cached_snapshot(self, news_mode: str, snapshot: DashboardSnapshot) -> None:
-        if self._snapshot_ttl_seconds <= 0:
-            return
-        self._snapshot_cache[news_mode] = (
-            time.monotonic() + self._snapshot_ttl_seconds,
-            snapshot,
+        self._snapshot_cache[news_mode] = _CachedValue(
+            payload=snapshot,
+            refreshed_at=time.monotonic(),
         )
 
     def _get_cached_module(self, key: str):
-        if self._snapshot_ttl_seconds <= 0:
-            return None
         cached = self._module_cache.get(key)
-        if cached is None:
-            return None
-        expires_at, payload = cached
-        if time.monotonic() >= expires_at:
-            self._module_cache.pop(key, None)
-            return None
-        return payload
+        return cached.payload if cached is not None else None
 
     def _set_cached_module(self, key: str, payload: object) -> None:
-        if self._snapshot_ttl_seconds <= 0:
-            return
-        self._module_cache[key] = (
-            time.monotonic() + self._snapshot_ttl_seconds,
-            payload,
+        self._module_cache[key] = _CachedValue(
+            payload=payload,
+            refreshed_at=time.monotonic(),
         )
 
     def _resolve_news_runtime(self, effective_news_mode: str):

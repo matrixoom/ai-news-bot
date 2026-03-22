@@ -165,7 +165,7 @@ function setRequestedNewsMode(mode) {
   window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
 }
 
-function buildModuleApiUrl(moduleId) {
+function buildModuleApiUrl(moduleId, { forceRefresh = false } = {}) {
   const params = new URLSearchParams();
   if (moduleId === "news" || moduleId === "status") {
     const newsMode = getRequestedNewsMode();
@@ -173,15 +173,21 @@ function buildModuleApiUrl(moduleId) {
       params.set("news_mode", newsMode);
     }
   }
+  if (forceRefresh) {
+    params.set("refresh", "1");
+  }
   const query = params.toString();
   return `/api/frontend/modules/${moduleId}${query ? `?${query}` : ""}`;
 }
 
-function buildLegacyApiUrl() {
+function buildLegacyApiUrl({ forceRefresh = false } = {}) {
   const params = new URLSearchParams();
   const newsMode = getRequestedNewsMode();
   if (newsMode !== "hybrid") {
     params.set("news_mode", newsMode);
+  }
+  if (forceRefresh) {
+    params.set("refresh", "1");
   }
   const query = params.toString();
   return `/api/frontend/dashboard${query ? `?${query}` : ""}`;
@@ -322,9 +328,12 @@ function modulePayloadFromLegacy(payload, moduleId) {
   };
 }
 
-async function fetchLegacyDashboard() {
+async function fetchLegacyDashboard({ forceRefresh = false } = {}) {
+  if (forceRefresh) {
+    legacyDashboardPromise = null;
+  }
   if (!legacyDashboardPromise) {
-    legacyDashboardPromise = fetch(buildLegacyApiUrl(), {
+    legacyDashboardPromise = fetch(buildLegacyApiUrl({ forceRefresh }), {
       headers: { Accept: "application/json" },
     }).then(async (response) => {
       if (!response.ok) {
@@ -662,7 +671,10 @@ function bindContentActions() {
     });
   });
   document.querySelectorAll("[data-retry-module]").forEach((node) => {
-    node.addEventListener("click", () => loadModule(node.getAttribute("data-retry-module"), { resetContent: true }));
+    node.addEventListener("click", () => loadModule(node.getAttribute("data-retry-module"), { resetContent: true, forceRefresh: true }));
+  });
+  document.querySelectorAll("[data-refresh-module]").forEach((node) => {
+    node.addEventListener("click", () => loadModule(node.getAttribute("data-refresh-module"), { forceRefresh: true }));
   });
 }
 
@@ -671,7 +683,7 @@ function renderModulePanel() {
   const detail = currentDetail(module);
   document.getElementById("activeModuleEyebrow").textContent = module.label;
   document.getElementById("activeModuleDescription").textContent = module.description;
-  document.getElementById("moduleStatus").innerHTML = `${statusBadge(module.loading ? "loading" : module.error ? "unavailable" : module.status)}<span class="tab-note">${escapeHtml(module.note || "")}</span>`;
+  document.getElementById("moduleStatus").innerHTML = `${statusBadge(module.loading ? "loading" : module.error ? "unavailable" : module.status)}<span class="tab-note">${escapeHtml(module.note || "")}</span><button type="button" class="module-refresh-button" data-refresh-module="${escapeHtml(module.id)}">手动刷新</button>`;
 
   if (module.loading && !module.loaded) {
     document.getElementById("activeModuleTitle").textContent = `${module.label} / 加载中`;
@@ -797,7 +809,7 @@ function applyModulePayload(payload) {
   applyRoute(route.moduleId, route.detailId);
 }
 
-async function loadModule(moduleId, { resetContent = false } = {}) {
+async function loadModule(moduleId, { resetContent = false, forceRefresh = false } = {}) {
   const requestId = (viewState.pendingRequestByModule[moduleId] || 0) + 1;
   viewState.pendingRequestByModule[moduleId] = requestId;
   setModuleLoading(moduleId, resetContent);
@@ -816,7 +828,7 @@ async function loadModule(moduleId, { resetContent = false } = {}) {
   try {
     let payload;
     try {
-      const response = await fetch(buildModuleApiUrl(moduleId), {
+      const response = await fetch(buildModuleApiUrl(moduleId, { forceRefresh }), {
         headers: { Accept: "application/json" },
       });
       if (!response.ok) {
@@ -824,7 +836,7 @@ async function loadModule(moduleId, { resetContent = false } = {}) {
       }
       payload = await response.json();
     } catch (moduleError) {
-      const legacyPayload = await fetchLegacyDashboard();
+      const legacyPayload = await fetchLegacyDashboard({ forceRefresh });
       payload = modulePayloadFromLegacy(legacyPayload, moduleId);
       if (moduleId === "news" && !payload.upstream_service_status && legacyPayload.upstream_service_status) {
         payload.upstream_service_status = legacyPayload.upstream_service_status;
