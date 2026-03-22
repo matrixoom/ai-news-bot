@@ -71,6 +71,7 @@ class NewsItemView:
     url: str
     published_at: str
     tag: str
+    summary: str = ""
 
 
 @dataclass(frozen=True)
@@ -671,6 +672,7 @@ class DashboardService:
                         url=item.url,
                         published_at=item.published_at or "暂无数据",
                         tag=self._news_tag_label(item.source_tag or item.source_type.value),
+                        summary=(item.summary or "").strip(),
                     )
                     for item in digest.items
                 ],

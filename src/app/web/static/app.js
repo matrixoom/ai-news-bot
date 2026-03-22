@@ -133,6 +133,14 @@ function normalizeNewsUrl(value) {
   return text.startsWith("http://") || text.startsWith("https://") ? text : "";
 }
 
+function normalizeSummaryText(value, maxChars = 100) {
+  const compact = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return "";
+  }
+  return Array.from(compact).slice(0, maxChars).join("");
+}
+
 function loadingSpinner(label = "加载中", inline = false) {
   return `<span class="loading-spinner ${inline ? "loading-spinner-inline" : ""}" aria-hidden="true"></span><span>${escapeHtml(label)}</span>`;
 }
@@ -515,9 +523,10 @@ function renderTable(headers, rows, options = {}) {
   if (options.compact) {
     classes.push("compact");
   }
+  const rowStyle = options.columnsTemplate ? ` style="grid-template-columns:${escapeHtml(options.columnsTemplate)};"` : "";
   return `
     <div class="${classes.join(" ")}">
-      <div class="terminal-row terminal-row-header">
+      <div class="terminal-row terminal-row-header"${rowStyle}>
         ${headers.map((header) => `<div class="terminal-cell ${header.className || ""}">${escapeHtml(header.label)}</div>`).join("")}
       </div>
       ${
@@ -525,7 +534,7 @@ function renderTable(headers, rows, options = {}) {
           ? rows
               .map(
                 (row) => `
-                  <div class="terminal-row">
+                  <div class="terminal-row"${rowStyle}>
                     ${row
                       .map((cell) => `<div class="terminal-cell ${cell.className || ""}">${cell.html ?? escapeHtml(cell.text ?? "")}</div>`)
                       .join("")}
@@ -542,27 +551,46 @@ function renderTable(headers, rows, options = {}) {
 function renderNewsTable(section) {
   const rows = (section.items || []).map((item) => {
     const url = normalizeNewsUrl(item.url);
+    const summary = normalizeSummaryText(item.summary);
     const title = url
       ? `<a class="headline-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>`
       : `<span class="headline-link disabled">${escapeHtml(item.title)}</span>`;
+    const metaParts = [];
+    if (item.source) {
+      metaParts.push(`<span class="news-title-meta-item">${escapeHtml(item.source)}</span>`);
+    }
+    if (item.published_at) {
+      metaParts.push(`<span class="news-title-meta-item cell-mono">${escapeHtml(item.published_at)}</span>`);
+    }
+    if (item.tag) {
+      metaParts.push(`<span class="news-title-meta-item news-title-meta-tag">${escapeHtml(String(item.tag).toUpperCase())}</span>`);
+    }
+    const titleCell = `
+      <div class="news-title-cell">
+        ${title}
+        ${metaParts.length ? `<div class="news-title-meta">${metaParts.join('<span class="news-title-meta-separator">/</span>')}</div>` : ""}
+      </div>
+    `;
+    const summaryCell = summary
+      ? `<span class="news-summary-text" title="${escapeHtml(summary)}">${escapeHtml(summary)}</span>`
+      : `<span class="news-summary-empty">-</span>`;
     return [
-      { text: String(item.rank), className: "cell-mono cell-tight" },
-      { html: title, className: "cell-grow" },
-      { text: item.source, className: "cell-muted" },
-      { text: item.published_at, className: "cell-mono" },
-      { text: String(item.tag || "").toUpperCase(), className: "cell-tag" },
+      { text: String(item.rank), className: "cell-mono cell-rank" },
+      { html: titleCell, className: "cell-grow" },
+      { html: summaryCell, className: "cell-summary" },
     ];
   });
   return renderTable(
     [
-      { label: "排名", className: "cell-mono cell-tight" },
-      { label: "Headline", className: "cell-grow" },
-      { label: "Source" },
-      { label: "Time", className: "cell-mono" },
-      { label: "Tag" },
+      { label: "Rank", className: "cell-mono cell-rank" },
+      { label: "Title", className: "cell-grow" },
+      { label: "Summary", className: "cell-summary" },
     ],
     rows,
-    { emptyText: "暂无新闻内容" },
+    {
+      emptyText: "暂无新闻内容",
+      columnsTemplate: "56px minmax(360px, 1.8fr) minmax(320px, 1.2fr)",
+    },
   );
 }
 
@@ -639,7 +667,7 @@ function renderErrorCard(message, moduleId) {
 
 function renderModuleContent(module, detail) {
   if (detail.kind === "news") {
-    return `<div class="content-stack"><article class="info-card"><div class="card-head"><h4>${escapeHtml(detail.section.title)}</h4>${statusBadge(detail.section.status)}</div><p class="detail-copy">${escapeHtml(detail.section.description)}</p></article>${renderNewsTable(detail.section)}</div>`;
+    return `<div class="content-stack"><article class="info-card"><div class="card-head"><h4>${escapeHtml(detail.section.title)}</h4>${statusBadge(detail.section.status)}</div><p class="detail-copy">${escapeHtml(detail.section.description)}</p></article><div class="table-scroll">${renderNewsTable(detail.section)}</div></div>`;
   }
   if (detail.kind === "macro") {
     return `<div class="content-stack">${renderMacroCard(detail.section)}${renderTable(

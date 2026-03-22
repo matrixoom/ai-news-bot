@@ -138,6 +138,7 @@ class FrontendPayloadTests(unittest.TestCase):
                 url=f"https://example.com/{index}",
                 published_at="2026-03-21T08:00:00Z",
                 tag="rss",
+                summary=f"Summary {index}",
             )
             for index in range(12)
         ]
@@ -183,6 +184,7 @@ class FrontendPayloadTests(unittest.TestCase):
         self.assertEqual(payload["news_mode"], "hybrid")
         self.assertEqual(payload["news_sections"][0]["item_count"], 12)
         self.assertEqual(len(payload["news_sections"][0]["items"]), 12)
+        self.assertEqual(payload["news_sections"][0]["items"][0]["summary"], "Summary 0")
 
 
 class DashboardServiceCacheTests(unittest.TestCase):
