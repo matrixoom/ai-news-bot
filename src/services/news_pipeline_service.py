@@ -130,6 +130,7 @@ class NewsPipelineService:
             source_weight=config.source_weight_for(source_name, NewsSourceType.RSS),
             corroboration_count=1,
             score=0,
+            source_tag=item.source_tag or NewsSourceType.RSS.value,
             supporting_sources=(source_name,),
         )
 
@@ -155,6 +156,7 @@ class NewsPipelineService:
             source_weight=config.source_weight_for(source_name, NewsSourceType.SEARCH),
             corroboration_count=1,
             score=0,
+            source_tag=item.source_tag or NewsSourceType.SEARCH.value,
             supporting_sources=(source_name,),
         )
 
@@ -199,6 +201,7 @@ class NewsPipelineService:
                     source_weight=primary.source_weight,
                     corroboration_count=corroboration_count,
                     score=score,
+                    source_tag=primary.source_tag,
                     supporting_sources=supporting_sources,
                 )
             )

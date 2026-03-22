@@ -49,6 +49,7 @@ class NewsItem:
     url: str
     published_at: str
     summary: str | None = None
+    source_tag: str | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,7 @@ class SearchResultItem:
     snippet: str
     original_url: str
     published_at: str | None = None
+    source_tag: str | None = None
 
 
 @dataclass(frozen=True)

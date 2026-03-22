@@ -106,7 +106,7 @@ class MarketMonitoringService:
         if state == FishbowlState.BREAKOUT:
             return f"价格显著高于 MA20（{deviation_pct:+.1f}%），处于明显突破状态。"
         if state == FishbowlState.CONSTRUCTIVE:
-            return f"价格维持在 MA20 上方（{deviation_pct:+.1f}%），鱼缸状态保持偏强。"
+            return f"价格维持在 MA20 上方（{deviation_pct:+.1f}%），鱼盆状态保持偏强。"
         if state == FishbowlState.NEUTRAL:
-            return f"价格小幅低于 MA20（{deviation_pct:+.1f}%），接近鱼缸边界。"
-        return f"价格明显低于 MA20（{deviation_pct:+.1f}%），鱼缸模型显示压力较大。"
+            return f"价格小幅低于 MA20（{deviation_pct:+.1f}%），接近鱼盆边界。"
+        return f"价格明显低于 MA20（{deviation_pct:+.1f}%），鱼盆模型显示压力较大。"

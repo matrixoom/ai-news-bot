@@ -190,6 +190,9 @@ class DashboardService:
         self._snapshot_lock = threading.Lock()
         self._module_cache: dict[str, _CachedValue] = {}
         self._module_lock = threading.Lock()
+        self._module_refresh_state: dict[str, str] = {}
+        self._module_refresh_detail: dict[str, str] = {}
+        self._module_refresh_state_lock = threading.Lock()
         self._enable_background_refresh = enable_background_refresh
         self._refresh_intervals_seconds = {
             "news": float(os.getenv("DASHBOARD_NEWS_REFRESH_SECONDS", "3600")),
@@ -218,6 +221,11 @@ class DashboardService:
             and market_service is None
             and events_service is None
         )
+        self._background_managed_module_keys = self._build_background_managed_module_keys()
+        if self._prime_live_caches_on_startup:
+            for cache_key in self._background_managed_module_keys:
+                self._module_refresh_state[cache_key] = "pending"
+                self._module_refresh_detail[cache_key] = "后台已启动，正在异步拉取最新数据。"
 
         if news_service is None:
             news_provider, search_provider = self._build_news_providers(
@@ -254,11 +262,40 @@ class DashboardService:
         else:
             self._events_service = events_service
 
-        if self._prime_live_caches_on_startup:
-            self.prime_caches()
-
         if self._prefer_live_data and self._enable_background_refresh:
             self._start_background_refresh()
+
+    def _build_background_managed_module_keys(self) -> set[str]:
+        return {
+            "module:macro",
+            "module:market",
+            "module:events",
+            f"module:news:{NewsNowSourceMode.HYBRID.value}",
+            f"module:news:{NewsNowSourceMode.API.value}",
+            f"module:news:{NewsNowSourceMode.UPSTREAM.value}",
+            f"module:status:{NewsNowSourceMode.HYBRID.value}",
+            f"module:status:{NewsNowSourceMode.API.value}",
+            f"module:status:{NewsNowSourceMode.UPSTREAM.value}",
+        }
+
+    def _module_cache_key(self, module_id: str, *, news_mode: str | None = None) -> str:
+        if module_id in {"news", "status"}:
+            effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
+            return f"module:{module_id}:{effective_news_mode}"
+        return f"module:{module_id}"
+
+    def get_module_bootstrap_state(self, module_id: str, *, news_mode: str | None = None) -> tuple[str, str]:
+        cache_key = self._module_cache_key(module_id, news_mode=news_mode)
+        if self._get_cached_module(cache_key) is not None:
+            return "ready", ""
+        with self._module_refresh_state_lock:
+            state = self._module_refresh_state.get(cache_key, "idle")
+            detail = self._module_refresh_detail.get(cache_key, "")
+        return state, detail
+
+    def should_serve_loading_module(self, module_id: str, *, news_mode: str | None = None) -> bool:
+        state, _ = self.get_module_bootstrap_state(module_id, news_mode=news_mode)
+        return state in {"pending", "refreshing", "error"}
 
     def build_snapshot(self, *, news_mode: str | None = None, force_refresh: bool = False) -> DashboardSnapshot:
         """Return a structured dashboard snapshot composed from service outputs."""
@@ -472,7 +509,10 @@ class DashboardService:
         ]
 
         with ThreadPoolExecutor(max_workers=min(4, len(tasks))) as executor:
-            futures = [(cache_key, executor.submit(task)) for cache_key, task in tasks]
+            futures = [
+                (cache_key, executor.submit(self._run_module_refresh_task, cache_key=cache_key, refresher=task))
+                for cache_key, task in tasks
+            ]
             for cache_key, future in futures:
                 try:
                     future.result()
@@ -496,9 +536,12 @@ class DashboardService:
             self._refresh_thread = None
 
     def _background_refresh_loop(self) -> None:
+        if self._prime_live_caches_on_startup:
+            self.prime_caches(force_refresh=True)
         while not self._refresh_stop_event.is_set():
+            if self._refresh_stop_event.wait(self._refresh_check_interval_seconds):
+                break
             self._refresh_due_caches()
-            self._refresh_stop_event.wait(self._refresh_check_interval_seconds)
 
     def _refresh_due_caches(self) -> None:
         news_modes = (
@@ -538,7 +581,7 @@ class DashboardService:
         if not self._is_cache_due(self._module_cache.get(cache_key), interval_key):
             return
         try:
-            refresher()
+            self._run_module_refresh_task(cache_key=cache_key, refresher=refresher)
         except Exception as error:
             logger.warning("background refresh failed for %s: %s", cache_key, error)
 
@@ -549,6 +592,26 @@ class DashboardService:
         if interval_seconds <= 0:
             return False
         return (time.monotonic() - cached.refreshed_at) >= interval_seconds
+
+    def _run_module_refresh_task(self, *, cache_key: str, refresher) -> None:
+        self._set_module_refresh_state(cache_key, "refreshing", "后台正在拉取最新数据。")
+        try:
+            refresher()
+        except Exception as error:
+            if self._get_cached_module(cache_key) is None:
+                self._set_module_refresh_state(
+                    cache_key,
+                    "error",
+                    f"后台拉取失败，稍后自动重试。{error}",
+                )
+            raise
+        else:
+            self._set_module_refresh_state(cache_key, "ready", "")
+
+    def _set_module_refresh_state(self, cache_key: str, state: str, detail: str) -> None:
+        with self._module_refresh_state_lock:
+            self._module_refresh_state[cache_key] = state
+            self._module_refresh_detail[cache_key] = detail
 
     def _get_cached_snapshot(self, news_mode: str) -> DashboardSnapshot | None:
         cached = self._snapshot_cache.get(news_mode)
@@ -607,13 +670,24 @@ class DashboardService:
                         source=item.source_name,
                         url=item.url,
                         published_at=item.published_at or "暂无数据",
-                        tag=item.source_type.value,
+                        tag=self._news_tag_label(item.source_tag or item.source_type.value),
                     )
                     for item in digest.items
                 ],
             )
             for digest in news_snapshot.domains
         ]
+
+    def _news_tag_label(self, value: str) -> str:
+        tag_map = {
+            "rss": "rss",
+            "search": "search",
+            "realtime": "live",
+            "hottest": "hot",
+            "none": "feed",
+        }
+        normalized = str(value or "").strip().lower()
+        return tag_map.get(normalized, normalized or "feed")
 
     def _build_macro_sections_from_snapshot(self, macro_snapshot) -> List[MetricCard]:
         return [
@@ -745,26 +819,15 @@ class DashboardService:
         return DataStatusItem(key, label, final_status, detail)
 
     def _coverage_note(self, data_status: List[DataStatusItem]) -> str:
-        if not self._prefer_live_data:
-            return "当前仪表盘运行在样例数据模式，便于稳定的本地开发与测试。"
-        if any(item.status == ProviderAvailability.DEGRADED.value for item in data_status):
-            return "当前仪表盘运行在实时优先模式，对缺少密钥、依赖或不可达数据源自动回退到样例数据。"
-        return "当前仪表盘运行在实时优先模式，最近一次抓取中所有已配置数据源都返回正常状态。"
+        _ = data_status
+        return ""
 
     def _summary_highlights(self, data_status: List[DataStatusItem]) -> List[str]:
         base = [
             "新闻、宏观、市场和事件模块都由独立服务聚合，而不是硬编码区块。",
             "首页与推送报告共用同一份仪表盘快照。",
         ]
-        if not self._prefer_live_data:
-            base.append("运行入口可切换到实时优先数据源，测试仍使用确定性的样例数据。")
-            return base
-
-        degraded = [item.label for item in data_status if item.status == ProviderAvailability.DEGRADED.value]
-        if degraded:
-            base.append("以下模块已启用自动样例回退：" + "、".join(degraded) + "。")
-        else:
-            base.append("最近一次刷新中，所有数据源分组均返回正常状态。")
+        _ = data_status
         return base
 
     def _resolve_news_mode(self, value: str | NewsNowSourceMode) -> str:

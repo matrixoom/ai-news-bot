@@ -72,3 +72,64 @@ NEWSNOW_ACTIVE_SOURCE_SPECS: Tuple[NewsNowSource, ...] = (
     NewsNowSource("zaobao", "world", "realtime", 1800000),
     NewsNowSource("zhihu", "china", "hottest", 600000),
 )
+
+
+NEWSNOW_SOURCE_DISPLAY_NAMES: dict[str, str] = {
+    "36kr-quick": "36氪",
+    "36kr-renqi": "36氪",
+    "baidu": "百度热搜",
+    "bilibili-hot-search": "哔哩哔哩热搜",
+    "bilibili-hot-video": "哔哩哔哩热门视频",
+    "bilibili-ranking": "哔哩哔哩排行榜",
+    "cankaoxiaoxi": "参考消息",
+    "chongbuluo-hot": "虫部落热搜",
+    "chongbuluo-latest": "虫部落",
+    "cls-depth": "财联社",
+    "cls-hot": "财联社",
+    "cls-telegraph": "财联社电报",
+    "coolapk": "酷安",
+    "douban": "豆瓣",
+    "douyin": "抖音",
+    "fastbull-express": "FastBull 快讯",
+    "fastbull-news": "FastBull",
+    "freebuf": "FreeBuf",
+    "gelonghui": "格隆汇",
+    "github-trending-today": "GitHub Trending",
+    "hackernews": "Hacker News",
+    "hupu": "虎扑",
+    "ifeng": "凤凰网",
+    "iqiyi-hot-ranklist": "爱奇艺热榜",
+    "ithome": "IT之家",
+    "jin10": "金十数据",
+    "juejin": "稀土掘金",
+    "kaopu": "靠谱新闻",
+    "kuaishou": "快手",
+    "mktnews-flash": "市场资讯快讯",
+    "nowcoder": "牛客",
+    "pcbeta-windows11": "PCBeta",
+    "producthunt": "Product Hunt",
+    "qqvideo-tv-hotsearch": "腾讯视频热搜",
+    "solidot": "Solidot",
+    "sputniknewscn": "Sputnik 中文网",
+    "sspai": "少数派",
+    "steam": "Steam",
+    "tencent-hot": "腾讯热搜",
+    "thepaper": "澎湃新闻",
+    "tieba": "百度贴吧",
+    "toutiao": "今日头条",
+    "v2ex-share": "V2EX",
+    "wallstreetcn-hot": "华尔街见闻",
+    "wallstreetcn-news": "华尔街见闻",
+    "wallstreetcn-quick": "华尔街见闻快讯",
+    "weibo": "微博热搜",
+    "xueqiu-hotstock": "雪球热股",
+    "zaobao": "联合早报",
+    "zhihu": "知乎热榜",
+}
+
+
+def display_name_for_source(source_id: str) -> str:
+    """Return a user-facing media name for one NewsNow source id."""
+    if source_id in NEWSNOW_SOURCE_DISPLAY_NAMES:
+        return NEWSNOW_SOURCE_DISPLAY_NAMES[source_id]
+    return source_id.replace("-", " ").replace("_", " ").title()

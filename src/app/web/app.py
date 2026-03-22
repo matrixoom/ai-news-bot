@@ -140,6 +140,8 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> bytes:
         for item in payload["data_status"]
     )
 
+    coverage_note = summary["coverage_note"]
+    coverage_note_html = f"<p>{escape(coverage_note)}</p>" if coverage_note else ""
     highlights = "".join(f"<li>{escape(item)}</li>" for item in summary["highlights"])
 
     html = f"""<!doctype html>
@@ -288,7 +290,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> bytes:
         <h1>{escape(summary['title'])}</h1>
         <p>{escape(summary['subtitle'])}</p>
         <p class="muted">更新时间 {escape(summary['as_of_label'])}</p>
-        <p>{escape(summary['coverage_note'])}</p>
+        {coverage_note_html}
         <ul class="highlights">{highlights}</ul>
         <div class="footer-links">
           <a href="/api/dashboard">结构化 API</a>
