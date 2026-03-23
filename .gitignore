@@ -55,3 +55,5 @@ local/
 .pip-cache/
 .uv-cache/
 .uv-python/
+.tmp-push-tests/
+.data/push_center.json

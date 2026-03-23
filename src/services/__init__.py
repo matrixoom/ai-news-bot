@@ -11,6 +11,7 @@ __all__ = [
     "MarketMonitoringService",
     "NewsPipelineService",
     "PushReportService",
+    "PushCenterService",
 ]
 
 _MODULE_BY_EXPORT = {
@@ -22,6 +23,7 @@ _MODULE_BY_EXPORT = {
     "MarketMonitoringService": ".market_monitoring_service",
     "NewsPipelineService": ".news_pipeline_service",
     "PushReportService": ".push_report_service",
+    "PushCenterService": ".push_center_service",
 }
 
 
