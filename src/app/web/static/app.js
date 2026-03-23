@@ -61,6 +61,12 @@ const MODULE_CONFIGS = [
     description: "状态监控",
     loadingMessage: "数据状态正在后台加载...",
   },
+  {
+    id: "push",
+    label: "推送中心",
+    description: "邮件配置、日报预览与定时任务",
+    loadingMessage: "推送中心正在加载...",
+  },
 ];
 
 const viewState = {
@@ -325,6 +331,40 @@ function modulePayloadFromLegacy(payload, moduleId) {
           note: `${(section.items || []).length} 条`,
           section,
         })),
+      },
+    };
+  }
+
+  if (moduleId === "push") {
+    return {
+      generated_at: payload.generated_at,
+      module: {
+        id: "push",
+        label: "推送中心",
+        note: "需要前端模块接口",
+        description: "请使用 /api/frontend/modules/push 获取完整推送配置。",
+        status: "compatible",
+        details: [
+          {
+            id: "workspace",
+            label: "推送配置",
+            kind: "push",
+            note: "frontend-api",
+            section: {
+              channel_type_options: [],
+              source_module_options: [],
+              style_options: [],
+              config: {},
+              preview: {
+                ok: false,
+                subject: "推送预览不可用",
+                html_body: "",
+                text_body: "",
+              },
+              recent_runs: [],
+            },
+          },
+        ],
       },
     };
   }
@@ -916,6 +956,286 @@ function renderMarketSummaryTable(module, detail) {
   `;
 }
 
+function splitCsvValues(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function renderPushSourceOptions(options, selectedIds, inputName) {
+  return (options || [])
+    .map((option) => `
+      <label class="push-check ${option.enabled ? "" : "disabled"}">
+        <input
+          type="checkbox"
+          ${option.enabled ? "" : "disabled"}
+          ${selectedIds.includes(option.id) ? "checked" : ""}
+          ${inputName ? `${inputName}="${escapeHtml(option.id)}"` : ""}
+        />
+        <span class="push-check-copy">
+          <strong>${escapeHtml(option.label)}</strong>
+          <span>${escapeHtml(option.description || "")}</span>
+        </span>
+      </label>
+    `)
+    .join("");
+}
+
+function renderPushScheduleRow(schedule, index, moduleOptions) {
+  const moduleIds = Array.isArray(schedule?.module_ids) ? schedule.module_ids : ["market"];
+  const safeIndex = Number(index) || 0;
+  return `
+    <div class="push-schedule-row" data-push-schedule-row="${safeIndex}">
+      <div class="push-schedule-head">
+        <h5>任务 ${safeIndex + 1}</h5>
+        <button type="button" class="retry-button push-inline-button" data-remove-schedule="${safeIndex}">移除</button>
+      </div>
+      <div class="push-form-grid">
+        <label class="push-field">
+          <span>任务名称</span>
+          <input type="text" data-schedule-name value="${escapeHtml(schedule?.name || `推送任务 ${safeIndex + 1}`)}" />
+        </label>
+        <label class="push-field">
+          <span>执行时间</span>
+          <input type="text" data-schedule-times value="${escapeHtml((schedule?.times || ["08:00"]).join(", "))}" placeholder="08:00, 12:00, 17:00" />
+        </label>
+        <label class="push-field">
+          <span>时区</span>
+          <input type="text" data-schedule-timezone value="${escapeHtml(schedule?.timezone || "Asia/Shanghai")}" />
+        </label>
+        <label class="push-toggle">
+          <input type="checkbox" data-schedule-enabled ${schedule?.enabled === false ? "" : "checked"} />
+          <span>启用任务</span>
+        </label>
+      </div>
+      <div class="push-check-grid">
+        ${renderPushSourceOptions(moduleOptions, moduleIds, "data-schedule-module")}
+      </div>
+    </div>
+  `;
+}
+
+function renderPushRecentRuns(runs) {
+  const rows = (runs || []).map((item) => ([
+    { text: item.executed_at || "-", className: "cell-mono" },
+    { text: item.trigger || "-", className: "cell-tight" },
+    { text: item.job_name || "-", className: "cell-grow" },
+    { text: item.status || "-", className: "cell-tight" },
+    { text: item.detail || "-", className: "cell-grow cell-muted" },
+  ]));
+  return renderTable(
+    [
+      { label: "Executed", className: "cell-mono" },
+      { label: "Trigger" },
+      { label: "Job", className: "cell-grow" },
+      { label: "Status" },
+      { label: "Detail", className: "cell-grow" },
+    ],
+    rows,
+    { emptyText: "暂无推送记录", tableClass: "push-run-table" },
+  );
+}
+
+function renderPushWorkspace(detail) {
+  const section = detail.section || {};
+  const config = section.config || {};
+  const email = config.email || {};
+  const preview = section.preview || {};
+  const moduleOptions = section.source_module_options || [];
+  const styleOptions = section.style_options || [];
+  const schedules = Array.isArray(config.schedules) && config.schedules.length
+    ? config.schedules
+    : [{ name: "市场日报", times: ["08:00", "12:00", "17:00"], timezone: "Asia/Shanghai", enabled: true, module_ids: config.selected_module_ids || ["market"] }];
+  const flash = section.flash || null;
+  return `
+    <div class="content-stack">
+      <div class="grid-two push-grid">
+        <article class="info-card push-control-card">
+          <div class="card-head">
+            <h4>推送配置</h4>
+            ${statusBadge(preview.ok === false ? "degraded" : "compatible")}
+          </div>
+          <p class="detail-copy">先配置投递方式与 SMTP 参数，再选择可用于日报的模块与样式。</p>
+          ${flash ? `<div class="push-flash push-flash-${escapeHtml(flash.status || "compatible")}">${escapeHtml(flash.message || "")}</div>` : ""}
+          <div class="push-form-grid">
+            <label class="push-field">
+              <span>推送方式</span>
+              <select data-push-channel-type>
+                ${(section.channel_type_options || []).map((option) => `
+                  <option value="${escapeHtml(option.id)}" ${option.id === "email" ? "selected" : ""} ${option.enabled ? "" : "disabled"}>
+                    ${escapeHtml(option.label)}${option.enabled ? "" : " (即将支持)"}
+                  </option>
+                `).join("")}
+              </select>
+            </label>
+            <label class="push-field">
+              <span>日报样式</span>
+              <select data-push-style>
+                ${styleOptions.map((option) => `
+                  <option value="${escapeHtml(option.id)}" ${config.report_style === option.id ? "selected" : ""}>
+                    ${escapeHtml(option.label)}${option.recommended ? " (推荐)" : ""}
+                  </option>
+                `).join("")}
+              </select>
+            </label>
+          </div>
+          <div class="push-check-grid">
+            ${renderPushSourceOptions(moduleOptions, config.selected_module_ids || ["market"], "data-push-module")}
+          </div>
+          <div class="push-form-grid">
+            <label class="push-field">
+              <span>SMTP 服务器</span>
+              <input type="text" data-push-email-field="smtp_server" value="${escapeHtml(email.smtp_server || "")}" placeholder="smtp.gmail.com" />
+            </label>
+            <label class="push-field">
+              <span>端口</span>
+              <input type="number" data-push-email-field="smtp_port" value="${escapeHtml(email.smtp_port || 587)}" />
+            </label>
+            <label class="push-field">
+              <span>用户名</span>
+              <input type="text" data-push-email-field="username" value="${escapeHtml(email.username || "")}" placeholder="bot@example.com" />
+            </label>
+            <label class="push-field">
+              <span>密码 / App Password</span>
+              <input type="password" data-push-email-field="password" value="${escapeHtml(email.password || "")}" placeholder="SMTP 密码" />
+            </label>
+            <label class="push-field">
+              <span>发件人</span>
+              <input type="text" data-push-email-field="from_address" value="${escapeHtml(email.from_address || "")}" placeholder="bot@example.com" />
+            </label>
+            <label class="push-field">
+              <span>收件人</span>
+              <input type="text" data-push-email-field="to_addresses" value="${escapeHtml(email.to_addresses || "")}" placeholder="a@example.com, b@example.com" />
+            </label>
+          </div>
+          <label class="push-toggle">
+            <input type="checkbox" data-push-email-field="use_tls" ${email.use_tls === false ? "" : "checked"} />
+            <span>启用 STARTTLS</span>
+          </label>
+          <div class="push-action-row">
+            <button type="button" class="module-refresh-button" data-push-action="save">保存配置</button>
+            <button type="button" class="module-refresh-button" data-push-action="preview">刷新预览</button>
+            <button type="button" class="retry-button" data-push-action="send">立即推送</button>
+          </div>
+        </article>
+
+        <article class="info-card push-preview-card">
+          <div class="card-head">
+            <h4>日报预览</h4>
+            <span class="tab-note">${escapeHtml(preview.style || config.report_style || "newspaper")}</span>
+          </div>
+          <div class="detail-grid">
+            ${detailItem("Subject", preview.subject || "推送预览不可用")}
+            ${detailItem("Modules", (preview.selected_module_ids || config.selected_module_ids || []).join(", ") || "market")}
+            ${detailItem("Generated", preview.generated_at || "-")}
+          </div>
+          ${preview.ok === false && preview.error ? `<p class="market-warning">${escapeHtml(preview.error)}</p>` : ""}
+          <iframe id="pushPreviewFrame" class="push-preview-frame" title="Push preview"></iframe>
+        </article>
+      </div>
+
+      <article class="info-card push-control-card">
+        <div class="card-head">
+          <h4>定时任务</h4>
+          <button type="button" class="module-refresh-button" data-add-schedule>新增任务</button>
+        </div>
+        <p class="detail-copy">可以为不同模块分别配置不同推送时间。目前默认已预置 08:00 / 12:00 / 17:00。</p>
+        <div id="pushScheduleList" class="content-stack">
+          ${schedules.map((schedule, index) => renderPushScheduleRow(schedule, index, moduleOptions)).join("")}
+        </div>
+      </article>
+
+      <article class="info-card">
+        <div class="card-head">
+          <h4>最近执行</h4>
+          <span class="tab-note">${escapeHtml(String((section.recent_runs || []).length))} records</span>
+        </div>
+        <div class="table-scroll">${renderPushRecentRuns(section.recent_runs || [])}</div>
+      </article>
+    </div>
+  `;
+}
+
+function currentPushDetail() {
+  const module = viewState.modules.find((item) => item.id === "push");
+  if (!module) {
+    return null;
+  }
+  return module.details.find((detail) => detail.kind === "push") || module.details[0] || null;
+}
+
+function updatePushSection(nextSection) {
+  const detail = currentPushDetail();
+  if (!detail) {
+    return;
+  }
+  detail.section = {
+    ...(detail.section || {}),
+    ...(nextSection || {}),
+  };
+}
+
+function renderPushPreviewFrame(preview) {
+  const frame = document.getElementById("pushPreviewFrame");
+  if (!frame) {
+    return;
+  }
+  const fallback = `<!DOCTYPE html><html><body style="font-family:Segoe UI,sans-serif;padding:24px;color:#555;">${escapeHtml(preview?.error || "暂无预览")}</body></html>`;
+  frame.srcdoc = preview?.ok === false ? fallback : (preview?.html_body || fallback);
+}
+
+function collectPushDraft() {
+  const detail = currentPushDetail();
+  const section = detail?.section || {};
+  const selectedModuleIds = Array.from(document.querySelectorAll("[data-push-module]:checked"))
+    .map((node) => node.getAttribute("data-push-module"))
+    .filter(Boolean);
+  const schedules = Array.from(document.querySelectorAll("[data-push-schedule-row]")).map((row, index) => ({
+    id: row.getAttribute("data-push-schedule-row") || `schedule-${index + 1}`,
+    name: row.querySelector("[data-schedule-name]")?.value || `推送任务 ${index + 1}`,
+    enabled: Boolean(row.querySelector("[data-schedule-enabled]")?.checked),
+    timezone: row.querySelector("[data-schedule-timezone]")?.value || "Asia/Shanghai",
+    times: splitCsvValues(row.querySelector("[data-schedule-times]")?.value || ""),
+    module_ids: Array.from(row.querySelectorAll("[data-schedule-module]:checked"))
+      .map((node) => node.getAttribute("data-schedule-module"))
+      .filter(Boolean),
+    channel_types: ["email"],
+  }));
+  return {
+    ...(section.config || {}),
+    selected_module_ids: selectedModuleIds.length ? selectedModuleIds : ["market"],
+    report_style: document.querySelector("[data-push-style]")?.value || "newspaper",
+    email: {
+      enabled: true,
+      smtp_server: document.querySelector("[data-push-email-field='smtp_server']")?.value || "",
+      smtp_port: Number(document.querySelector("[data-push-email-field='smtp_port']")?.value || 587),
+      username: document.querySelector("[data-push-email-field='username']")?.value || "",
+      password: document.querySelector("[data-push-email-field='password']")?.value || "",
+      from_address: document.querySelector("[data-push-email-field='from_address']")?.value || "",
+      to_addresses: document.querySelector("[data-push-email-field='to_addresses']")?.value || "",
+      use_tls: Boolean(document.querySelector("[data-push-email-field='use_tls']")?.checked),
+    },
+    schedules,
+  };
+}
+
+async function requestPushApi(path, payload, method = "POST") {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ config: payload }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || `HTTP ${response.status}`);
+  }
+  return data;
+}
+
 function renderLoadingCard(message) {
   return `<article class="info-card loading-card"><div class="card-head"><h4>数据加载中</h4>${statusBadge("loading")}</div><div class="loading-card-copy">${loadingSpinner(message || "模块数据正在加载...", false)}</div></article>`;
 }
@@ -968,6 +1288,9 @@ function renderModuleContent(module, detail) {
   }
   if (detail.kind === "events") {
     return `<div class="content-stack"><article class="info-card"><div class="card-head"><h4>${escapeHtml(detail.section.title)}</h4>${statusBadge(detail.section.status)}</div><p class="detail-copy">当前窗口收录 ${(detail.section.items || []).length} 条事件。</p></article>${renderEventsTable([detail.section])}${renderOfficialLinkCard(detail.section.official_links || [])}</div>`;
+  }
+  if (detail.kind === "push") {
+    return renderPushWorkspace(detail);
   }
   if (detail.kind === "status") {
     return renderTable(
@@ -1029,6 +1352,96 @@ function bindContentActions() {
       renderModulePanel();
     });
   });
+  document.querySelectorAll("[data-add-schedule]").forEach((node) => {
+    node.addEventListener("click", () => {
+      const detail = currentPushDetail();
+      const section = detail?.section || {};
+      const moduleOptions = section.source_module_options || [];
+      const root = document.getElementById("pushScheduleList");
+      if (!root) {
+        return;
+      }
+      const nextIndex = root.querySelectorAll("[data-push-schedule-row]").length;
+      root.insertAdjacentHTML(
+        "beforeend",
+        renderPushScheduleRow(
+          {
+            name: `推送任务 ${nextIndex + 1}`,
+            times: ["08:00"],
+            timezone: "Asia/Shanghai",
+            enabled: true,
+            module_ids: ["market"],
+          },
+          nextIndex,
+          moduleOptions,
+        ),
+      );
+      const newRow = root.lastElementChild;
+      newRow?.querySelectorAll("[data-remove-schedule]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const row = button.closest("[data-push-schedule-row]");
+          if (row) {
+            row.remove();
+          }
+        });
+      });
+    });
+  });
+  document.querySelectorAll("[data-remove-schedule]").forEach((node) => {
+    node.addEventListener("click", () => {
+      const row = node.closest("[data-push-schedule-row]");
+      if (row) {
+        row.remove();
+      }
+    });
+  });
+  document.querySelectorAll("[data-push-action]").forEach((node) => {
+    node.addEventListener("click", async () => {
+      const action = node.getAttribute("data-push-action");
+      const draft = collectPushDraft();
+      updatePushSection({
+        config: draft,
+        flash: { status: "compatible", message: action === "send" ? "正在发送..." : "正在处理..." },
+      });
+      renderModulePanel();
+      try {
+        if (action === "save") {
+          const payload = await requestPushApi("/api/push/config", draft, "PUT");
+          applyModulePayload(payload);
+          updatePushSection({ flash: { status: "compatible", message: "配置已保存。" } });
+          renderModulePanel();
+          return;
+        }
+        if (action === "preview") {
+          const payload = await requestPushApi("/api/push/preview", draft, "POST");
+          updatePushSection({
+            config: payload.config,
+            preview: payload.preview,
+            flash: { status: "compatible", message: "预览已刷新。" },
+          });
+          renderModulePanel();
+          return;
+        }
+        const payload = await requestPushApi("/api/push/trigger", draft, "POST");
+        updatePushSection({
+          config: draft,
+          preview: payload.preview,
+          recent_runs: payload.recent_runs || [],
+          flash: {
+            status: payload.ok ? "compatible" : "degraded",
+            message: payload.result?.detail || (payload.ok ? "推送完成。" : "推送失败。"),
+          },
+        });
+        renderModulePanel();
+      } catch (error) {
+        updatePushSection({
+          config: draft,
+          flash: { status: "degraded", message: error.message || "请求失败" },
+        });
+        renderModulePanel();
+      }
+    });
+  });
 }
 
 function renderModulePanel() {
@@ -1077,6 +1490,9 @@ function renderModulePanel() {
   bindContentActions();
   if (detail.kind === "market") {
     renderMarketTrendChart(detail.section, getActiveMarketChartRange(detail.id, detail.section));
+  }
+  if (detail.kind === "push") {
+    renderPushPreviewFrame(detail.section?.preview);
   }
 }
 

@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ...services.dashboard_service import DashboardService, DataStatusItem
+from ...services.push_center_service import PushCenterService
 from .app import build_dashboard_payload, render_dashboard_html, render_error_html
 from .frontend_payload import (
     build_frontend_events_module_payload,
@@ -20,9 +21,16 @@ from .frontend_payload import (
 )
 
 
-def create_fastapi_app(dashboard_service: DashboardService | None = None) -> FastAPI:
+def create_fastapi_app(
+    dashboard_service: DashboardService | None = None,
+    push_center_service: PushCenterService | None = None,
+) -> FastAPI:
     """Create the FastAPI app used by the development web server."""
     service = dashboard_service or DashboardService()
+    push_service = push_center_service or PushCenterService(
+        dashboard_service=service,
+        enable_scheduler=True,
+    )
     app = FastAPI(
         title="Finance And Policy Intelligence Dashboard",
         docs_url=None,
@@ -51,6 +59,7 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
     @app.on_event("shutdown")
     def shutdown_background_refresh() -> None:
         service.stop_background_refresh()
+        push_service.stop_scheduler()
 
     @app.get("/api/dashboard")
     def dashboard_payload(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
@@ -214,6 +223,47 @@ def create_fastapi_app(dashboard_service: DashboardService | None = None) -> Fas
             return JSONResponse(
                 {"error": "frontend_status_module_unavailable"},
                 status_code=503,
+            )
+
+    @app.get("/api/frontend/modules/push")
+    def frontend_push_module() -> JSONResponse:
+        try:
+            return JSONResponse(push_service.build_module_payload())
+        except Exception:
+            return JSONResponse(
+                {"error": "frontend_push_module_unavailable"},
+                status_code=503,
+            )
+
+    @app.put("/api/push/config")
+    def update_push_config(payload: dict | None = None) -> JSONResponse:
+        try:
+            return JSONResponse(push_service.update_config(payload))
+        except Exception:
+            return JSONResponse(
+                {"error": "push_config_update_failed"},
+                status_code=400,
+            )
+
+    @app.post("/api/push/preview")
+    def preview_push(payload: dict | None = None) -> JSONResponse:
+        try:
+            return JSONResponse(push_service.build_preview_response(payload))
+        except Exception:
+            return JSONResponse(
+                {"error": "push_preview_failed"},
+                status_code=400,
+            )
+
+    @app.post("/api/push/trigger")
+    def trigger_push(payload: dict | None = None) -> JSONResponse:
+        try:
+            response = push_service.trigger_push(payload)
+            return JSONResponse(response, status_code=200 if response.get("ok") else 502)
+        except Exception:
+            return JSONResponse(
+                {"error": "push_trigger_failed"},
+                status_code=400,
             )
 
     @app.get("/", response_class=FileResponse)

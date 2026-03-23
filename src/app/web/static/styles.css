@@ -1097,6 +1097,142 @@ li {
   opacity: 0.7;
 }
 
+.push-grid {
+  align-items: start;
+}
+
+.push-control-card,
+.push-preview-card {
+  display: grid;
+  gap: 12px;
+}
+
+.push-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.push-field {
+  display: grid;
+  gap: 6px;
+}
+
+.push-field span {
+  color: var(--accent-2);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.push-field input,
+.push-field select {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-3);
+  color: var(--ink);
+  padding: 0 10px;
+}
+
+.push-check-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.push-check {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-3);
+}
+
+.push-check.disabled {
+  opacity: 0.58;
+}
+
+.push-check-copy {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.push-check-copy strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+}
+
+.push-toggle {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.push-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.push-preview-frame {
+  width: 100%;
+  min-height: 720px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: #fffdf7;
+}
+
+.push-schedule-row {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-3);
+}
+
+.push-schedule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.push-schedule-head h5 {
+  margin: 0;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+}
+
+.push-inline-button {
+  min-height: 28px;
+  padding: 0 10px;
+}
+
+.push-flash {
+  padding: 9px 10px;
+  border-radius: 2px;
+  font-size: 0.78rem;
+  border: 1px solid var(--line);
+}
+
+.push-flash-compatible {
+  color: var(--accent-2);
+  background: rgba(49, 184, 196, 0.12);
+}
+
+.push-flash-degraded {
+  color: var(--warn);
+  background: rgba(246, 163, 19, 0.12);
+}
+
 .reveal {
   opacity: 1;
   transform: translateY(0);

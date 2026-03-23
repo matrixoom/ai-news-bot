@@ -1,314 +1,327 @@
 """
-Email notification module using Gmail SMTP
+Email notification module using configurable SMTP settings.
 """
-import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from __future__ import annotations
+
 from datetime import datetime
+import ipaddress
+import os
+import socket
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Optional
+
 from ..logger import setup_logger
 
 
 logger = setup_logger(__name__)
+BENCHMARK_TEST_NET = ipaddress.ip_network("198.18.0.0/15")
 
 
 class EmailNotifier:
-    """Send email notifications with AI news digest using Gmail SMTP"""
+    """Send email notifications with configurable SMTP transport."""
 
     def __init__(
         self,
         gmail_address: Optional[str] = None,
         gmail_app_password: Optional[str] = None,
         email_to: Optional[str] = None,
+        *,
+        smtp_server: Optional[str] = None,
+        smtp_port: Optional[int] = None,
+        smtp_use_tls: Optional[bool] = None,
+        smtp_use_ssl: Optional[bool] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        from_address: Optional[str] = None,
     ):
         """
-        Initialize EmailNotifier with Gmail SMTP.
+        Initialize EmailNotifier.
 
-        Args:
-            gmail_address: Your Gmail address
-            gmail_app_password: App Password from Google Account settings
-              (NOT your regular Gmail password - see README for setup instructions)
-            email_to: Recipient email address
-
-        All parameters default to environment variables if not provided.
+        Backward compatibility:
+        - `gmail_address` maps to the SMTP username by default
+        - `gmail_app_password` maps to the SMTP password by default
+        - when no SMTP server is given, Gmail defaults are kept
         """
-        self.gmail_address = gmail_address or os.getenv("GMAIL_ADDRESS")
-        self.gmail_app_password = gmail_app_password or os.getenv("GMAIL_APP_PASSWORD")
+        env_username = os.getenv("SMTP_USERNAME") or os.getenv("GMAIL_ADDRESS")
+        env_password = os.getenv("SMTP_PASSWORD") or os.getenv("GMAIL_APP_PASSWORD")
+        env_from = os.getenv("SMTP_FROM_ADDRESS") or os.getenv("GMAIL_ADDRESS")
+
+        self.smtp_server = smtp_server or os.getenv("SMTP_SERVER") or "smtp.gmail.com"
+        self.smtp_port = int(smtp_port or os.getenv("SMTP_PORT") or 587)
+        self.smtp_use_tls = (
+            bool(smtp_use_tls)
+            if smtp_use_tls is not None
+            else os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        self.smtp_use_ssl = (
+            bool(smtp_use_ssl)
+            if smtp_use_ssl is not None
+            else os.getenv("SMTP_USE_SSL", "false").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        self.username = username or gmail_address or env_username
+        self.password = password or gmail_app_password or env_password
+        self.from_address = from_address or self.username or env_from
         self.email_to = email_to or os.getenv("EMAIL_TO")
+        self.timeout_seconds = float(os.getenv("SMTP_TIMEOUT_SECONDS", "20"))
+        self.last_error = ""
 
-        # Gmail SMTP settings
-        self.smtp_server = "smtp.gmail.com"
-        self.smtp_port = 587
-
-        if not all([self.gmail_address, self.gmail_app_password, self.email_to]):
+        if not all([self.smtp_server, self.smtp_port, self.from_address, self.email_to]):
             logger.warning(
-                "Gmail notifier not fully configured. "
-                "Required: GMAIL_ADDRESS, GMAIL_APP_PASSWORD, EMAIL_TO"
+                "Email notifier not fully configured. "
+                "Required: SMTP server, sender, and recipient."
             )
         else:
-            logger.info(f"EmailNotifier initialized with Gmail SMTP (from: {self.gmail_address})")
+            logger.info(
+                "EmailNotifier initialized (server=%s, from=%s)",
+                self.smtp_server,
+                self.from_address,
+            )
 
-    def send(self, content: str, subject: Optional[str] = None, language: str = "en") -> bool:
+    def send(
+        self,
+        content: str,
+        subject: Optional[str] = None,
+        language: str = "en",
+        *,
+        html_content: Optional[str] = None,
+    ) -> bool:
         """
-        Send email notification with news digest.
+        Send an email notification.
 
         Args:
-            content: Email body content (news digest)
+            content: Plain text body
             subject: Email subject. If None, uses default with current date
-            language: Language code to include in subject (e.g., 'en', 'zh', 'ja')
-
-        Returns:
-            True if email sent successfully, False otherwise
+            language: Language code to include in subject
+            html_content: Optional pre-rendered HTML body
         """
-        # Create default subject if not provided
         if subject is None:
             today = datetime.now().strftime("%Y-%m-%d")
             lang_suffix = f" [{language.upper()}]" if language != "en" else ""
             subject = f"AI News Digest - {today}{lang_suffix}"
 
-        if not all([self.gmail_address, self.gmail_app_password, self.email_to]):
-            logger.error("Gmail notifier is not fully configured. Skipping email send.")
+        recipients = [item.strip() for item in str(self.email_to or "").split(",") if item.strip()]
+        if not all([self.smtp_server, self.from_address, recipients]):
+            logger.error("Email notifier is not fully configured. Skipping email send.")
+            self.last_error = "email_config_incomplete"
+            return False
+        endpoint_error = self._diagnose_endpoint()
+        if endpoint_error:
+            logger.error("SMTP endpoint diagnosis failed: %s", endpoint_error)
+            self.last_error = endpoint_error
             return False
 
         try:
-            # Create HTML email content
-            html_content = self._create_html_email(content, subject)
+            rendered_html = html_content or self._create_html_email(content, subject)
 
-            # Create message
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = self.gmail_address
-            msg["To"] = self.email_to
+            msg["From"] = self.from_address
+            msg["To"] = ", ".join(recipients)
 
-            # Attach plain text and HTML versions
-            part1 = MIMEText(content, "plain", "utf-8")
-            part2 = MIMEText(html_content, "html", "utf-8")
-            msg.attach(part1)
-            msg.attach(part2)
+            msg.attach(MIMEText(content, "plain", "utf-8"))
+            msg.attach(MIMEText(rendered_html, "html", "utf-8"))
 
-            logger.info(f"Sending email via Gmail SMTP to {self.email_to}")
+            logger.info("Sending email via SMTP to %s", msg["To"])
 
-            # Connect and send
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.gmail_address, self.gmail_app_password)
-                server.sendmail(self.gmail_address, self.email_to, msg.as_string())
+            self._send_message(msg, recipients)
 
-            logger.info("Email sent successfully via Gmail SMTP")
+            logger.info("Email sent successfully via SMTP")
+            self.last_error = ""
             return True
 
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error(
-                f"Gmail authentication failed: {str(e)}. "
-                "Make sure you're using an App Password, not your regular Gmail password. "
-                "See README for setup instructions."
+        except smtplib.SMTPAuthenticationError as error:
+            logger.error("SMTP authentication failed: %s", error)
+            self.last_error = f"smtp_auth_failed: {error}"
+            return False
+        except Exception as error:
+            logger.error("Failed to send email via SMTP: %s", error, exc_info=True)
+            self.last_error = str(error)
+            return False
+
+    def _send_message(self, msg: MIMEMultipart, recipients: list[str]) -> None:
+        errors: list[Exception] = []
+        candidates = self._connection_candidates()
+        for index, candidate in enumerate(candidates):
+            try:
+                with self._open_connection(candidate) as server:
+                    self._prepare_connection(server, candidate)
+                    server.sendmail(self.from_address, recipients, msg.as_string())
+                return
+            except smtplib.SMTPServerDisconnected as error:
+                errors.append(error)
+                if index + 1 < len(candidates):
+                    logger.warning(
+                        "SMTP disconnected during %s connection to %s:%s, retrying alternate mode.",
+                        candidate["label"],
+                        self.smtp_server,
+                        candidate["port"],
+                    )
+                    continue
+                raise
+            except Exception as error:
+                errors.append(error)
+                raise
+        if errors:
+            raise errors[-1]
+
+    def _connection_candidates(self) -> list[dict[str, object]]:
+        candidates = [
+            {
+                "use_ssl": self.smtp_use_ssl,
+                "use_tls": self.smtp_use_tls and not self.smtp_use_ssl,
+                "port": self.smtp_port,
+                "label": "SSL" if self.smtp_use_ssl else ("STARTTLS" if self.smtp_use_tls else "plain"),
+            }
+        ]
+        host = str(self.smtp_server or "").lower()
+        should_try_qq_ssl_fallback = (
+            not self.smtp_use_ssl
+            and self.smtp_use_tls
+            and ("smtp.qq.com" in host or "exmail.qq.com" in host)
+            and self.smtp_port in {465, 587}
+        )
+        if should_try_qq_ssl_fallback:
+            candidates.append(
+                {
+                    "use_ssl": True,
+                    "use_tls": False,
+                    "port": 465,
+                    "label": "SSL fallback",
+                }
             )
-            return False
-        except Exception as e:
-            logger.error(f"Failed to send email via Gmail: {str(e)}", exc_info=True)
-            return False
+        return candidates
+
+    def _open_connection(self, candidate: dict[str, object]):
+        port = int(candidate["port"])
+        if candidate["use_ssl"]:
+            return smtplib.SMTP_SSL(self.smtp_server, port, timeout=self.timeout_seconds)
+        return smtplib.SMTP(self.smtp_server, port, timeout=self.timeout_seconds)
+
+    def _prepare_connection(self, server, candidate: dict[str, object]) -> None:
+        server.ehlo()
+        if candidate["use_tls"]:
+            server.starttls()
+            server.ehlo()
+        if self.username and self.password:
+            server.login(self.username, self.password)
+
+    def _diagnose_endpoint(self) -> str:
+        host = str(self.smtp_server or "").strip()
+        if not host:
+            return "smtp_server_missing"
+        if host.lower() == "localhost":
+            return ""
+        try:
+            infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+        except socket.gaierror as error:
+            return f"smtp_dns_resolution_failed: {host} ({error})"
+
+        addresses: list[str] = []
+        suspicious: list[str] = []
+        for info in infos:
+            sockaddr = info[4]
+            if not sockaddr:
+                continue
+            address = str(sockaddr[0])
+            if address in addresses:
+                continue
+            addresses.append(address)
+            try:
+                ip = ipaddress.ip_address(address)
+            except ValueError:
+                continue
+            if self._is_suspicious_smtp_ip(ip):
+                suspicious.append(address)
+
+        if not addresses:
+            return f"smtp_dns_resolution_failed: {host} (no addresses)"
+        if suspicious and len(suspicious) == len(addresses):
+            return (
+                f"smtp_endpoint_unreachable: {host} resolved only to suspicious addresses "
+                f"{', '.join(suspicious)}; likely DNS/proxy/TUN hijack or outbound SMTP blocked"
+            )
+        return ""
+
+    def _is_suspicious_smtp_ip(self, ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+        if isinstance(ip, ipaddress.IPv4Address) and ip in BENCHMARK_TEST_NET:
+            return True
+        return any(
+            (
+                ip.is_loopback,
+                ip.is_link_local,
+                ip.is_multicast,
+                ip.is_unspecified,
+            )
+        )
 
     def _create_html_email(self, content: str, subject: str) -> str:
         """
-        Create HTML version of email with proper formatting.
-
-        Args:
-            content: Markdown formatted content
-            subject: Email subject
-
-        Returns:
-            HTML formatted email
+        Create an HTML version of the email.
         """
         try:
             import markdown
-            from markdown.extensions import nl2br, tables, fenced_code
 
-            # Convert markdown to HTML with extensions
             html_content = markdown.markdown(
                 content,
                 extensions=[
-                    'nl2br',      # Convert newlines to <br>
-                    'tables',     # Support for tables
-                    'fenced_code',# Support for code blocks
-                    'sane_lists', # Better list handling
-                ]
+                    "nl2br",
+                    "tables",
+                    "fenced_code",
+                    "sane_lists",
+                ],
             )
         except ImportError:
             logger.warning("markdown library not installed, using basic HTML formatting")
-            # Fallback to basic HTML escaping and line break conversion
             import html
-            html_content = html.escape(content).replace('\n', '<br>\n')
 
-        html = f"""
+            html_content = html.escape(content).replace("\n", "<br>\n")
+
+        return f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{subject}</title>
             <style>
                 body {{
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Helvetica, Arial, sans-serif;
-                    line-height: 1.8;
-                    color: #24292e;
-                    max-width: 800px;
-                    margin: 0 auto;
-                    padding: 20px;
-                    background-color: #f6f8fa;
+                    margin: 0;
+                    padding: 24px;
+                    background: #f7f5ef;
+                    color: #1b1b1b;
+                    font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+                    line-height: 1.75;
                 }}
                 .container {{
-                    background-color: #ffffff;
-                    border-radius: 8px;
-                    padding: 40px;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    max-width: 820px;
+                    margin: 0 auto;
+                    background: #fffdf7;
+                    border: 1px solid #d6ccb8;
+                    padding: 32px;
                 }}
-                .title {{
-                    color: #0366d6;
-                    font-size: 32px;
-                    font-weight: 700;
-                    margin-bottom: 20px;
-                    padding-bottom: 15px;
-                    border-bottom: 4px solid #0366d6;
-                    text-align: center;
+                h1, h2, h3 {{
+                    color: #171717;
                 }}
-                .content {{
-                    margin-top: 30px;
-                }}
-                .content h1 {{
-                    color: #0366d6;
-                    font-size: 28px;
-                    font-weight: 700;
-                    margin-top: 40px;
-                    margin-bottom: 20px;
-                    padding-bottom: 12px;
-                    border-bottom: 3px solid #0366d6;
-                }}
-                .content h2 {{
-                    color: #2c3e50;
-                    font-size: 22px;
-                    font-weight: 600;
-                    margin-top: 35px;
-                    margin-bottom: 18px;
-                    padding-bottom: 10px;
-                    border-bottom: 2px solid #e1e4e8;
-                }}
-                .content h3 {{
-                    color: #24292e;
-                    font-size: 18px;
-                    font-weight: 600;
-                    margin-top: 28px;
-                    margin-bottom: 15px;
-                    padding-left: 12px;
-                    border-left: 4px solid #0366d6;
-                }}
-                .content h4 {{
-                    color: #586069;
-                    font-size: 16px;
-                    font-weight: 600;
-                    margin-top: 20px;
-                    margin-bottom: 12px;
-                }}
-                .content p {{
-                    margin: 15px 0;
-                    line-height: 1.8;
-                    color: #24292e;
-                }}
-                .content ul, .content ol {{
-                    margin: 15px 0;
-                    padding-left: 30px;
-                }}
-                .content li {{
-                    margin: 10px 0;
-                    line-height: 1.8;
-                }}
-                .content strong {{
-                    font-weight: 600;
-                    color: #0366d6;
-                }}
-                .content em {{
-                    font-style: italic;
-                    color: #586069;
-                }}
-                .content code {{
-                    background-color: #f6f8fa;
-                    padding: 3px 6px;
-                    border-radius: 3px;
-                    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-                    font-size: 0.9em;
-                    color: #d73a49;
-                }}
-                .content pre {{
-                    background-color: #f6f8fa;
-                    padding: 16px;
-                    border-radius: 6px;
-                    overflow-x: auto;
-                    border: 1px solid #e1e4e8;
-                }}
-                .content pre code {{
-                    background-color: transparent;
-                    padding: 0;
-                    color: #24292e;
-                }}
-                .content blockquote {{
-                    margin: 20px 0;
-                    padding: 10px 20px;
-                    border-left: 4px solid #dfe2e5;
-                    background-color: #f6f8fa;
-                    color: #586069;
-                }}
-                .content hr {{
-                    border: none;
-                    border-top: 2px solid #e1e4e8;
-                    margin: 30px 0;
-                }}
-                .content a {{
-                    color: #0366d6;
-                    text-decoration: none;
-                    border-bottom: 1px solid transparent;
-                    transition: border-bottom 0.2s;
-                }}
-                .content a:hover {{
-                    border-bottom: 1px solid #0366d6;
-                }}
-                .content table {{
-                    border-collapse: collapse;
+                table {{
                     width: 100%;
-                    margin: 20px 0;
+                    border-collapse: collapse;
                 }}
-                .content th, .content td {{
-                    border: 1px solid #e1e4e8;
-                    padding: 10px 15px;
+                th, td {{
+                    border-bottom: 1px solid #ddd3bc;
+                    padding: 8px 0;
                     text-align: left;
                 }}
-                .content th {{
-                    background-color: #f6f8fa;
-                    font-weight: 600;
-                }}
-                .footer {{
-                    margin-top: 50px;
-                    padding-top: 25px;
-                    border-top: 2px solid #e1e4e8;
-                    text-align: center;
-                    font-size: 14px;
-                    color: #586069;
-                }}
-                .footer p {{
-                    margin: 8px 0;
+                a {{
+                    color: #7a4f00;
                 }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="title">{subject}</div>
-                <div class="content">
-                    {html_content}
-                </div>
-            </div>
-            <div class="footer">
-                <p>This email was automatically generated by AI News Bot</p>
-                <p>Powered by AI • <a href="https://github.com/giftedunicorn/ai-news-bot" style="color: #0366d6;">View on GitHub</a></p>
+                {html_content}
             </div>
         </body>
         </html>
         """
-        return html
