@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Infomation</title>
+    <title>Trend Insights</title>
     <script>
       (() => {
         try {
@@ -14,14 +14,14 @@
         } catch (error) {}
       })();
     </script>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260324-push-center-cleanup" />
   </head>
   <body>
     <div class="app-shell">
       <aside id="sidebar" class="sidebar reveal" aria-label="一级模块导航">
         <div class="brand-block">
           <p class="brand-kicker">MARKETS + POLICY DESK</p>
-          <h1 id="heroTitle">Infomation</h1>
+          <h1 id="heroTitle">Trend Insights</h1>
           <p id="heroSubtitle" class="brand-subtitle"></p>
         </div>
 
@@ -51,14 +51,14 @@
             <span class="module-button-title">事件展望</span>
             <span class="module-button-note">等待加载</span>
           </button>
-          <button type="button" class="module-button" data-module-id="status">
-            <span class="badge loading"><span class="loading-spinner loading-spinner-inline" aria-hidden="true"></span><span>加载中...</span></span>
-            <span class="module-button-title">数据状态</span>
-            <span class="module-button-note">等待加载</span>
-          </button>
           <button type="button" class="module-button" data-module-id="push">
             <span class="badge loading"><span class="loading-spinner loading-spinner-inline" aria-hidden="true"></span><span>鍔犺浇涓?..</span></span>
             <span class="module-button-title">推送中心</span>
+            <span class="module-button-note">等待加载</span>
+          </button>
+          <button type="button" class="module-button" data-module-id="status">
+            <span class="badge loading"><span class="loading-spinner loading-spinner-inline" aria-hidden="true"></span><span>加载中...</span></span>
+            <span class="module-button-title">数据状态</span>
             <span class="module-button-note">等待加载</span>
           </button>
         </nav>
@@ -119,6 +119,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" defer></script>
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=20260324-push-center-cleanup" defer></script>
   </body>
 </html>

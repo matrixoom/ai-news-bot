@@ -81,6 +81,8 @@ STYLE_OPTIONS = (
 )
 
 DEFAULT_TIMEZONE = "Asia/Shanghai"
+MAX_RECENT_RUNS = 12
+MAX_SCHEDULER_HISTORY = 128
 DEFAULT_PUSH_CONFIG = {
     "selected_module_ids": ["market"],
     "report_style": "newspaper",
@@ -106,9 +108,8 @@ DEFAULT_PUSH_CONFIG = {
             "timezone": DEFAULT_TIMEZONE,
         }
     ],
-    "recent_runs": [],
-    "scheduler_history": {},
 }
+DEFAULT_PUSH_STATE = {"scheduler_history": {}}
 
 
 def _utc_now_iso() -> str:
@@ -134,6 +135,13 @@ class PushCenterService:
         self._config_path = Path(
             config_path or os.getenv("PUSH_CENTER_CONFIG_PATH", ".data/push_center.json")
         )
+        self._state_path = self._config_path.with_name(
+            f"{self._config_path.stem}.state{self._config_path.suffix}"
+        )
+        self._template_path = self._config_path.with_name(
+            f"{self._config_path.stem}.template{self._config_path.suffix}"
+        )
+        self._log_root = self._config_path.parent / "logs" / self._config_path.stem
         self._config_lock = threading.Lock()
         self._scheduler_check_seconds = max(
             5.0,
@@ -174,7 +182,6 @@ class PushCenterService:
                             "style_options": list(STYLE_OPTIONS),
                             "config": self._public_config(config),
                             "preview": preview,
-                            "recent_runs": list(config.get("recent_runs", [])),
                             "scheduler": {
                                 "enabled": self._scheduler_thread is not None,
                                 "check_interval_seconds": self._scheduler_check_seconds,
@@ -208,23 +215,20 @@ class PushCenterService:
         normalized = self._normalize_config(payload or {}, base=existing)
         persist = bool((payload or {}).get("persist"))
         result = self._execute_delivery(normalized, trigger="manual", job_name="手动触发")
-        merged = deepcopy(existing)
         if persist:
-            merged.update({k: deepcopy(v) for k, v in normalized.items() if k not in {"recent_runs", "scheduler_history"}})
-        merged["recent_runs"] = list(result["recent_runs"])
-        merged["scheduler_history"] = dict(existing.get("scheduler_history", {}))
-        self._save_config(merged)
+            self._save_config(normalized)
         return result
 
     def run_due_jobs(self, *, now: datetime | None = None) -> list[dict[str, Any]]:
         config = self._load_config()
+        state = self._load_state()
         current_time = now or datetime.now(UTC)
         results: list[dict[str, Any]] = []
         dirty = False
         for schedule in config.get("schedules", []):
             if not schedule.get("enabled"):
                 continue
-            if not self._is_schedule_due(schedule, current_time, config):
+            if not self._is_schedule_due(schedule, current_time, state):
                 continue
             run_result = self._execute_delivery(
                 config,
@@ -232,15 +236,16 @@ class PushCenterService:
                 job_name=str(schedule.get("name") or "定时推送"),
                 module_ids=schedule.get("module_ids") or config.get("selected_module_ids"),
                 channel_types=schedule.get("channel_types") or ["email"],
+                execution_timezone=str(schedule.get("timezone") or DEFAULT_TIMEZONE),
+                executed_now=current_time,
             )
             schedule_key = self._schedule_history_key(schedule, current_time)
-            config.setdefault("scheduler_history", {})[schedule_key] = run_result["result"]["executed_at"]
-            config["recent_runs"] = list(run_result["recent_runs"])
+            state.setdefault("scheduler_history", {})[schedule_key] = run_result["result"]["executed_at"]
             dirty = True
             results.append(run_result)
         if dirty:
-            self._trim_scheduler_history(config)
-            self._save_config(config)
+            self._trim_scheduler_history(state)
+            self._save_state(state)
         return results
 
     def start_scheduler(self) -> None:
@@ -315,11 +320,16 @@ class PushCenterService:
         job_name: str,
         module_ids: Iterable[str] | None = None,
         channel_types: Iterable[str] | None = None,
+        execution_timezone: str | None = None,
+        executed_now: datetime | None = None,
     ) -> dict[str, Any]:
         selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
         selected_channels = [str(item).strip().lower() for item in (channel_types or ["email"]) if str(item).strip()]
         preview = self._build_preview(config, module_ids=selected_modules)
-        executed_at = _utc_now_iso()
+        resolved_timezone = self._normalize_timezone(
+            execution_timezone or self._default_execution_timezone(config)
+        )
+        executed_at = self._format_executed_at(executed_now, resolved_timezone)
         sent: list[str] = []
         failed: list[str] = []
         error_messages: list[str] = []
@@ -340,6 +350,7 @@ class PushCenterService:
         detail = " / ".join(error_messages) if error_messages else "发送完成"
         run_record = {
             "executed_at": executed_at,
+            "timezone": resolved_timezone,
             "trigger": trigger,
             "job_name": job_name,
             "status": status,
@@ -348,7 +359,7 @@ class PushCenterService:
             "channel_types": selected_channels,
             "module_ids": selected_modules,
         }
-        recent_runs = self._append_recent_run(list(config.get("recent_runs") or []), run_record)
+        recent_runs = self._record_recent_run(run_record)
         return {
             "ok": bool(sent),
             "preview": preview,
@@ -356,6 +367,7 @@ class PushCenterService:
             "result": {
                 "status": status,
                 "executed_at": executed_at,
+                "timezone": resolved_timezone,
                 "trigger": trigger,
                 "job_name": job_name,
                 "sent": sent,
@@ -399,10 +411,11 @@ class PushCenterService:
         return public
 
     def _ensure_config_file(self) -> None:
-        if self._config_path.exists():
-            return
-        self._config_path.parent.mkdir(parents=True, exist_ok=True)
-        self._write_config(DEFAULT_PUSH_CONFIG)
+        with self._config_lock:
+            self._config_path.parent.mkdir(parents=True, exist_ok=True)
+            self._ensure_template_file_locked()
+            if not self._config_path.exists():
+                self._write_config(DEFAULT_PUSH_CONFIG)
 
     def _load_config(self) -> dict[str, Any]:
         with self._config_lock:
@@ -411,12 +424,23 @@ class PushCenterService:
                     raw = json.load(handle)
             except (FileNotFoundError, json.JSONDecodeError):
                 raw = deepcopy(DEFAULT_PUSH_CONFIG)
-            return self._normalize_config(raw, base=DEFAULT_PUSH_CONFIG)
+            normalized = self._normalize_config(raw, base=DEFAULT_PUSH_CONFIG)
+            self._migrate_legacy_runtime_data_locked(raw)
+            return normalized
 
     def _save_config(self, payload: Mapping[str, Any]) -> None:
         normalized = self._normalize_config(payload, base=DEFAULT_PUSH_CONFIG)
         with self._config_lock:
             self._write_config(normalized)
+
+    def _load_state(self) -> dict[str, Any]:
+        with self._config_lock:
+            return self._load_state_locked()
+
+    def _save_state(self, payload: Mapping[str, Any]) -> None:
+        normalized = self._normalize_state(payload)
+        with self._config_lock:
+            self._write_state(normalized)
 
     def _unwrap_payload(self, payload: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
         if payload is None:
@@ -430,11 +454,17 @@ class PushCenterService:
         return payload
 
     def _write_config(self, payload: Mapping[str, Any]) -> None:
-        self._config_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = self._config_path.with_suffix(f"{self._config_path.suffix}.tmp")
+        self._write_json(self._config_path, payload)
+
+    def _write_state(self, payload: Mapping[str, Any]) -> None:
+        self._write_json(self._state_path, payload)
+
+    def _write_json(self, path: Path, payload: Mapping[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = path.with_suffix(f"{path.suffix}.tmp")
         with temp_path.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
-        temp_path.replace(self._config_path)
+        temp_path.replace(path)
 
     def _normalize_config(self, payload: Mapping[str, Any], *, base: Mapping[str, Any]) -> dict[str, Any]:
         merged = deepcopy(dict(base))
@@ -449,10 +479,14 @@ class PushCenterService:
             payload.get("schedules", merged.get("schedules")),
             default_module_ids=merged["selected_module_ids"],
         )
-        merged["recent_runs"] = self._normalize_recent_runs(payload.get("recent_runs", merged.get("recent_runs")))
-        merged["scheduler_history"] = dict(payload.get("scheduler_history", merged.get("scheduler_history", {})))
-        self._trim_scheduler_history(merged)
         return merged
+
+    def _normalize_state(self, payload: Mapping[str, Any] | None) -> dict[str, Any]:
+        state = deepcopy(DEFAULT_PUSH_STATE)
+        if isinstance(payload, Mapping):
+            state["scheduler_history"] = dict(payload.get("scheduler_history", {}))
+        self._trim_scheduler_history(state)
+        return state
 
     def _normalize_module_ids(self, raw_value: Any) -> list[str]:
         allowed = {item["id"] for item in AVAILABLE_SOURCE_MODULES if item["enabled"]}
@@ -538,11 +572,12 @@ class PushCenterService:
     def _normalize_recent_runs(self, raw_value: Any) -> list[dict[str, Any]]:
         runs = raw_value if isinstance(raw_value, list) else []
         normalized: list[dict[str, Any]] = []
-        for item in runs[:12]:
+        for item in runs[:MAX_RECENT_RUNS]:
             record = dict(item or {})
             normalized.append(
                 {
                     "executed_at": str(record.get("executed_at") or _utc_now_iso()),
+                    "timezone": self._normalize_timezone(record.get("timezone")),
                     "trigger": str(record.get("trigger") or "manual"),
                     "job_name": str(record.get("job_name") or "推送任务"),
                     "status": str(record.get("status") or "unknown"),
@@ -554,18 +589,123 @@ class PushCenterService:
             )
         return normalized
 
-    def _append_recent_run(self, recent_runs: list[dict[str, Any]], record: Mapping[str, Any]) -> list[dict[str, Any]]:
-        items = [dict(record)] + [dict(item) for item in recent_runs]
-        return self._normalize_recent_runs(items)
+    def _record_recent_run(self, record: Mapping[str, Any]) -> list[dict[str, Any]]:
+        normalized_items = self._normalize_recent_runs([record])
+        if not normalized_items:
+            return self._read_recent_runs()
+        with self._config_lock:
+            self._write_log_records_locked(normalized_items)
+            return self._read_recent_runs_locked()
 
-    def _is_schedule_due(self, schedule: Mapping[str, Any], now: datetime, config: Mapping[str, Any]) -> bool:
+    def _read_recent_runs(self, *, limit: int = MAX_RECENT_RUNS) -> list[dict[str, Any]]:
+        with self._config_lock:
+            return self._read_recent_runs_locked(limit=limit)
+
+    def _read_recent_runs_locked(self, *, limit: int = MAX_RECENT_RUNS) -> list[dict[str, Any]]:
+        if limit <= 0 or not self._log_root.exists():
+            return []
+        records: list[dict[str, Any]] = []
+        for path in self._log_root.glob("*/*/*.jsonl"):
+            try:
+                with path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        text = line.strip()
+                        if not text:
+                            continue
+                        try:
+                            raw = json.loads(text)
+                        except json.JSONDecodeError:
+                            continue
+                        records.extend(self._normalize_recent_runs([raw]))
+            except FileNotFoundError:
+                continue
+        records.sort(key=lambda item: self._parse_timestamp(item.get("executed_at")), reverse=True)
+        return records[:limit]
+
+    def _write_log_records_locked(
+        self,
+        records: Iterable[Mapping[str, Any]],
+        *,
+        dedupe: bool = False,
+    ) -> None:
+        grouped: dict[Path, list[dict[str, Any]]] = {}
+        for record in records:
+            normalized = self._normalize_recent_runs([record])
+            if not normalized:
+                continue
+            item = normalized[0]
+            grouped.setdefault(self._log_file_path(item), []).append(item)
+        for path, items in grouped.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            existing_signatures: set[tuple[Any, ...]] = set()
+            if dedupe and path.exists():
+                try:
+                    with path.open("r", encoding="utf-8") as handle:
+                        for line in handle:
+                            text = line.strip()
+                            if not text:
+                                continue
+                            try:
+                                raw = json.loads(text)
+                            except json.JSONDecodeError:
+                                continue
+                            normalized_existing = self._normalize_recent_runs([raw])
+                            if normalized_existing:
+                                existing_signatures.add(self._recent_run_signature(normalized_existing[0]))
+                except FileNotFoundError:
+                    pass
+            with path.open("a", encoding="utf-8") as handle:
+                for item in items:
+                    signature = self._recent_run_signature(item)
+                    if dedupe and signature in existing_signatures:
+                        continue
+                    handle.write(json.dumps(item, ensure_ascii=False))
+                    handle.write("\n")
+                    existing_signatures.add(signature)
+
+    def _log_file_path(self, record: Mapping[str, Any]) -> Path:
+        trigger = str(record.get("trigger") or "unknown").strip().lower() or "unknown"
+        executed_at = str(record.get("executed_at") or "")
+        date_text = executed_at[:10] if re.fullmatch(r"\d{4}-\d{2}-\d{2}", executed_at[:10]) else _utc_now_iso()[:10]
+        month_text = date_text[:7]
+        return self._log_root / trigger / month_text / f"{date_text}.jsonl"
+
+    def _recent_run_signature(self, record: Mapping[str, Any]) -> tuple[Any, ...]:
+        return (
+            str(record.get("executed_at") or ""),
+            str(record.get("timezone") or ""),
+            str(record.get("trigger") or ""),
+            str(record.get("job_name") or ""),
+            str(record.get("status") or ""),
+            str(record.get("detail") or ""),
+            str(record.get("subject") or ""),
+            tuple(record.get("channel_types") or []),
+            tuple(record.get("module_ids") or []),
+        )
+
+    def _default_execution_timezone(self, config: Mapping[str, Any]) -> str:
+        for schedule in config.get("schedules", []):
+            if not isinstance(schedule, Mapping):
+                continue
+            timezone = schedule.get("timezone")
+            if timezone:
+                return self._normalize_timezone(timezone)
+        return DEFAULT_TIMEZONE
+
+    def _format_executed_at(self, now: datetime | None, timezone: str) -> str:
+        current_time = now or datetime.now(UTC)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=UTC)
+        return current_time.astimezone(ZoneInfo(timezone)).isoformat(timespec="seconds")
+
+    def _is_schedule_due(self, schedule: Mapping[str, Any], now: datetime, state: Mapping[str, Any]) -> bool:
         timezone = ZoneInfo(str(schedule.get("timezone") or DEFAULT_TIMEZONE))
         local_now = now.astimezone(timezone)
         current_slot = local_now.strftime("%H:%M")
         if current_slot not in list(schedule.get("times") or []):
             return False
         history_key = self._schedule_history_key(schedule, now)
-        return history_key not in dict(config.get("scheduler_history") or {})
+        return history_key not in dict(state.get("scheduler_history") or {})
 
     def _schedule_history_key(self, schedule: Mapping[str, Any], now: datetime) -> str:
         timezone = ZoneInfo(str(schedule.get("timezone") or DEFAULT_TIMEZONE))
@@ -574,8 +714,53 @@ class PushCenterService:
 
     def _trim_scheduler_history(self, config: dict[str, Any]) -> None:
         history = dict(config.get("scheduler_history") or {})
-        if len(history) <= 128:
+        if len(history) <= MAX_SCHEDULER_HISTORY:
             config["scheduler_history"] = history
             return
-        sorted_items = sorted(history.items(), key=lambda item: item[1], reverse=True)
-        config["scheduler_history"] = dict(sorted_items[:128])
+        sorted_items = sorted(
+            history.items(),
+            key=lambda item: self._parse_timestamp(item[1]),
+            reverse=True,
+        )
+        config["scheduler_history"] = dict(sorted_items[:MAX_SCHEDULER_HISTORY])
+
+    def _ensure_template_file_locked(self) -> None:
+        if self._template_path.exists():
+            return
+        self._write_json(self._template_path, DEFAULT_PUSH_CONFIG)
+
+    def _load_state_locked(self) -> dict[str, Any]:
+        try:
+            with self._state_path.open("r", encoding="utf-8") as handle:
+                raw = json.load(handle)
+        except (FileNotFoundError, json.JSONDecodeError):
+            raw = deepcopy(DEFAULT_PUSH_STATE)
+        return self._normalize_state(raw)
+
+    def _migrate_legacy_runtime_data_locked(self, raw: Any) -> None:
+        if not isinstance(raw, Mapping):
+            return
+        needs_rewrite = False
+        if "recent_runs" in raw:
+            legacy_runs = self._normalize_recent_runs(raw.get("recent_runs"))
+            if legacy_runs:
+                self._write_log_records_locked(legacy_runs, dedupe=True)
+            needs_rewrite = True
+        if "scheduler_history" in raw:
+            state = self._load_state_locked()
+            state["scheduler_history"].update(dict(raw.get("scheduler_history") or {}))
+            self._trim_scheduler_history(state)
+            self._write_state(state)
+            needs_rewrite = True
+        if needs_rewrite:
+            self._write_config(self._normalize_config(raw, base=DEFAULT_PUSH_CONFIG))
+
+    def _parse_timestamp(self, value: Any) -> datetime:
+        text = str(value or "")
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return datetime.min.replace(tzinfo=UTC)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)

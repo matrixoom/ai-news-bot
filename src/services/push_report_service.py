@@ -225,7 +225,7 @@ class PushReportService:
       <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#7a6b4d;">3M Trend</div>
       <div style="font-size:12px;color:#6e654f;">近3个月收盘走势、区间涨跌与高低点</div>
     </div>
-    <div style="display:grid;gap:12px;margin-top:10px;">
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px;align-items:start;">
       {trend_cards or '<p style="margin:0;">暂无趋势数据。</p>'}
     </div>
   </div>
@@ -239,8 +239,9 @@ class PushReportService:
     <h3 style="margin:0;font-size:18px;">{escape(card.label)}</h3>
     <span style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8b5e00;">{escape(card.signal)}</span>
   </div>
-  <div style="margin-top:10px;">{self._render_market_sparkline(trend["points"], label=card.label)}</div>
-  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px;font-size:13px;">
+  <div style="margin-top:8px;font-size:12px;color:#6e654f;">组合图与市场模型保持一致，展示 Close、M20 与 Deviation。</div>
+  <div style="margin-top:10px;">{self._render_market_combo_chart(trend["chart_points"], label=card.label)}</div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;font-size:13px;">
     <div><strong>3M 涨跌</strong><br />{escape(trend["change_label"])}</div>
     <div><strong>区间高低</strong><br />{escape(trend["range_label"])}</div>
     <div><strong>最新收盘</strong><br />{escape(trend["latest_label"])}</div>
@@ -250,11 +251,11 @@ class PushReportService:
 </article>"""
 
     def _build_market_trend_summary(self, card) -> dict[str, object]:
-        points = self._extract_recent_market_points(card)
-        closes = [point["close_price"] for point in points if isinstance(point.get("close_price"), (int, float))]
+        chart_points = self._normalize_market_chart_points(self._extract_recent_market_points(card))
+        closes = [point["close_price"] for point in chart_points]
         if not closes:
             return {
-                "points": [],
+                "chart_points": [],
                 "change_label": "暂无数据",
                 "range_label": "暂无数据",
                 "latest_label": card.close_value,
@@ -265,7 +266,7 @@ class PushReportService:
         lowest = min(closes)
         change_label = "暂无数据" if not start else f"{((latest - start) / start) * 100:+.1f}%"
         return {
-            "points": closes,
+            "chart_points": chart_points,
             "change_label": change_label,
             "range_label": f"{lowest:.1f} - {highest:.1f}",
             "latest_label": f"{latest:.1f}",
@@ -288,40 +289,144 @@ class PushReportService:
         filtered = [point for trade_date, point in dated_points if trade_date >= threshold]
         return filtered or [point for _, point in dated_points[-65:]]
 
-    def _render_market_sparkline(self, points: list[float], *, label: str) -> str:
+    def _normalize_market_chart_points(self, points: list[dict]) -> list[dict[str, object]]:
+        normalized: list[dict[str, object]] = []
+        for point in points:
+            close_price = point.get("close_price")
+            if not isinstance(close_price, (int, float)):
+                continue
+            ma20_price = point.get("ma20_price")
+            deviation_pct = point.get("deviation_pct")
+            normalized.append(
+                {
+                    "trade_date": str(point.get("trade_date") or ""),
+                    "close_price": float(close_price),
+                    "ma20_price": float(ma20_price) if isinstance(ma20_price, (int, float)) else None,
+                    "deviation_pct": float(deviation_pct) if isinstance(deviation_pct, (int, float)) else None,
+                }
+            )
+        return normalized
+
+    def _render_market_combo_chart(self, points: list[dict[str, object]], *, label: str) -> str:
         if len(points) < 2:
-            return '<div style="height:72px;display:grid;place-items:center;border:1px dashed #d0c3a8;color:#6e654f;">暂无趋势数据</div>'
-        width = 320
-        height = 72
-        min_value = min(points)
-        max_value = max(points)
-        if math.isclose(max_value, min_value):
-            max_value += 1
-            min_value -= 1
-        inner_width = width - 16
-        inner_height = height - 20
+            return '<div style="height:112px;display:grid;place-items:center;border:1px dashed #d0c3a8;color:#6e654f;">暂无趋势数据</div>'
+
+        width = 344.0
+        height = 126.0
+        left = 14.0
+        right = 14.0
+        top = 12.0
+        price_height = 66.0
+        gap = 10.0
+        deviation_height = 24.0
+        chart_width = width - left - right
+        zero_y = top + price_height + gap + (deviation_height / 2)
+        deviation_center = deviation_height / 2
+
+        price_values = [
+            value
+            for point in points
+            for value in (point["close_price"], point["ma20_price"])
+            if isinstance(value, (int, float))
+        ]
+        min_price = min(price_values)
+        max_price = max(price_values)
+        if math.isclose(max_price, min_price):
+            max_price += 1
+            min_price -= 1
+
+        deviation_values = [
+            float(point["deviation_pct"])
+            for point in points
+            if isinstance(point.get("deviation_pct"), (int, float))
+        ]
+        max_abs_deviation = max((abs(value) for value in deviation_values), default=1.0)
+        if math.isclose(max_abs_deviation, 0.0):
+            max_abs_deviation = 1.0
 
         def to_x(index: int) -> float:
-            return 8 + (inner_width * index) / max(len(points) - 1, 1)
+            return left + (chart_width * index) / max(len(points) - 1, 1)
 
-        def to_y(value: float) -> float:
-            return 8 + ((max_value - value) / (max_value - min_value)) * inner_height
+        def to_price_y(value: float) -> float:
+            return top + ((max_price - value) / (max_price - min_price)) * price_height
 
-        path = " ".join(
-            f"{'M' if index == 0 else 'L'} {to_x(index):.2f} {to_y(value):.2f}"
-            for index, value in enumerate(points)
+        def to_deviation_y(value: float) -> float:
+            return zero_y - (value / max_abs_deviation) * deviation_center
+
+        close_path = self._build_svg_line_path(
+            [(to_x(index), to_price_y(float(point["close_price"]))) for index, point in enumerate(points)]
         )
-        last_x = to_x(len(points) - 1)
-        last_y = to_y(points[-1])
-        first_x = to_x(0)
-        baseline = 8 + inner_height
-        area_path = f"{path} L {last_x:.2f} {baseline:.2f} L {first_x:.2f} {baseline:.2f} Z"
+        ma20_path = self._build_svg_line_path(
+            [
+                (
+                    to_x(index),
+                    to_price_y(float(point["ma20_price"])) if isinstance(point.get("ma20_price"), (int, float)) else None,
+                )
+                for index, point in enumerate(points)
+            ]
+        )
+
+        step = chart_width / max(len(points) - 1, 1)
+        bar_width = min(8.0, max(3.0, step * 0.55))
+        bars: list[str] = []
+        for index, point in enumerate(points):
+            value = point.get("deviation_pct")
+            if not isinstance(value, (int, float)):
+                continue
+            x = to_x(index) - (bar_width / 2)
+            y = to_deviation_y(float(value))
+            bar_top = min(y, zero_y)
+            bar_height = max(abs(zero_y - y), 1.0)
+            fill = "#ff5f72" if value > 0 else "#37c48d" if value < 0 else "#8fa0b4"
+            bars.append(
+                f'<rect x="{x:.2f}" y="{bar_top:.2f}" width="{bar_width:.2f}" '
+                f'height="{bar_height:.2f}" rx="1.5" fill="{fill}"></rect>'
+            )
+
+        last_close_x = to_x(len(points) - 1)
+        last_close_y = to_price_y(float(points[-1]["close_price"]))
+        last_ma20_value = next(
+            (float(point["ma20_price"]) for point in reversed(points) if isinstance(point.get("ma20_price"), (int, float))),
+            None,
+        )
+        last_ma20_y = to_price_y(last_ma20_value) if last_ma20_value is not None else None
+        first_date = str(points[0].get("trade_date") or "")
+        last_date = str(points[-1].get("trade_date") or "")
+
         return f"""
-<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" role="img" aria-label="{escape(label)} 近3个月趋势">
-  <path d="{area_path}" fill="rgba(122, 79, 0, 0.10)"></path>
-  <path d="{path}" fill="none" stroke="#7a4f00" stroke-width="2.2" stroke-linecap="round"></path>
-  <circle cx="{last_x:.2f}" cy="{last_y:.2f}" r="3.2" fill="#0f8092"></circle>
-</svg>"""
+<div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:#6e654f;margin-bottom:6px;">
+    <span><span style="display:inline-block;width:12px;height:2px;background:#f6a313;vertical-align:middle;margin-right:6px;"></span>Close</span>
+    <span><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #31b8c4;vertical-align:middle;margin-right:6px;"></span>M20</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:#ff5f72;vertical-align:middle;margin-right:6px;"></span>Deviation</span>
+  </div>
+  <svg viewBox="0 0 {width:.0f} {height:.0f}" width="100%" height="{height:.0f}" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
+    <line x1="{left:.2f}" y1="{top:.2f}" x2="{width - right:.2f}" y2="{top:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
+    <line x1="{left:.2f}" y1="{top + (price_height / 2):.2f}" x2="{width - right:.2f}" y2="{top + (price_height / 2):.2f}" stroke="#efe6d3" stroke-width="1" stroke-dasharray="3 3"></line>
+    <line x1="{left:.2f}" y1="{top + price_height:.2f}" x2="{width - right:.2f}" y2="{top + price_height:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
+    <line x1="{left:.2f}" y1="{zero_y:.2f}" x2="{width - right:.2f}" y2="{zero_y:.2f}" stroke="#d0c3a8" stroke-width="1" stroke-dasharray="4 4"></line>
+    {''.join(bars)}
+    <path d="{close_path}" fill="none" stroke="#f6a313" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="{ma20_path}" fill="none" stroke="#31b8c4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 4"></path>
+    <circle cx="{last_close_x:.2f}" cy="{last_close_y:.2f}" r="3.2" fill="#f6a313"></circle>
+    {f'<circle cx="{last_close_x:.2f}" cy="{last_ma20_y:.2f}" r="2.8" fill="#31b8c4"></circle>' if last_ma20_y is not None else ''}
+  </svg>
+  <div style="display:flex;justify-content:space-between;gap:12px;margin-top:6px;font-size:11px;color:#6e654f;">
+    <span>{escape(first_date)}</span>
+    <span>{escape(last_date)}</span>
+  </div>
+</div>"""
+
+    def _build_svg_line_path(self, points: list[tuple[float, float | None]]) -> str:
+        commands: list[str] = []
+        started = False
+        for x, y in points:
+            if y is None:
+                started = False
+                continue
+            commands.append(f"{'M' if not started else 'L'} {x:.2f} {y:.2f}")
+            started = True
+        return " ".join(commands)
 
     def _build_macro_column(self, snapshot: DashboardSnapshot) -> str:
         rows = "".join(

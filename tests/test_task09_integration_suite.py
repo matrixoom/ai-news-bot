@@ -31,10 +31,14 @@ class IntegrationSuiteTests(unittest.TestCase):
     def test_push_report_reuses_dashboard_snapshot(self):
         snapshot = DashboardService().build_snapshot()
         report = PushReportService().build_markdown(snapshot)
+        html = PushReportService().build_email_html(snapshot)
 
         self.assertIn(snapshot.title, report)
-        self.assertIn("| Indicator | Value | Previous | Trend | Updated |", report)
-        self.assertIn("| Index | Close | MA20 | Deviation | Fishbowl |", report)
+        self.assertIn("| 指标 | 当前值 | 前值 | 趋势 | 更新时间 |", report)
+        self.assertIn("| 指数 | 收盘 | MA20 | 偏离 | 信号 |", report)
+        self.assertIn("Close", html)
+        self.assertIn("M20", html)
+        self.assertIn("Deviation", html)
 
 
 if __name__ == "__main__":

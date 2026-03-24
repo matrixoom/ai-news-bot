@@ -31,7 +31,6 @@ ENV/
 .env.local
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -57,3 +56,8 @@ local/
 .uv-python/
 .tmp-push-tests/
 .data/push_center.json
+.data/push_center.state.json
+.data/logs/
+
+# temp
+.tmp*
