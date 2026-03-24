@@ -118,7 +118,7 @@ class FastAPIWebShellTests(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Infomation", response.text)
+        self.assertIn("Trend Insights", response.text)
         self.assertIn("一级模块导航", response.text)
         self.assertIn("contentStage", response.text)
         self.assertIn("loading-spinner", response.text)

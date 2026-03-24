@@ -1,0 +1,36 @@
+{
+  "selected_module_ids": [
+    "market"
+  ],
+  "report_style": "newspaper",
+  "email": {
+    "enabled": true,
+    "label": "Primary Email",
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "use_tls": true,
+    "username": "",
+    "password": "",
+    "from_address": "",
+    "to_addresses": ""
+  },
+  "schedules": [
+    {
+      "id": "market-daily",
+      "name": "市场日报",
+      "enabled": true,
+      "module_ids": [
+        "market"
+      ],
+      "channel_types": [
+        "email"
+      ],
+      "times": [
+        "08:00",
+        "12:00",
+        "17:00"
+      ],
+      "timezone": "Asia/Shanghai"
+    }
+  ]
+}

@@ -56,16 +56,16 @@ const MODULE_CONFIGS = [
     loadingMessage: "事件展望正在后台加载...",
   },
   {
-    id: "status",
-    label: "数据状态",
-    description: "状态监控",
-    loadingMessage: "数据状态正在后台加载...",
-  },
-  {
     id: "push",
     label: "推送中心",
     description: "邮件配置、日报预览与定时任务",
     loadingMessage: "推送中心正在加载...",
+  },
+  {
+    id: "status",
+    label: "数据状态",
+    description: "状态监控",
+    loadingMessage: "数据状态正在后台加载...",
   },
 ];
 
@@ -361,7 +361,6 @@ function modulePayloadFromLegacy(payload, moduleId) {
                 html_body: "",
                 text_body: "",
               },
-              recent_runs: [],
             },
           },
         ],
@@ -956,6 +955,30 @@ function renderMarketSummaryTable(module, detail) {
   `;
 }
 
+function renderMarketSnapshotCard(detail, historyWindow) {
+  return `
+    <article class="info-card market-snapshot-card">
+      <div class="card-head">
+        <h4>实时市场快照</h4>
+        ${statusBadge(detail.section.status)}
+      </div>
+      <p class="card-meta">${escapeHtml(detail.section.trade_date || "-")} | ${escapeHtml(detail.label)}</p>
+      <div class="detail-grid market-snapshot-grid">
+        ${detailItem("收盘价", detail.section.close_value || "-")}
+        ${detailItem("MA20", detail.section.ma20_value || "-")}
+        ${detailItem("模型信号", signalMap[detail.section.signal] || detail.section.signal || "-")}
+        ${detailItem("偏离", detail.section.deviation_pct || "-")}
+        ${detailItem("交易日", detail.section.trade_date || "-")}
+        ${detailItem("历史窗口", historyWindow || "-")}
+      </div>
+      <div class="detail-item market-detail-story">
+        <span class="detail-label">说明</span>
+        <span class="detail-value cell-muted">${escapeHtml(detail.section.explanation || "-")}</span>
+      </div>
+    </article>
+  `;
+}
+
 function splitCsvValues(value) {
   return String(value ?? "")
     .split(",")
@@ -1014,27 +1037,6 @@ function renderPushScheduleRow(schedule, index, moduleOptions) {
       </div>
     </div>
   `;
-}
-
-function renderPushRecentRuns(runs) {
-  const rows = (runs || []).map((item) => ([
-    { text: item.executed_at || "-", className: "cell-mono" },
-    { text: item.trigger || "-", className: "cell-tight" },
-    { text: item.job_name || "-", className: "cell-grow" },
-    { text: item.status || "-", className: "cell-tight" },
-    { text: item.detail || "-", className: "cell-grow cell-muted" },
-  ]));
-  return renderTable(
-    [
-      { label: "Executed", className: "cell-mono" },
-      { label: "Trigger" },
-      { label: "Job", className: "cell-grow" },
-      { label: "Status" },
-      { label: "Detail", className: "cell-grow" },
-    ],
-    rows,
-    { emptyText: "暂无推送记录", tableClass: "push-run-table" },
-  );
 }
 
 function renderPushWorkspace(detail) {
@@ -1144,14 +1146,6 @@ function renderPushWorkspace(detail) {
         <div id="pushScheduleList" class="content-stack">
           ${schedules.map((schedule, index) => renderPushScheduleRow(schedule, index, moduleOptions)).join("")}
         </div>
-      </article>
-
-      <article class="info-card">
-        <div class="card-head">
-          <h4>最近执行</h4>
-          <span class="tab-note">${escapeHtml(String((section.recent_runs || []).length))} records</span>
-        </div>
-        <div class="table-scroll">${renderPushRecentRuns(section.recent_runs || [])}</div>
       </article>
     </div>
   `;
@@ -1270,21 +1264,7 @@ function renderModuleContent(module, detail) {
     const historyWarning = detail.section.history_warning
       ? `<p class="market-warning">${escapeHtml(detail.section.history_warning)}</p>`
       : "";
-    return `<div class="content-stack"><article class="info-card market-chart-panel"><div class="card-head"><h4>${escapeHtml(detail.label)} Trend</h4><div class="market-chart-tools">${rangeSwitch}${statusBadge(detail.section.status)}</div></div><p class="card-meta">显示范围: ${escapeHtml(activeRangeLabel)} | 历史覆盖: ${escapeHtml(historyWindow)} | 组合图展示收盘价、M20 与乖离率。</p><div id="marketTrendChart" class="market-trend-chart" aria-label="${escapeHtml(`${detail.label} 历史趋势图`)}"></div>${historyWarning}</article>${renderTable(
-      [
-        { label: "Field" },
-        { label: "Value", className: "cell-grow" },
-      ],
-      [
-        [{ text: "收盘价", className: "cell-tight cell-cyan" }, { text: detail.section.close_value, className: "cell-grow cell-mono cell-accent" }],
-        [{ text: "MA20", className: "cell-tight cell-cyan" }, { text: detail.section.ma20_value, className: "cell-grow cell-mono" }],
-        [{ text: "模型信号", className: "cell-tight cell-cyan" }, { text: signalMap[detail.section.signal] || detail.section.signal, className: "cell-grow" }],
-        [{ text: "偏离", className: "cell-tight cell-cyan" }, { text: detail.section.deviation_pct, className: "cell-grow cell-mono" }],
-        [{ text: "交易日", className: "cell-tight cell-cyan" }, { text: detail.section.trade_date, className: "cell-grow cell-mono" }],
-        [{ text: "历史窗口", className: "cell-tight cell-cyan" }, { text: historyWindow, className: "cell-grow" }],
-        [{ text: "说明", className: "cell-tight cell-cyan" }, { text: detail.section.explanation, className: "cell-grow cell-muted" }],
-      ],
-    )}${renderMarketSummaryTable(module, detail)}</div>`;
+    return `<div class="content-stack"><div class="market-focus-row"><article class="info-card market-chart-panel"><div class="card-head"><h4>${escapeHtml(detail.label)} Trend</h4><div class="market-chart-tools">${rangeSwitch}${statusBadge(detail.section.status)}</div></div><p class="card-meta">显示范围: ${escapeHtml(activeRangeLabel)} | 历史覆盖: ${escapeHtml(historyWindow)} | 组合图展示收盘价、M20 与乖离率。</p><div id="marketTrendChart" class="market-trend-chart" aria-label="${escapeHtml(`${detail.label} 历史趋势图`)}"></div>${historyWarning}</article>${renderMarketSnapshotCard(detail, historyWindow)}</div>${renderMarketSummaryTable(module, detail)}</div>`;
   }
   if (detail.kind === "events") {
     return `<div class="content-stack"><article class="info-card"><div class="card-head"><h4>${escapeHtml(detail.section.title)}</h4>${statusBadge(detail.section.status)}</div><p class="detail-copy">当前窗口收录 ${(detail.section.items || []).length} 条事件。</p></article>${renderEventsTable([detail.section])}${renderOfficialLinkCard(detail.section.official_links || [])}</div>`;
@@ -1426,7 +1406,6 @@ function bindContentActions() {
         updatePushSection({
           config: draft,
           preview: payload.preview,
-          recent_runs: payload.recent_runs || [],
           flash: {
             status: payload.ok ? "compatible" : "degraded",
             message: payload.result?.detail || (payload.ok ? "推送完成。" : "推送失败。"),
