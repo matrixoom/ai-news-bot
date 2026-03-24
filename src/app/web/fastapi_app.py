@@ -226,9 +226,15 @@ def create_fastapi_app(
             )
 
     @app.get("/api/frontend/modules/push")
-    def frontend_push_module() -> JSONResponse:
+    def frontend_push_module(refresh: bool = False) -> JSONResponse:
         try:
-            return JSONResponse(push_service.build_module_payload())
+            if not refresh:
+                loading, detail = push_service.should_serve_loading_module()
+                if loading:
+                    return _loading_response(push_service.build_module_payload(), detail)
+            payload = push_service.build_module_payload(force_refresh_preview=refresh)
+            payload["refresh_after_ms"] = push_service.frontend_auto_refresh_ms
+            return JSONResponse(payload)
         except Exception:
             return JSONResponse(
                 {"error": "frontend_push_module_unavailable"},

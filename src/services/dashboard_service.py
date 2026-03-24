@@ -638,6 +638,7 @@ class DashboardService:
                 )
             raise
         else:
+            self._invalidate_snapshot_caches()
             self._set_module_refresh_state(cache_key, "ready", "")
 
     def _set_module_refresh_state(self, cache_key: str, state: str, detail: str) -> None:
@@ -664,6 +665,10 @@ class DashboardService:
             payload=payload,
             refreshed_at=time.monotonic(),
         )
+
+    def _invalidate_snapshot_caches(self) -> None:
+        with self._snapshot_lock:
+            self._snapshot_cache.clear()
 
     def _resolve_news_runtime(self, effective_news_mode: str):
         news_service = self._news_service

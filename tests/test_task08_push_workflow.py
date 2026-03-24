@@ -21,6 +21,24 @@ class FailingNotifier:
         return False
 
 
+class RecordingDashboardService:
+    def __init__(self):
+        self.force_refresh_calls = []
+
+    def build_snapshot(self, *, force_refresh=False):
+        self.force_refresh_calls.append(force_refresh)
+        return type("Snapshot", (), {"generated_at": "2026-03-24T08:00:00Z"})()
+
+
+class StubReportService:
+    def build_subject(self, snapshot, language="en"):
+        return f"{language}:{snapshot.generated_at}"
+
+    def build_markdown(self, snapshot, language="en", module_ids=None):
+        _ = module_ids
+        return f"report-{language}-{snapshot.generated_at}"
+
+
 class Task08DocumentationTests(unittest.TestCase):
     def test_task08_main_doc_links_protocol_and_tests(self):
         with open("TASK/08-push-workflow-and-automation.md", encoding="utf-8") as handle:
@@ -53,6 +71,21 @@ class PushWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(result, 0)
+
+    def test_push_job_forces_snapshot_refresh_before_sending(self):
+        dashboard_service = RecordingDashboardService()
+
+        result = run_push_job(
+            config=FakeConfig(),
+            dashboard_service=dashboard_service,
+            report_service=StubReportService(),
+            notifier_specs=[
+                ("email", SuccessNotifier),
+            ],
+        )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(dashboard_service.force_refresh_calls, [True])
 
 
 if __name__ == "__main__":

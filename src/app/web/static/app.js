@@ -1051,9 +1051,9 @@ function renderPushWorkspace(detail) {
     : [{ name: "市场日报", times: ["08:00", "12:00", "17:00"], timezone: "Asia/Shanghai", enabled: true, module_ids: config.selected_module_ids || ["market"] }];
   const flash = section.flash || null;
   return `
-    <div class="content-stack">
+    <div class="content-stack push-layout" data-push-workspace>
       <div class="grid-two push-grid">
-        <article class="info-card push-control-card">
+        <article class="info-card push-control-card push-config-card">
           <div class="card-head">
             <h4>推送配置</h4>
             ${statusBadge(preview.ok === false ? "degraded" : "compatible")}
@@ -1085,7 +1085,7 @@ function renderPushWorkspace(detail) {
           <div class="push-check-grid">
             ${renderPushSourceOptions(moduleOptions, config.selected_module_ids || ["market"], "data-push-module")}
           </div>
-          <div class="push-form-grid">
+          <div class="push-form-grid push-email-grid">
             <label class="push-field">
               <span>SMTP 服务器</span>
               <input type="text" data-push-email-field="smtp_server" value="${escapeHtml(email.smtp_server || "")}" placeholder="smtp.gmail.com" />
@@ -1137,7 +1137,7 @@ function renderPushWorkspace(detail) {
         </article>
       </div>
 
-      <article class="info-card push-control-card">
+      <article class="info-card push-control-card push-schedule-card">
         <div class="card-head">
           <h4>定时任务</h4>
           <button type="button" class="module-refresh-button" data-add-schedule>新增任务</button>
@@ -1519,10 +1519,22 @@ function clearScheduledModuleReload(moduleId) {
   }
 }
 
+function isPushWorkspaceInteracting() {
+  if (viewState.activeModuleId !== "push") {
+    return false;
+  }
+  const active = document.activeElement;
+  return Boolean(active && typeof active.closest === "function" && active.closest("[data-push-workspace]"));
+}
+
 function scheduleModuleReload(moduleId, delayMs) {
   clearScheduledModuleReload(moduleId);
   viewState.refreshTimerByModule[moduleId] = window.setTimeout(() => {
     delete viewState.refreshTimerByModule[moduleId];
+    if (moduleId === "push" && isPushWorkspaceInteracting()) {
+      scheduleModuleReload(moduleId, delayMs);
+      return;
+    }
     loadModule(moduleId);
   }, Math.max(500, Number(delayMs) || 2000));
 }
@@ -1562,9 +1574,9 @@ function applyModulePayload(payload) {
     return;
   }
   const isLoadingModule = Boolean(payload.module.loading);
-  if (isLoadingModule && payload.refresh_after_ms) {
+  if (payload.refresh_after_ms) {
     scheduleModuleReload(payload.module.id, payload.refresh_after_ms);
-  } else {
+  } else if (payload.module.id !== "push") {
     clearScheduledModuleReload(payload.module.id);
   }
   replaceModule({
