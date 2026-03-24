@@ -33,6 +33,41 @@ class RecordingEmailNotifier:
         return True
 
 
+class RecordingDashboardService:
+    def __init__(self):
+        self.force_refresh_calls = []
+
+    def build_snapshot(self, *, force_refresh=False):
+        self.force_refresh_calls.append(force_refresh)
+        return type("Snapshot", (), {"generated_at": "2026-03-24T08:00:00Z"})()
+
+    def stop_background_refresh(self):
+        return None
+
+
+class LoadingDashboardService(RecordingDashboardService):
+    def should_serve_loading_module(self, module_id):
+        return module_id == "market"
+
+    def get_module_bootstrap_state(self, module_id):
+        _ = module_id
+        return "refreshing", "后台正在拉取最新数据。"
+
+
+class StubPushReportService:
+    def build_subject(self, snapshot, language="en"):
+        _ = language
+        return f"subject-{snapshot.generated_at}"
+
+    def build_markdown(self, snapshot, module_ids=None, language="en"):
+        _ = (module_ids, language)
+        return f"text-{snapshot.generated_at}"
+
+    def build_email_html(self, snapshot, module_ids=None, layout="newspaper"):
+        _ = (module_ids, layout)
+        return f"<p>{snapshot.generated_at}</p>"
+
+
 class PushCenterModuleTests(unittest.TestCase):
     def setUp(self):
         RecordingEmailNotifier.sent_messages = []
@@ -69,6 +104,7 @@ class PushCenterModuleTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
+        self.assertEqual(payload["refresh_after_ms"], self.push_service.frontend_auto_refresh_ms)
         self.assertEqual(payload["module"]["id"], "push")
         detail = payload["module"]["details"][0]
         self.assertEqual(detail["kind"], "push")
@@ -77,6 +113,57 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertIn("schedules", detail["section"]["config"])
         self.assertNotIn("recent_runs", detail["section"])
         self.assertTrue(self.config_path.with_name("push-center.template.json").exists())
+
+    def test_frontend_push_module_refresh_forces_latest_preview(self):
+        dashboard_service = RecordingDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "refresh-preview.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        client = TestClient(
+            create_fastapi_app(
+                dashboard_service=dashboard_service,
+                push_center_service=push_service,
+            )
+        )
+        try:
+            response = client.get("/api/frontend/modules/push?refresh=1")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(dashboard_service.force_refresh_calls, [True])
+        finally:
+            client.close()
+            push_service.stop_scheduler()
+
+    def test_frontend_push_module_returns_loading_during_selected_module_refresh(self):
+        dashboard_service = LoadingDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "loading-preview.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        client = TestClient(
+            create_fastapi_app(
+                dashboard_service=dashboard_service,
+                push_center_service=push_service,
+            )
+        )
+        try:
+            response = client.get("/api/frontend/modules/push")
+
+            self.assertEqual(response.status_code, 202)
+            payload = response.json()
+            self.assertTrue(payload["module"]["loading"])
+            self.assertEqual(payload["module"]["note"], "后台正在拉取最新数据。")
+            self.assertEqual(payload["refresh_after_ms"], 2000)
+        finally:
+            client.close()
+            push_service.stop_scheduler()
 
     def test_push_config_and_preview_endpoints_roundtrip(self):
         payload = {
@@ -123,7 +210,12 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertIn("Close", preview_json["preview"]["html_body"])
         self.assertIn("M20", preview_json["preview"]["html_body"])
         self.assertIn("Deviation", preview_json["preview"]["html_body"])
-        self.assertIn("grid-template-columns:repeat(2,minmax(0,1fr))", preview_json["preview"]["html_body"])
+        self.assertIn('role="presentation"', preview_json["preview"]["html_body"])
+        self.assertIn('style="display:block;width:100%;max-width:344px;height:auto;"', preview_json["preview"]["html_body"])
+        self.assertIn("@media only screen and (max-width: 480px)", preview_json["preview"]["html_body"])
+        self.assertIn("email-two-up-col", preview_json["preview"]["html_body"])
+        self.assertIn("max-width:50%", preview_json["preview"]["html_body"])
+        self.assertNotIn("组合图与市场模型保持一致", preview_json["preview"]["html_body"])
         self.assertIn("## 市场模型", preview_json["preview"]["text_body"])
         self.assertIn("### 近3个月趋势", preview_json["preview"]["text_body"])
 
@@ -204,6 +296,81 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertIn("market-daily@2026-03-22T08:00", state_json["scheduler_history"])
         config_json = self._read_json(self.config_path)
         self.assertNotIn("scheduler_history", config_json)
+
+    def test_manual_trigger_forces_snapshot_refresh_before_send(self):
+        dashboard_service = RecordingDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "refresh-manual.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        try:
+            result = push_service.trigger_push(
+                {
+                    "selected_module_ids": ["market"],
+                    "email": {
+                        "smtp_server": "smtp.example.com",
+                        "smtp_port": 587,
+                        "username": "bot@example.com",
+                        "password": "secret",
+                        "from_address": "bot@example.com",
+                        "to_addresses": "desk@example.com",
+                        "use_tls": True,
+                    },
+                    "schedules": [],
+                }
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(dashboard_service.force_refresh_calls, [True])
+        finally:
+            push_service.stop_scheduler()
+
+    def test_scheduled_trigger_forces_snapshot_refresh_before_send(self):
+        dashboard_service = RecordingDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "refresh-scheduled.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        try:
+            push_service.update_config(
+                {
+                    "selected_module_ids": ["market"],
+                    "email": {
+                        "smtp_server": "smtp.example.com",
+                        "smtp_port": 587,
+                        "username": "bot@example.com",
+                        "password": "secret",
+                        "from_address": "bot@example.com",
+                        "to_addresses": "desk@example.com",
+                        "use_tls": True,
+                    },
+                    "schedules": [
+                        {
+                            "id": "market-daily",
+                            "name": "Market Daily",
+                            "enabled": True,
+                            "module_ids": ["market"],
+                            "channel_types": ["email"],
+                            "times": ["08:00"],
+                            "timezone": "Asia/Shanghai",
+                        }
+                    ],
+                }
+            )
+            dashboard_service.force_refresh_calls.clear()
+
+            results = push_service.run_due_jobs(now=datetime(2026, 3, 24, 0, 0, tzinfo=UTC))
+
+            self.assertEqual(len(results), 1)
+            self.assertEqual(dashboard_service.force_refresh_calls, [True])
+        finally:
+            push_service.stop_scheduler()
 
     def test_legacy_runtime_data_is_migrated_out_of_config(self):
         legacy_config_path = self.temp_dir / "legacy-push-center.json"

@@ -481,6 +481,22 @@ class DashboardServiceCacheTests(unittest.TestCase):
 
         prime_caches.assert_called_once_with(force_refresh=False)
 
+    def test_successful_module_refresh_invalidates_snapshot_cache(self):
+        from src.services.dashboard_service import DashboardService
+
+        service = DashboardService(
+            news_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(domains=[])),
+            macro_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(indicators=[])),
+            market_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(items=[])),
+            events_service=SimpleNamespace(build_snapshot=lambda: SimpleNamespace(windows=[])),
+            enable_background_refresh=False,
+        )
+        service._snapshot_cache["hybrid"] = SimpleNamespace(payload="stale", refreshed_at=1.0)
+
+        service._run_module_refresh_task(cache_key="module:market", refresher=lambda: None)
+
+        self.assertEqual(service._snapshot_cache, {})
+
     def test_news_view_uses_media_name_and_provider_specific_tag(self):
         from src.services.dashboard_service import DashboardService
 

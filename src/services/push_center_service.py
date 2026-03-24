@@ -151,15 +151,23 @@ class PushCenterService:
                 else os.getenv("PUSH_CENTER_SCHEDULER_CHECK_SECONDS", "20")
             ),
         )
+        self._frontend_auto_refresh_ms = max(
+            5000,
+            int(os.getenv("PUSH_FRONTEND_AUTO_REFRESH_MS", "30000")),
+        )
         self._scheduler_stop_event = threading.Event()
         self._scheduler_thread: threading.Thread | None = None
         self._ensure_config_file()
         if enable_scheduler:
             self.start_scheduler()
 
-    def build_module_payload(self) -> dict[str, Any]:
+    @property
+    def frontend_auto_refresh_ms(self) -> int:
+        return self._frontend_auto_refresh_ms
+
+    def build_module_payload(self, *, force_refresh_preview: bool = False) -> dict[str, Any]:
         config = self._load_config()
-        preview = self._build_preview(config)
+        preview = self._build_preview(config, force_refresh=force_refresh_preview)
         note = f"{len(config['schedules'])} 个任务 / {len(config['selected_module_ids'])} 个模块"
         return {
             "generated_at": _utc_now_iso(),
@@ -192,12 +200,28 @@ class PushCenterService:
             },
         }
 
+    def should_serve_loading_module(self) -> tuple[bool, str]:
+        config = self._load_config()
+        selected_modules = list(config.get("selected_module_ids") or ["market"])
+        should_serve = getattr(self._dashboard_service, "should_serve_loading_module", None)
+        get_state = getattr(self._dashboard_service, "get_module_bootstrap_state", None)
+        if not callable(should_serve):
+            return False, ""
+        for module_id in selected_modules:
+            if not should_serve(module_id):
+                continue
+            detail = ""
+            if callable(get_state):
+                _, detail = get_state(module_id)
+            return True, detail or "后台正在拉取最新数据。"
+        return False, ""
+
     def update_config(self, payload: Mapping[str, Any] | None) -> dict[str, Any]:
         payload = self._unwrap_payload(payload)
         existing = self._load_config()
         normalized = self._normalize_config(payload or {}, base=existing)
         self._save_config(normalized)
-        return self.build_module_payload()
+        return self.build_module_payload(force_refresh_preview=True)
 
     def build_preview_response(self, payload: Mapping[str, Any] | None) -> dict[str, Any]:
         payload = self._unwrap_payload(payload)
@@ -206,7 +230,7 @@ class PushCenterService:
         return {
             "generated_at": _utc_now_iso(),
             "config": self._public_config(normalized),
-            "preview": self._build_preview(normalized),
+            "preview": self._build_preview(normalized, force_refresh=True),
         }
 
     def trigger_push(self, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -272,10 +296,16 @@ class PushCenterService:
             except Exception as error:  # pragma: no cover - defensive background logging
                 logger.warning("push-center scheduler loop failed: %s", error)
 
-    def _build_preview(self, config: Mapping[str, Any], *, module_ids: Iterable[str] | None = None) -> dict[str, Any]:
+    def _build_preview(
+        self,
+        config: Mapping[str, Any],
+        *,
+        module_ids: Iterable[str] | None = None,
+        force_refresh: bool = False,
+    ) -> dict[str, Any]:
         selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
         try:
-            snapshot = self._dashboard_service.build_snapshot()
+            snapshot = self._dashboard_service.build_snapshot(force_refresh=force_refresh)
             subject = self._build_subject(snapshot, config, selected_modules)
             text_body = self._report_service.build_markdown(snapshot, module_ids=selected_modules)
             html_body = self._report_service.build_email_html(
@@ -325,7 +355,11 @@ class PushCenterService:
     ) -> dict[str, Any]:
         selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
         selected_channels = [str(item).strip().lower() for item in (channel_types or ["email"]) if str(item).strip()]
-        preview = self._build_preview(config, module_ids=selected_modules)
+        preview = self._build_preview(
+            config,
+            module_ids=selected_modules,
+            force_refresh=True,
+        )
         resolved_timezone = self._normalize_timezone(
             execution_timezone or self._default_execution_timezone(config)
         )

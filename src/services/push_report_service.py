@@ -123,27 +123,57 @@ class PushReportService:
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{escape(snapshot.title)}</title>
+    <style>
+      @media only screen and (max-width: 480px) {{
+        .email-two-up-col {{
+          display: block !important;
+          max-width: 100% !important;
+        }}
+
+        .email-two-up-col table {{
+          width: 100% !important;
+        }}
+
+        .email-two-up-col-left td,
+        .email-two-up-col-right td {{
+          padding-left: 0 !important;
+          padding-right: 0 !important;
+        }}
+      }}
+    </style>
   </head>
   <body style="margin:0;padding:0;background:#f3efe6;color:#171717;">
-    <div style="max-width:1120px;margin:0 auto;padding:28px 18px 40px;font-family:Georgia,'Times New Roman','Songti SC','STSong',serif;">
-      {body}
-    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;background:#f3efe6;">
+      <tr>
+        <td align="center" style="padding:28px 18px 40px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:1120px;border-collapse:collapse;font-family:Georgia,'Times New Roman','Songti SC','STSong',serif;">
+            <tr>
+              <td>{body}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>"""
 
     def _build_newspaper_body(self, snapshot: DashboardSnapshot, selected: set[str]) -> str:
         header = f"""
 <header style="padding:0 0 18px;border-bottom:3px double #171717;">
-  <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-end;flex-wrap:wrap;">
-    <div>
-      <div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#7a6b4d;">Finance Dispatch</div>
-      <h1 style="margin:4px 0 0;font-size:34px;line-height:1.05;">{escape(snapshot.title)}</h1>
-    </div>
-    <div style="font-size:13px;color:#4f4a40;text-align:right;">
-      <div>Edition: {escape(snapshot.generated_at[:10])}</div>
-      <div>Generated: {escape(snapshot.generated_at)}</div>
-    </div>
-  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#7a6b4d;">Finance Dispatch</td>
+    </tr>
+    <tr>
+      <td style="padding-top:4px;"><h1 style="margin:0;font-size:34px;line-height:1.05;">{escape(snapshot.title)}</h1></td>
+    </tr>
+    <tr>
+      <td style="padding-top:10px;font-size:13px;line-height:1.7;color:#4f4a40;">
+        <div>Edition: {escape(snapshot.generated_at[:10])}</div>
+        <div>Generated: {escape(snapshot.generated_at)}</div>
+      </td>
+    </tr>
+  </table>
 </header>"""
         lead = f"""
 <section style="padding:14px 0 18px;border-bottom:1px solid #b8aa8c;">
@@ -164,9 +194,9 @@ class PushReportService:
 
         return f"""{header}
 {lead}
-<main style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;padding-top:18px;">
-  {''.join(columns)}
-</main>"""
+<div style="padding-top:18px;">
+  {self._wrap_stacked_blocks(columns, top_padding=18)}
+</div>"""
 
     def _build_briefing_body(self, snapshot: DashboardSnapshot, selected: set[str]) -> str:
         sections: list[str] = [
@@ -184,7 +214,7 @@ class PushReportService:
             sections.append(self._build_news_column(snapshot))
         if "events" in selected:
             sections.append(self._build_events_column(snapshot))
-        return "".join(sections)
+        return self._wrap_stacked_blocks(sections, top_padding=18)
 
     def _build_market_column(self, snapshot: DashboardSnapshot) -> str:
         summary_rows = "".join(
@@ -198,7 +228,7 @@ class PushReportService:
 </tr>"""
             for card in snapshot.market_sections
         )
-        trend_cards = "".join(self._build_market_trend_block(card) for card in snapshot.market_sections)
+        trend_cards = [self._build_market_trend_block(card) for card in snapshot.market_sections]
         return f"""
 <section style="padding:0 14px 16px;border:1px solid #cdbf9d;background:#faf6eb;">
   <div style="padding:14px 0 10px;border-bottom:2px solid #171717;">
@@ -221,12 +251,9 @@ class PushReportService:
     </table>
   </div>
   <div style="padding-top:18px;">
-    <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap;">
-      <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#7a6b4d;">3M Trend</div>
-      <div style="font-size:12px;color:#6e654f;">近3个月收盘走势、区间涨跌与高低点</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px;align-items:start;">
-      {trend_cards or '<p style="margin:0;">暂无趋势数据。</p>'}
+    <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#7a6b4d;">3M Trend</div>
+    <div style="margin-top:10px;">
+      {self._wrap_two_up_blocks(trend_cards or ['<p style="margin:0;">暂无趋势数据。</p>'], top_padding=12)}
     </div>
   </div>
 </section>"""
@@ -235,18 +262,23 @@ class PushReportService:
         trend = self._build_market_trend_summary(card)
         return f"""
 <article style="padding:12px;border:1px solid #d0c3a8;background:#fffdf7;">
-  <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap;">
-    <h3 style="margin:0;font-size:18px;">{escape(card.label)}</h3>
-    <span style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8b5e00;">{escape(card.signal)}</span>
-  </div>
-  <div style="margin-top:8px;font-size:12px;color:#6e654f;">组合图与市场模型保持一致，展示 Close、M20 与 Deviation。</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="font-size:18px;font-weight:700;line-height:1.4;">{escape(card.label)}</td>
+      <td align="right" style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8b5e00;white-space:nowrap;">{escape(card.signal)}</td>
+    </tr>
+  </table>
   <div style="margin-top:10px;">{self._render_market_combo_chart(trend["chart_points"], label=card.label)}</div>
-  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;font-size:13px;">
-    <div><strong>3M 涨跌</strong><br />{escape(trend["change_label"])}</div>
-    <div><strong>区间高低</strong><br />{escape(trend["range_label"])}</div>
-    <div><strong>最新收盘</strong><br />{escape(trend["latest_label"])}</div>
-    <div><strong>交易日</strong><br />{escape(card.trade_date)}</div>
-  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;">
+    <tr>
+      <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;"><strong>3M 涨跌</strong><br />{escape(trend["change_label"])}</td>
+      <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;"><strong>区间高低</strong><br />{escape(trend["range_label"])}</td>
+    </tr>
+    <tr>
+      <td width="50%" style="padding:0 8px 0 0;vertical-align:top;"><strong>最新收盘</strong><br />{escape(trend["latest_label"])}</td>
+      <td width="50%" style="padding:0 0 0 8px;vertical-align:top;"><strong>交易日</strong><br />{escape(card.trade_date)}</td>
+    </tr>
+  </table>
   <p style="margin:10px 0 0;font-size:13px;line-height:1.7;color:#4f4a40;">{escape(card.explanation)}</p>
 </article>"""
 
@@ -309,7 +341,11 @@ class PushReportService:
 
     def _render_market_combo_chart(self, points: list[dict[str, object]], *, label: str) -> str:
         if len(points) < 2:
-            return '<div style="height:112px;display:grid;place-items:center;border:1px dashed #d0c3a8;color:#6e654f;">暂无趋势数据</div>'
+            return (
+                '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+                'style="width:100%;border-collapse:collapse;"><tr><td align="center" '
+                'style="height:112px;border:1px dashed #d0c3a8;color:#6e654f;">暂无趋势数据</td></tr></table>'
+            )
 
         width = 344.0
         height = 126.0
@@ -395,12 +431,14 @@ class PushReportService:
 
         return f"""
 <div>
-  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:#6e654f;margin-bottom:6px;">
-    <span><span style="display:inline-block;width:12px;height:2px;background:#f6a313;vertical-align:middle;margin-right:6px;"></span>Close</span>
-    <span><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #31b8c4;vertical-align:middle;margin-right:6px;"></span>M20</span>
-    <span><span style="display:inline-block;width:10px;height:10px;background:#ff5f72;vertical-align:middle;margin-right:6px;"></span>Deviation</span>
-  </div>
-  <svg viewBox="0 0 {width:.0f} {height:.0f}" width="100%" height="{height:.0f}" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
+  <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:12px;color:#6e654f;margin-bottom:6px;">
+    <tr>
+      <td style="padding:0 14px 0 0;white-space:nowrap;"><span style="display:inline-block;width:12px;height:2px;background:#f6a313;vertical-align:middle;margin-right:6px;"></span>Close</td>
+      <td style="padding:0 14px 0 0;white-space:nowrap;"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #31b8c4;vertical-align:middle;margin-right:6px;"></span>M20</td>
+      <td style="white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#ff5f72;vertical-align:middle;margin-right:6px;"></span>Deviation</td>
+    </tr>
+  </table>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="{width:.0f}" height="{height:.0f}" style="display:block;width:100%;max-width:{width:.0f}px;height:auto;" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
     <line x1="{left:.2f}" y1="{top:.2f}" x2="{width - right:.2f}" y2="{top:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
     <line x1="{left:.2f}" y1="{top + (price_height / 2):.2f}" x2="{width - right:.2f}" y2="{top + (price_height / 2):.2f}" stroke="#efe6d3" stroke-width="1" stroke-dasharray="3 3"></line>
     <line x1="{left:.2f}" y1="{top + price_height:.2f}" x2="{width - right:.2f}" y2="{top + price_height:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
@@ -411,10 +449,12 @@ class PushReportService:
     <circle cx="{last_close_x:.2f}" cy="{last_close_y:.2f}" r="3.2" fill="#f6a313"></circle>
     {f'<circle cx="{last_close_x:.2f}" cy="{last_ma20_y:.2f}" r="2.8" fill="#31b8c4"></circle>' if last_ma20_y is not None else ''}
   </svg>
-  <div style="display:flex;justify-content:space-between;gap:12px;margin-top:6px;font-size:11px;color:#6e654f;">
-    <span>{escape(first_date)}</span>
-    <span>{escape(last_date)}</span>
-  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:6px;font-size:11px;color:#6e654f;">
+    <tr>
+      <td align="left">{escape(first_date)}</td>
+      <td align="right">{escape(last_date)}</td>
+    </tr>
+  </table>
 </div>"""
 
     def _build_svg_line_path(self, points: list[tuple[float, float | None]]) -> str:
@@ -499,3 +539,56 @@ class PushReportService:
             return allowed
         selected = {str(module_id).strip() for module_id in module_ids if str(module_id).strip() in allowed}
         return selected or {"market"}
+
+    def _wrap_stacked_blocks(self, blocks: Iterable[str], *, top_padding: int = 0) -> str:
+        rows: list[str] = []
+        for index, block in enumerate(blocks):
+            padding = f"padding-top:{top_padding}px;" if index else ""
+            rows.append(f'<tr><td style="{padding}">{block}</td></tr>')
+        return (
+            '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+            'style="width:100%;border-collapse:collapse;">'
+            f'{"".join(rows)}'
+            "</table>"
+        )
+
+    def _wrap_two_up_blocks(self, blocks: Iterable[str], *, top_padding: int = 0) -> str:
+        items = list(blocks)
+        if not items:
+            return self._wrap_stacked_blocks([], top_padding=top_padding)
+
+        rows: list[str] = []
+        for index in range(0, len(items), 2):
+            left = items[index]
+            right = items[index + 1] if index + 1 < len(items) else ""
+            row_padding = f"padding-top:{top_padding}px;" if index else ""
+            left_max_width = "50%" if right else "100%"
+            right_block = (
+                f'<div class="email-two-up-col email-two-up-col-right" '
+                f'style="display:inline-block;width:100%;max-width:50%;vertical-align:top;">'
+                '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+                'style="width:100%;border-collapse:collapse;">'
+                f'<tr><td style="padding-left:6px;">{right}</td></tr>'
+                "</table>"
+                "</div>"
+            ) if right else ""
+            rows.append(
+                "<tr>"
+                f'<td style="{row_padding}font-size:0;text-align:left;">'
+                f'<div class="email-two-up-col email-two-up-col-left" '
+                f'style="display:inline-block;width:100%;max-width:{left_max_width};vertical-align:top;">'
+                '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+                'style="width:100%;border-collapse:collapse;">'
+                f'<tr><td style="padding-right:6px;">{left}</td></tr>'
+                "</table>"
+                "</div>"
+                f"{right_block}"
+                "</td>"
+                "</tr>"
+            )
+        return (
+            '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+            'style="width:100%;border-collapse:collapse;">'
+            f'{"".join(rows)}'
+            "</table>"
+        )

@@ -79,7 +79,7 @@ def run_push_job(
         logger.info(f"Languages: {', '.join(languages)}")
         logger.info("=" * 60)
 
-        snapshot = dashboard_service.build_snapshot()
+        snapshot = dashboard_service.build_snapshot(force_refresh=True)
         overall_results = {"sent": [], "failed": []}
 
         for language in languages:
