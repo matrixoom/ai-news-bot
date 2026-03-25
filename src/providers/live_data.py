@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from html import unescape
 import inspect
 import json
 import os
 import re
 from typing import Any, Callable, Iterable, Sequence
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 
 import feedparser
 from openai import OpenAI
@@ -17,7 +18,9 @@ import requests
 from ..domain.external_data import (
     ConfidenceLevel,
     EventHorizon,
+    MacroHistoryPoint,
     MacroIndicatorReading,
+    MacroIndicatorSeries,
     MarketIndexHistoryPoint,
     MarketIndexSnapshot,
     NewsCategory,
@@ -88,10 +91,153 @@ def _pick_first(mapping: dict[str, Any], names: Iterable[str]) -> Any | None:
     return None
 
 
+def _month_end(year: int, month: int) -> date:
+    if month == 12:
+        return date(year, 12, 31)
+    return date(year, month + 1, 1) - timedelta(days=1)
+
+
+def _quarter_end(year: int, quarter: int) -> date:
+    return _month_end(year, quarter * 3)
+
+
+def _parse_nbs_period_code(code: str) -> tuple[str, date]:
+    text = str(code or "").strip()
+    if len(text) == 6 and text.isdigit():
+        year = int(text[:4])
+        month = int(text[4:])
+        return f"{year:04d}-{month:02d}", _month_end(year, month)
+    if len(text) == 5 and text[:4].isdigit() and text[-1] in {"A", "B", "C", "D"}:
+        year = int(text[:4])
+        quarter = {"A": 1, "B": 2, "C": 3, "D": 4}[text[-1]]
+        return f"{year:04d}-Q{quarter}", _quarter_end(year, quarter)
+    raise ValueError(f"Unsupported NBS period code: {code}")
+
+
+def _extract_article_text(html: str) -> str:
+    match = re.search(r'<div id="zoom"[^>]*>(.*?)</div>\s*</td>', html, flags=re.S)
+    body = match.group(1) if match else html
+    body = re.sub(r"<br\s*/?>", "\n", body, flags=re.I)
+    body = re.sub(r"</p>", "\n", body, flags=re.I)
+    body = re.sub(r"<[^>]+>", "", body)
+    body = body.replace("\xa0", " ")
+    return re.sub(r"\s+", " ", body).strip()
+
+
+def _parse_release_date_from_html(html: str) -> str | None:
+    for pattern in (
+        r"文章来源：\s*(\d{4}-\d{2}-\d{2})",
+        r"发布时间：\s*(\d{4}-\d{2}-\d{2})",
+        r'content="(\d{4}-\d{2}-\d{2})"',
+    ):
+        match = re.search(pattern, html)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _parse_signed_chinese_amount_to_tn_yuan(text: str) -> float:
+    normalized = str(text or "").replace(",", "").strip()
+    sign = -1.0 if "减少" in normalized else 1.0
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(万亿元|亿元)", normalized)
+    if match is None:
+        raise ValueError(f"Unsupported amount text: {text}")
+    value = float(match.group(1))
+    if match.group(2) == "亿元":
+        value = value / 10000
+    return sign * value
+
+
+def _parse_unsigned_chinese_amount_to_tn_yuan(text: str) -> float:
+    normalized = str(text or "").replace(",", "").strip()
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(万亿元|亿元)", normalized)
+    if match is None:
+        raise ValueError(f"Unsupported amount text: {text}")
+    value = float(match.group(1))
+    if match.group(2) == "亿元":
+        value = value / 10000
+    return value
+
+
+def _title_to_period_end(title: str) -> date | None:
+    text = str(title or "").strip()
+    month_match = re.search(r"(\d{4})年(\d{1,2})月", text)
+    if month_match:
+        return _month_end(int(month_match.group(1)), int(month_match.group(2)))
+    year_match = re.search(r"(\d{4})年", text)
+    if year_match is None:
+        return None
+    year = int(year_match.group(1))
+    if "上半年" in text or "二季度" in text:
+        return _quarter_end(year, 2)
+    if "前三季度" in text or "三季度" in text:
+        return _quarter_end(year, 3)
+    if "一季度" in text:
+        return _quarter_end(year, 1)
+    if "四季度" in text or re.search(r"\d{4}年金融统计数据报告", text):
+        return _quarter_end(year, 4)
+    return None
+
+
 @dataclass
 class _ProviderRuntimeState:
     availability: ProviderAvailability
     detail: str
+
+
+def _parse_release_date_from_html_clean(html: str) -> str | None:
+    for pattern in (
+        r"文章来源[:：]?\s*(\d{4}-\d{2}-\d{2})",
+        r"发布时间[:：]?\s*(\d{4}-\d{2}-\d{2})",
+        r'content="(\d{4}-\d{2}-\d{2})"',
+    ):
+        match = re.search(pattern, html)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _parse_signed_amount_tn_yuan(text: str) -> float:
+    normalized = str(text or "").replace(",", "").strip()
+    sign = -1.0 if "减少" in normalized else 1.0
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(万亿元|亿元)", normalized)
+    if match is None:
+        raise ValueError(f"Unsupported amount text: {text}")
+    value = float(match.group(1))
+    if match.group(2) == "亿元":
+        value = value / 10000
+    return sign * value
+
+
+def _parse_unsigned_amount_tn_yuan(text: str) -> float:
+    normalized = str(text or "").replace(",", "").strip()
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(万亿元|亿元)", normalized)
+    if match is None:
+        raise ValueError(f"Unsupported amount text: {text}")
+    value = float(match.group(1))
+    if match.group(2) == "亿元":
+        value = value / 10000
+    return value
+
+
+def _title_to_period_end_clean(title: str) -> date | None:
+    text = str(title or "").strip()
+    month_match = re.search(r"(\d{4})年(\d{1,2})月", text)
+    if month_match:
+        return _month_end(int(month_match.group(1)), int(month_match.group(2)))
+    year_match = re.search(r"(\d{4})年", text)
+    if year_match is None:
+        return None
+    year = int(year_match.group(1))
+    if "上半年" in text or "二季度" in text:
+        return _quarter_end(year, 2)
+    if "前三季度" in text or "三季度" in text:
+        return _quarter_end(year, 3)
+    if "一季度" in text:
+        return _quarter_end(year, 1)
+    if "四季度" in text or re.search(r"\d{4}年金融统计数据报告", text):
+        return _quarter_end(year, 4)
+    return None
 
 
 class _FallbackStatusMixin:
@@ -455,6 +601,681 @@ class AkshareMarketDataProvider:
         )
 
 
+class OfficialMacroDataProvider:
+    """Fetch macro history directly from official NBS and PBOC pages."""
+
+    provider_key = "official-macro"
+    _USER_AGENT = "ai-news-bot/1.0 (+https://github.com/giftedunicorn/ai-news-bot)"
+    _NBS_URL = "https://data.stats.gov.cn/easyquery.htm"
+    _PBOC_STATS_LIST_URL = "https://www.pbc.gov.cn/diaochatongjisi/116219/116225/index.html"
+    _PBOC_STATS_PAGE_TEMPLATE = "https://www.pbc.gov.cn/diaochatongjisi/116219/116225/11871-{page}.html"
+    _PBOC_NEWS_LIST_URL = "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html"
+    _PBOC_NEWS_PAGE_TEMPLATE = "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/11040-{page}.html"
+    _ANCHOR_RE = re.compile(r"<a\b(?P<attrs>[^>]*)>(?P<body>.*?)</a>", re.I | re.S)
+    _NBS_NOMINAL_GDP_TOTAL_CODE = "A010101"
+    _NBS_REAL_GDP_TOTAL_CODE = "A010301"
+    _PBOC_LOAN_BALANCE_REPORT_FALLBACKS = (
+        (date(2024, 12, 31), "2024年四季度金融机构贷款投向统计报告", "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2025092212554556296/index.html"),
+        (date(2025, 3, 31), "2025年一季度金融机构贷款投向统计报告", "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2025092212554751302/index.html"),
+        (date(2025, 6, 30), "2025年二季度金融机构贷款投向统计报告", "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2025092212554883025/index.html"),
+        (date(2025, 9, 30), "2025年三季度金融机构贷款投向统计报告", "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/5877760/index.html"),
+    )
+
+    def __init__(self) -> None:
+        self._session = requests.Session()
+        self._session.headers.update({"User-Agent": self._USER_AGENT})
+
+    def fetch_history_series(
+        self,
+        *,
+        indicator_codes: Sequence[str],
+        start_date: date,
+    ) -> Sequence[MacroIndicatorSeries]:
+        requested = set(indicator_codes)
+        result: dict[str, MacroIndicatorSeries] = {}
+        nominal_gdp_quarter_values: list[tuple[str, date, float]] | None = None
+
+        if "cpi" in requested:
+            result["cpi"] = MacroIndicatorSeries(
+                provider=self.provider_key,
+                indicator_code="cpi",
+                display_name="CPI",
+                unit="%",
+                source_url="https://data.stats.gov.cn/",
+                points=tuple(self._fetch_nbs_monthly_cpi_points(start_date=start_date)),
+            )
+        if "ppi" in requested:
+            result["ppi"] = MacroIndicatorSeries(
+                provider=self.provider_key,
+                indicator_code="ppi",
+                display_name="PPI",
+                unit="%",
+                source_url="https://data.stats.gov.cn/",
+                points=tuple(self._fetch_nbs_monthly_ppi_points(start_date=start_date)),
+            )
+
+        if requested & {"gdp_nominal", "gdp_real", "household_leverage", "enterprise_leverage"}:
+            nominal_gdp_quarter_values = self._fetch_nbs_nominal_gdp_quarter_values(
+                start_date=start_date - timedelta(days=370)
+            )
+            if "gdp_nominal" in requested:
+                result["gdp_nominal"] = MacroIndicatorSeries(
+                    provider=self.provider_key,
+                    indicator_code="gdp_nominal",
+                    display_name="Nominal GDP Growth",
+                    unit="%",
+                    source_url="https://data.stats.gov.cn/",
+                    points=tuple(
+                        self._build_nominal_gdp_growth_points(
+                            nbs_quarter_values=nominal_gdp_quarter_values,
+                            start_date=start_date,
+                        )
+                    ),
+                )
+            if "gdp_real" in requested:
+                result["gdp_real"] = MacroIndicatorSeries(
+                    provider=self.provider_key,
+                    indicator_code="gdp_real",
+                    display_name="Real GDP Growth",
+                    unit="%",
+                    source_url="https://data.stats.gov.cn/",
+                    points=tuple(self._fetch_nbs_real_gdp_growth_points(start_date=start_date)),
+                )
+
+        if requested & {"household_new_loans", "enterprise_new_loans"}:
+            household_points, enterprise_points = self._fetch_pbc_new_loan_points_v2(start_date=start_date)
+            result["household_new_loans"] = MacroIndicatorSeries(
+                provider=self.provider_key,
+                indicator_code="household_new_loans",
+                display_name="Household New Loans",
+                unit="tn yuan",
+                source_url=self._PBOC_STATS_LIST_URL,
+                points=tuple(household_points),
+            )
+            result["enterprise_new_loans"] = MacroIndicatorSeries(
+                provider=self.provider_key,
+                indicator_code="enterprise_new_loans",
+                display_name="Enterprise New Loans",
+                unit="tn yuan",
+                source_url=self._PBOC_STATS_LIST_URL,
+                points=tuple(enterprise_points),
+            )
+
+        if requested & {"household_leverage", "enterprise_leverage"}:
+            if nominal_gdp_quarter_values is None:
+                nominal_gdp_quarter_values = self._fetch_nbs_nominal_gdp_quarter_values(
+                    start_date=start_date - timedelta(days=370)
+                )
+            loan_balance_points = self._fetch_pbc_loan_balance_points_v2(start_date=start_date - timedelta(days=120))
+            household_leverage, enterprise_leverage = self._build_leverage_points_v2(
+                loan_balance_points=loan_balance_points,
+                nbs_quarter_values=nominal_gdp_quarter_values,
+                start_date=start_date,
+            )
+            result["household_leverage"] = MacroIndicatorSeries(
+                provider=self.provider_key,
+                indicator_code="household_leverage",
+                display_name="Household Leverage",
+                unit="%",
+                source_url=self._PBOC_NEWS_LIST_URL,
+                points=tuple(household_leverage),
+            )
+            result["enterprise_leverage"] = MacroIndicatorSeries(
+                provider=self.provider_key,
+                indicator_code="enterprise_leverage",
+                display_name="Enterprise Leverage",
+                unit="%",
+                source_url=self._PBOC_NEWS_LIST_URL,
+                points=tuple(enterprise_leverage),
+            )
+
+        return [result[code] for code in indicator_codes if code in result and result[code].points]
+
+    def fetch_latest_readings(
+        self,
+        *,
+        indicator_codes: Sequence[str],
+    ) -> Sequence[MacroIndicatorReading]:
+        start_date = date.today() - timedelta(days=400)
+        series_items = self.fetch_history_series(indicator_codes=indicator_codes, start_date=start_date)
+        readings: list[MacroIndicatorReading] = []
+        for item in series_items:
+            latest = item.points[-1]
+            previous = item.points[-2] if len(item.points) > 1 else None
+            readings.append(
+                MacroIndicatorReading(
+                    provider=item.provider,
+                    indicator_code=item.indicator_code,
+                    display_name=item.display_name,
+                    value=latest.value,
+                    unit=item.unit,
+                    period_label=latest.period_label,
+                    released_at=latest.released_at,
+                    source_url=item.source_url,
+                    previous_value=previous.value if previous else None,
+                    change_value=(latest.value - previous.value) if previous else None,
+                    change_kind="vs prior release" if previous else None,
+                    trend_summary=None,
+                )
+            )
+        return readings
+
+    def _fetch_nbs_monthly_cpi_points(self, *, start_date: date) -> list[MacroHistoryPoint]:
+        points = self._fetch_nbs_series_points(dbcode="hgyd", code="A01010G", transform=lambda value: value - 100)
+        points.extend(self._fetch_nbs_series_points(dbcode="hgyd", code="A01010J", transform=lambda value: value - 100))
+        points.sort(key=lambda item: item.period_end)
+        return [point for point in points if point.period_end >= start_date]
+
+    def _fetch_nbs_monthly_ppi_points(self, *, start_date: date) -> list[MacroHistoryPoint]:
+        points = self._fetch_nbs_series_points(dbcode="hgyd", code="A010801", transform=lambda value: value - 100)
+        return [point for point in points if point.period_end >= start_date]
+
+    def _fetch_nbs_nominal_gdp_quarter_values(self, *, start_date: date) -> list[tuple[str, date, float]]:
+        payload = self._fetch_nbs_query(dbcode="hgjd", code="A0101", period_value="LAST12")
+        rows: list[tuple[str, date, float]] = []
+        for node in payload["returndata"]["datanodes"]:
+            if node["wds"][0]["valuecode"] != self._NBS_NOMINAL_GDP_TOTAL_CODE:
+                continue
+            if not node["data"]["hasdata"]:
+                continue
+            period_label, period_end = _parse_nbs_period_code(node["wds"][1]["valuecode"])
+            rows.append((period_label, period_end, float(node["data"]["strdata"])))
+        rows.sort(key=lambda item: item[1])
+        return [row for row in rows if row[1] >= start_date]
+
+    def _build_nominal_gdp_growth_points(
+        self,
+        *,
+        nbs_quarter_values: Sequence[tuple[str, date, float]],
+        start_date: date,
+    ) -> list[MacroHistoryPoint]:
+        points: list[MacroHistoryPoint] = []
+        for index in range(4, len(nbs_quarter_values)):
+            period_label, period_end, value = nbs_quarter_values[index]
+            previous_value = nbs_quarter_values[index - 4][2]
+            if previous_value == 0:
+                continue
+            growth = ((value / previous_value) - 1) * 100
+            points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_label,
+                    value=round(growth, 4),
+                    unit="%",
+                    source_url="https://data.stats.gov.cn/",
+                    released_at=period_end.isoformat(),
+                )
+            )
+        return [point for point in points if point.period_end >= start_date]
+
+    def _fetch_nbs_real_gdp_growth_points(self, *, start_date: date) -> list[MacroHistoryPoint]:
+        points = self._fetch_nbs_series_points(
+            dbcode="hgjd",
+            code="A0103",
+            leaf_code=self._NBS_REAL_GDP_TOTAL_CODE,
+            transform=lambda value: value - 100,
+        )
+        return [point for point in points if point.period_end >= start_date]
+
+    def _fetch_nbs_query(self, *, dbcode: str, code: str, period_value: str) -> dict[str, Any]:
+        response = self._session.post(
+            self._NBS_URL,
+            params={
+                "m": "QueryData",
+                "dbcode": dbcode,
+                "rowcode": "zb",
+                "colcode": "sj",
+                "wds": "[]",
+                "dfwds": json.dumps(
+                    [
+                        {"wdcode": "zb", "valuecode": code},
+                        {"wdcode": "sj", "valuecode": period_value},
+                    ],
+                    ensure_ascii=False,
+                ),
+                "k1": str(int(datetime.now(UTC).timestamp() * 1000)),
+            },
+            timeout=20,
+            verify=False,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _fetch_nbs_series_points(
+        self,
+        *,
+        dbcode: str,
+        code: str,
+        leaf_code: str | None = None,
+        transform: Callable[[float], float],
+    ) -> list[MacroHistoryPoint]:
+        payload = self._fetch_nbs_query(dbcode=dbcode, code=code, period_value="LAST24")
+        points: list[MacroHistoryPoint] = []
+        for node in payload["returndata"]["datanodes"]:
+            if leaf_code is not None and node["wds"][0]["valuecode"] != leaf_code:
+                continue
+            if not node["data"]["hasdata"]:
+                continue
+            period_label, period_end = _parse_nbs_period_code(node["wds"][1]["valuecode"])
+            points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_label,
+                    value=round(transform(float(node["data"]["strdata"])), 4),
+                    unit="%",
+                    source_url="https://data.stats.gov.cn/",
+                    released_at=period_end.isoformat(),
+                )
+            )
+        points.sort(key=lambda item: item.period_end)
+        return points
+
+    def _fetch_pbc_new_loan_points(self, *, start_date: date) -> tuple[list[MacroHistoryPoint], list[MacroHistoryPoint]]:
+        report_links = self._collect_pbc_links(
+            list_url=self._PBOC_STATS_LIST_URL,
+            page_template=self._PBOC_STATS_PAGE_TEMPLATE,
+            title_keyword="金融统计数据报告",
+            start_date=date(start_date.year, 1, 1),
+            max_pages=6,
+        )
+        cumulative_rows: list[tuple[date, float, float, str]] = []
+        for period_end, _title, url in report_links:
+            html = self._fetch_text(url)
+            article = _extract_article_text(html)
+            household_match = re.search(r"住户贷款(增加|减少)([0-9.]+(?:万亿元|亿元))", article)
+            enterprise_match = re.search(r"企（事）业单位贷款(增加|减少)([0-9.]+(?:万亿元|亿元))", article)
+            if household_match is None or enterprise_match is None:
+                continue
+            released_at = _parse_release_date_from_html(html) or period_end.isoformat()
+            cumulative_rows.append(
+                (
+                    period_end,
+                    _parse_signed_chinese_amount_to_tn_yuan("".join(household_match.groups())),
+                    _parse_signed_chinese_amount_to_tn_yuan("".join(enterprise_match.groups())),
+                    released_at,
+                )
+            )
+
+        household_points: list[MacroHistoryPoint] = []
+        enterprise_points: list[MacroHistoryPoint] = []
+        rows_by_year: dict[int, list[tuple[date, float, float, str]]] = {}
+        for row in cumulative_rows:
+            rows_by_year.setdefault(row[0].year, []).append(row)
+        for rows in rows_by_year.values():
+            rows.sort(key=lambda item: item[0])
+            household_previous = 0.0
+            enterprise_previous = 0.0
+            for period_end, household_cumulative, enterprise_cumulative, released_at in rows:
+                household_value = household_cumulative - household_previous
+                enterprise_value = enterprise_cumulative - enterprise_previous
+                period_label = period_end.strftime("%Y-%m")
+                household_points.append(
+                    MacroHistoryPoint(
+                        period_end=period_end,
+                        period_label=period_label,
+                        value=round(household_value, 4),
+                        unit="tn yuan",
+                        source_url=self._PBOC_STATS_LIST_URL,
+                        released_at=released_at,
+                    )
+                )
+                enterprise_points.append(
+                    MacroHistoryPoint(
+                        period_end=period_end,
+                        period_label=period_label,
+                        value=round(enterprise_value, 4),
+                        unit="tn yuan",
+                        source_url=self._PBOC_STATS_LIST_URL,
+                        released_at=released_at,
+                    )
+                )
+                household_previous = household_cumulative
+                enterprise_previous = enterprise_cumulative
+
+        household_points.sort(key=lambda item: item.period_end)
+        enterprise_points.sort(key=lambda item: item.period_end)
+        return (
+            [point for point in household_points if point.period_end >= start_date],
+            [point for point in enterprise_points if point.period_end >= start_date],
+        )
+
+    def _fetch_pbc_loan_balance_points(self, *, start_date: date) -> list[tuple[date, float, float, str]]:
+        report_links = self._collect_pbc_links(
+            list_url=self._PBOC_NEWS_LIST_URL,
+            page_template=self._PBOC_NEWS_PAGE_TEMPLATE,
+            title_keyword="金融机构贷款投向统计报告",
+            start_date=start_date,
+            max_pages=28,
+        )
+        rows: list[tuple[date, float, float, str]] = []
+        for period_end, _title, url in report_links:
+            html = self._fetch_text(url)
+            article = _extract_article_text(html)
+            enterprise_match = re.search(r"本外币企事业单位贷款余额([0-9.]+万亿元)", article)
+            household_match = re.search(r"本外币住户贷款余额([0-9.]+万亿元)", article)
+            if enterprise_match is None or household_match is None:
+                continue
+            released_at = _parse_release_date_from_html(html) or period_end.isoformat()
+            rows.append(
+                (
+                    period_end,
+                    _parse_unsigned_chinese_amount_to_tn_yuan(household_match.group(1)),
+                    _parse_unsigned_chinese_amount_to_tn_yuan(enterprise_match.group(1)),
+                    released_at,
+                )
+            )
+        rows.sort(key=lambda item: item[0])
+        return rows
+
+    def _build_leverage_points(
+        self,
+        *,
+        loan_balance_points: Sequence[tuple[date, float, float, str]],
+        nbs_quarter_values: Sequence[tuple[str, date, float]],
+        start_date: date,
+    ) -> tuple[list[MacroHistoryPoint], list[MacroHistoryPoint]]:
+        denominator_by_period: dict[date, float] = {}
+        ordered = sorted(nbs_quarter_values, key=lambda item: item[1])
+        for index in range(3, len(ordered)):
+            denominator_by_period[ordered[index][1]] = sum(item[2] for item in ordered[index - 3:index + 1])
+
+        household_points: list[MacroHistoryPoint] = []
+        enterprise_points: list[MacroHistoryPoint] = []
+        for period_end, household_balance, enterprise_balance, released_at in loan_balance_points:
+            denominator = denominator_by_period.get(period_end)
+            if not denominator:
+                continue
+            period_label = f"{period_end.year:04d}-Q{((period_end.month - 1) // 3) + 1}"
+            household_points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_label,
+                    value=round((household_balance * 10000 / denominator) * 100, 4),
+                    unit="%",
+                    source_url=self._PBOC_NEWS_LIST_URL,
+                    released_at=released_at,
+                )
+            )
+            enterprise_points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_label,
+                    value=round((enterprise_balance * 10000 / denominator) * 100, 4),
+                    unit="%",
+                    source_url=self._PBOC_NEWS_LIST_URL,
+                    released_at=released_at,
+                )
+            )
+        return (
+            [point for point in household_points if point.period_end >= start_date],
+            [point for point in enterprise_points if point.period_end >= start_date],
+        )
+
+    def _collect_pbc_links(
+        self,
+        *,
+        list_url: str,
+        page_template: str,
+        title_keyword: str,
+        start_date: date,
+        max_pages: int,
+    ) -> list[tuple[date, str, str]]:
+        collected: list[tuple[date, str, str]] = []
+        seen_urls: set[str] = set()
+        for page in range(1, max_pages + 1):
+            url = list_url if page == 1 else page_template.format(page=page)
+            html = self._fetch_text(url)
+            page_min_date: date | None = None
+            page_matches = 0
+            for href, title in self._ANCHOR_RE.findall(html):
+                if title_keyword not in title:
+                    continue
+                period_end = _title_to_period_end(title)
+                if period_end is None:
+                    continue
+                page_matches += 1
+                page_min_date = period_end if page_min_date is None else min(page_min_date, period_end)
+                absolute_url = urljoin(url, href)
+                if absolute_url in seen_urls:
+                    continue
+                seen_urls.add(absolute_url)
+                collected.append((period_end, title, absolute_url))
+            if page_matches == 0 and page > 1:
+                break
+            if page_min_date is not None and page_min_date < start_date:
+                break
+        collected.sort(key=lambda item: item[0])
+        return [item for item in collected if item[0] >= start_date]
+
+    def _fetch_text(self, url: str) -> str:
+        response = self._session.get(url, timeout=20, verify=False)
+        response.raise_for_status()
+        response.encoding = "utf-8"
+        return response.text
+
+    def _fetch_pbc_new_loan_points_v2(
+        self,
+        *,
+        start_date: date,
+    ) -> tuple[list[MacroHistoryPoint], list[MacroHistoryPoint]]:
+        report_links = self._collect_pbc_links_v2(
+            list_url=self._PBOC_STATS_LIST_URL,
+            page_template=self._PBOC_STATS_PAGE_TEMPLATE,
+            title_keyword="金融统计数据报告",
+            start_date=date(start_date.year, 1, 1),
+            max_pages=6,
+        )
+        cumulative_rows: list[tuple[date, float, float, str]] = []
+        for period_end, _title, url in report_links:
+            html = self._fetch_text(url)
+            article = _extract_article_text(html)
+            household_match = re.search(r"住户贷款(增加|减少)([0-9.]+(?:万亿元|亿元))", article)
+            enterprise_match = re.search(r"企（事）业单位贷款(增加|减少)([0-9.]+(?:万亿元|亿元))", article)
+            if household_match is None or enterprise_match is None:
+                continue
+            released_at = _parse_release_date_from_html_clean(html) or period_end.isoformat()
+            cumulative_rows.append(
+                (
+                    period_end,
+                    _parse_signed_amount_tn_yuan("".join(household_match.groups())),
+                    _parse_signed_amount_tn_yuan("".join(enterprise_match.groups())),
+                    released_at,
+                )
+            )
+
+        household_points: list[MacroHistoryPoint] = []
+        enterprise_points: list[MacroHistoryPoint] = []
+        rows_by_year: dict[int, list[tuple[date, float, float, str]]] = {}
+        for row in cumulative_rows:
+            rows_by_year.setdefault(row[0].year, []).append(row)
+        for rows in rows_by_year.values():
+            rows.sort(key=lambda item: item[0])
+            household_previous = 0.0
+            enterprise_previous = 0.0
+            for period_end, household_cumulative, enterprise_cumulative, released_at in rows:
+                period_label = period_end.strftime("%Y-%m")
+                household_value = household_cumulative - household_previous
+                enterprise_value = enterprise_cumulative - enterprise_previous
+                household_points.append(
+                    MacroHistoryPoint(
+                        period_end=period_end,
+                        period_label=period_label,
+                        value=round(household_value, 4),
+                        unit="tn yuan",
+                        source_url=self._PBOC_STATS_LIST_URL,
+                        released_at=released_at,
+                    )
+                )
+                enterprise_points.append(
+                    MacroHistoryPoint(
+                        period_end=period_end,
+                        period_label=period_label,
+                        value=round(enterprise_value, 4),
+                        unit="tn yuan",
+                        source_url=self._PBOC_STATS_LIST_URL,
+                        released_at=released_at,
+                    )
+                )
+                household_previous = household_cumulative
+                enterprise_previous = enterprise_cumulative
+
+        household_points.sort(key=lambda item: item.period_end)
+        enterprise_points.sort(key=lambda item: item.period_end)
+        return (
+            [point for point in household_points if point.period_end >= start_date],
+            [point for point in enterprise_points if point.period_end >= start_date],
+        )
+
+    def _fetch_pbc_loan_balance_points_v2(
+        self,
+        *,
+        start_date: date,
+    ) -> list[tuple[date, float, float, str]]:
+        report_links = self._collect_pbc_links_v2(
+            list_url=self._PBOC_NEWS_LIST_URL,
+            page_template=self._PBOC_NEWS_PAGE_TEMPLATE,
+            title_keyword="金融机构贷款投向统计报告",
+            start_date=start_date,
+            max_pages=28,
+        )
+        if not report_links:
+            report_links = [
+                item
+                for item in self._PBOC_LOAN_BALANCE_REPORT_FALLBACKS
+                if item[0] >= start_date
+            ]
+        rows: list[tuple[date, float, float, str]] = []
+        for period_end, _title, url in report_links:
+            html = self._fetch_text(url)
+            article = _extract_article_text(html)
+            enterprise_match = re.search(r"本外币企事业单位贷款余额([0-9.]+(?:万亿元|亿元))", article)
+            household_match = re.search(r"本外币住户贷款余额([0-9.]+(?:万亿元|亿元))", article)
+            if enterprise_match is None or household_match is None:
+                continue
+            released_at = _parse_release_date_from_html_clean(html) or period_end.isoformat()
+            rows.append(
+                (
+                    period_end,
+                    _parse_unsigned_amount_tn_yuan(household_match.group(1)),
+                    _parse_unsigned_amount_tn_yuan(enterprise_match.group(1)),
+                    released_at,
+                )
+            )
+        rows.sort(key=lambda item: item[0])
+        return rows
+
+    def _build_leverage_points_v2(
+        self,
+        *,
+        loan_balance_points: Sequence[tuple[date, float, float, str]],
+        nbs_quarter_values: Sequence[tuple[str, date, float]],
+        start_date: date,
+    ) -> tuple[list[MacroHistoryPoint], list[MacroHistoryPoint]]:
+        ordered = self._quarterly_flow_values_v2(nbs_quarter_values)
+        denominator_by_period: dict[date, float] = {}
+        for index in range(3, len(ordered)):
+            denominator_by_period[ordered[index][1]] = sum(item[2] for item in ordered[index - 3:index + 1])
+
+        household_points: list[MacroHistoryPoint] = []
+        enterprise_points: list[MacroHistoryPoint] = []
+        for period_end, household_balance, enterprise_balance, released_at in loan_balance_points:
+            denominator = denominator_by_period.get(period_end)
+            if not denominator:
+                continue
+            period_label = f"{period_end.year:04d}-Q{((period_end.month - 1) // 3) + 1}"
+            household_points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_label,
+                    value=round((household_balance * 10000 / denominator) * 100, 4),
+                    unit="%",
+                    source_url=self._PBOC_NEWS_LIST_URL,
+                    released_at=released_at,
+                )
+            )
+            enterprise_points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_label,
+                    value=round((enterprise_balance * 10000 / denominator) * 100, 4),
+                    unit="%",
+                    source_url=self._PBOC_NEWS_LIST_URL,
+                    released_at=released_at,
+                )
+            )
+
+        return (
+            [point for point in household_points if point.period_end >= start_date],
+            [point for point in enterprise_points if point.period_end >= start_date],
+        )
+
+    def _quarterly_flow_values_v2(
+        self,
+        nbs_quarter_values: Sequence[tuple[str, date, float]],
+    ) -> list[tuple[str, date, float]]:
+        ordered = sorted(nbs_quarter_values, key=lambda item: item[1])
+        quarterly: list[tuple[str, date, float]] = []
+        previous_by_year: dict[int, float] = {}
+        for period_label, period_end, cumulative_value in ordered:
+            previous_value = previous_by_year.get(period_end.year, 0.0)
+            quarterly.append((period_label, period_end, cumulative_value - previous_value))
+            previous_by_year[period_end.year] = cumulative_value
+        return quarterly
+
+    def _collect_pbc_links_v2(
+        self,
+        *,
+        list_url: str,
+        page_template: str,
+        title_keyword: str,
+        start_date: date,
+        max_pages: int,
+    ) -> list[tuple[date, str, str]]:
+        collected: list[tuple[date, str, str]] = []
+        seen_urls: set[str] = set()
+        for page in range(1, max_pages + 1):
+            url = list_url if page == 1 else page_template.format(page=page)
+            html = self._fetch_text(url)
+            page_min_date: date | None = None
+            page_matches = 0
+            for match in self._ANCHOR_RE.finditer(html):
+                attrs = match.group("attrs") or ""
+                body = match.group("body") or ""
+                href_match = re.search(r'href="([^"]+)"', attrs, re.I)
+                if href_match is None:
+                    continue
+                title_match = re.search(r'title="([^"]+)"', attrs, re.I)
+                visible_title = re.sub(r"<[^>]+>", "", body)
+                visible_title = unescape(visible_title).replace("\xa0", " ").strip()
+                title = unescape(title_match.group(1)).strip() if title_match else visible_title
+                if title_keyword not in title and title_keyword not in visible_title:
+                    continue
+                period_end = _title_to_period_end_clean(title)
+                if period_end is None:
+                    continue
+                page_matches += 1
+                page_min_date = period_end if page_min_date is None else min(page_min_date, period_end)
+                absolute_url = urljoin(url, href_match.group(1))
+                if absolute_url in seen_urls:
+                    continue
+                seen_urls.add(absolute_url)
+                collected.append((period_end, title, absolute_url))
+            if page_matches == 0 and page > 1:
+                break
+            if page_min_date is not None and page_min_date < start_date:
+                break
+        collected.sort(key=lambda item: item[0])
+        return [item for item in collected if item[0] >= start_date]
+
+    def healthcheck(self) -> ProviderStatus:
+        return ProviderStatus(
+            provider_key=self.provider_key,
+            availability=ProviderAvailability.LIVE,
+            detail="Official NBS and PBOC macro endpoints are configured.",
+            checked_at=_checked_at(),
+        )
+
+
 class AkshareMacroDataProvider:
     """Fetch a subset of macro indicators through AKShare."""
 
@@ -476,6 +1297,37 @@ class AkshareMacroDataProvider:
             if reading is not None:
                 readings.append(reading)
         return readings
+
+    def fetch_history_series(
+        self,
+        *,
+        indicator_codes: Sequence[str],
+        start_date: date,
+    ) -> Sequence[MacroIndicatorSeries]:
+        _ = start_date
+        series: list[MacroIndicatorSeries] = []
+        for reading in self.fetch_latest_readings(indicator_codes=indicator_codes):
+            period_end = date.today()
+            series.append(
+                MacroIndicatorSeries(
+                    provider=self.provider_key,
+                    indicator_code=reading.indicator_code,
+                    display_name=reading.display_name,
+                    unit=reading.unit,
+                    source_url=reading.source_url,
+                    points=(
+                        MacroHistoryPoint(
+                            period_end=period_end,
+                            period_label=reading.period_label,
+                            value=reading.value,
+                            unit=reading.unit,
+                            source_url=reading.source_url,
+                            released_at=reading.released_at,
+                        ),
+                    ),
+                )
+            )
+        return series
 
     def _load_akshare(self):
         try:
@@ -765,6 +1617,39 @@ class FallbackMacroProvider(_FallbackStatusMixin):
             return primary_items
 
         fallback_items = list(self._fallback.fetch_latest_readings(indicator_codes=missing_codes))
+        self._set_state(
+            ProviderAvailability.DEGRADED,
+            "缺少指标：" + ", ".join(missing_codes),
+        )
+        return [*primary_items, *fallback_items]
+
+    def fetch_history_series(
+        self,
+        *,
+        indicator_codes: Sequence[str],
+        start_date: date,
+    ) -> Sequence[MacroIndicatorSeries]:
+        requested = list(indicator_codes)
+        if self._primary_failed:
+            return list(self._fallback.fetch_history_series(indicator_codes=requested, start_date=start_date))
+        try:
+            primary_items = list(self._primary.fetch_history_series(indicator_codes=requested, start_date=start_date))
+        except Exception as exc:
+            self._primary_failed = True
+            logger.warning("Macro provider fallback triggered: %s", exc)
+            self._set_state(
+                ProviderAvailability.DEGRADED,
+                f"实时宏观数据不可用（{exc}）",
+            )
+            return list(self._fallback.fetch_history_series(indicator_codes=requested, start_date=start_date))
+
+        primary_by_code = {item.indicator_code: item for item in primary_items}
+        missing_codes = [code for code in requested if code not in primary_by_code]
+        if not missing_codes:
+            self._set_state(ProviderAvailability.LIVE, f"实时宏观读数：{self._primary.provider_key}")
+            return primary_items
+
+        fallback_items = list(self._fallback.fetch_history_series(indicator_codes=missing_codes, start_date=start_date))
         self._set_state(
             ProviderAvailability.DEGRADED,
             "缺少指标：" + ", ".join(missing_codes),

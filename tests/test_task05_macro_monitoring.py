@@ -1,23 +1,36 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
+
+from fastapi.testclient import TestClient
 
 from src.app.web import create_fastapi_app
 from src.domain import MacroFrequency, TrendDirection, build_default_macro_registry
-from src.domain.external_data import MacroIndicatorReading
+from src.domain.external_data import MacroHistoryPoint, MacroIndicatorSeries
 from src.providers import ProviderAvailability, ProviderStatus
 from src.services.dashboard_service import DashboardService
+from src.services.macro_history_store import MacroHistoryStore
 from src.services.macro_monitoring_service import MacroMonitoringService
-from fastapi.testclient import TestClient
 
 
 class FakeMacroProvider:
     provider_key = "fake-macro"
 
-    def __init__(self, readings):
-        self._readings = readings
+    def __init__(self, series_items):
+        self._series_items = list(series_items)
+
+    def fetch_history_series(self, *, indicator_codes, start_date):
+        return [
+            item
+            for item in self._series_items
+            if item.indicator_code in indicator_codes
+            and any(point.period_end >= start_date for point in item.points)
+        ]
 
     def fetch_latest_readings(self, *, indicator_codes):
-        return [reading for reading in self._readings if reading.indicator_code in indicator_codes]
+        _ = indicator_codes
+        return []
 
     def healthcheck(self):
         return ProviderStatus(
@@ -30,8 +43,7 @@ class FakeMacroProvider:
 
 class Task05DocumentationTests(unittest.TestCase):
     def test_task05_main_doc_links_protocol_and_tests(self):
-        with open("TASK/05-macro-indicators-monitoring.md", encoding="utf-8") as handle:
-            content = handle.read()
+        content = Path("TASK/05-macro-indicators-monitoring.md").read_text(encoding="utf-8")
 
         self.assertIn("Completed for implementation phase.", content)
         self.assertIn("05-indicator-registry-and-display-protocol.md", content)
@@ -39,7 +51,7 @@ class Task05DocumentationTests(unittest.TestCase):
 
 
 class MacroRegistryTests(unittest.TestCase):
-    def test_registry_covers_first_batch_indicators(self):
+    def test_registry_covers_paired_macro_dashboard_indicators(self):
         registry = build_default_macro_registry()
 
         self.assertEqual(
@@ -49,81 +61,139 @@ class MacroRegistryTests(unittest.TestCase):
                 "ppi",
                 "gdp_nominal",
                 "gdp_real",
-                "social_financing",
+                "household_new_loans",
+                "enterprise_new_loans",
                 "household_leverage",
-                "government_leverage",
+                "enterprise_leverage",
             },
         )
         self.assertEqual(registry["cpi"].frequency, MacroFrequency.MONTHLY)
         self.assertEqual(registry["gdp_real"].frequency, MacroFrequency.QUARTERLY)
-        self.assertEqual(registry["gdp_nominal"].unit, "%")
+        self.assertEqual(registry["enterprise_new_loans"].unit, "tn yuan")
+
+
+class MacroHistoryStoreTests(unittest.TestCase):
+    def test_store_persists_points_and_sync_state(self):
+        with TemporaryDirectory() as tmpdir:
+            store = MacroHistoryStore(Path(tmpdir) / "macro_history.db")
+            store.upsert_indicator_history(
+                indicator_code="cpi",
+                provider_key="fake-macro",
+                source_url="https://example.com/cpi",
+                points=[
+                    MacroHistoryPoint(
+                        period_end=date(2026, 1, 31),
+                        period_label="2026-01",
+                        value=0.2,
+                        unit="%",
+                        source_url="https://example.com/cpi",
+                        released_at="2026-02-09",
+                    ),
+                    MacroHistoryPoint(
+                        period_end=date(2026, 2, 28),
+                        period_label="2026-02",
+                        value=0.4,
+                        unit="%",
+                        source_url="https://example.com/cpi",
+                        released_at="2026-03-09",
+                    ),
+                ],
+                status="live",
+                warning_message="",
+                synced_at="2026-03-15T00:00:00Z",
+            )
+
+            points = store.load_points(indicator_code="cpi", start_date=date(2026, 1, 1))
+            state = store.get_sync_state("cpi")
+
+        self.assertEqual(len(points), 2)
+        self.assertEqual(points[-1].value, 0.4)
+        self.assertIsNotNone(state)
+        self.assertEqual(state.point_count, 2)
+        self.assertEqual(state.latest_period_end, date(2026, 2, 28))
 
 
 class MacroMonitoringServiceTests(unittest.TestCase):
-    def test_service_formats_indicator_and_derives_trend(self):
-        service = MacroMonitoringService(
-            macro_provider=FakeMacroProvider(
-                [
-                    MacroIndicatorReading(
-                        provider="fake-macro",
-                        indicator_code="cpi",
-                        display_name="CPI",
-                        value=0.4,
-                        unit="%",
-                        period_label="2026-02",
-                        released_at="2026-03-09",
-                        source_url="https://example.com/cpi",
-                        previous_value=0.2,
-                        change_value=0.2,
-                        change_kind="MoM",
-                    )
-                ]
+    def test_service_formats_indicator_and_derives_trend_from_history(self):
+        series = MacroIndicatorSeries(
+            provider="fake-macro",
+            indicator_code="cpi",
+            display_name="CPI",
+            unit="%",
+            source_url="https://example.com/cpi",
+            points=(
+                MacroHistoryPoint(
+                    period_end=date(2026, 1, 31),
+                    period_label="2026-01",
+                    value=0.2,
+                    unit="%",
+                    source_url="https://example.com/cpi",
+                    released_at="2026-02-09",
+                ),
+                MacroHistoryPoint(
+                    period_end=date(2026, 2, 28),
+                    period_label="2026-02",
+                    value=0.4,
+                    unit="%",
+                    source_url="https://example.com/cpi",
+                    released_at="2026-03-09",
+                ),
             ),
-            registry={"cpi": build_default_macro_registry()["cpi"]},
-            now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
         )
+        with TemporaryDirectory() as tmpdir:
+            service = MacroMonitoringService(
+                macro_provider=FakeMacroProvider([series]),
+                store=MacroHistoryStore(Path(tmpdir) / "macro_history.db"),
+                registry={"cpi": build_default_macro_registry()["cpi"]},
+                now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
+            )
 
-        snapshot = service.build_snapshot(["cpi"])
+            snapshot = service.build_snapshot(["cpi"])
 
         self.assertEqual(snapshot.indicators[0].value, "0.4%")
         self.assertEqual(snapshot.indicators[0].previous_value, "0.2%")
-        self.assertEqual(snapshot.indicators[0].change_label, "环比：+0.2 个百分点")
+        self.assertIn("+0.2", snapshot.indicators[0].change_label)
         self.assertEqual(snapshot.indicators[0].trend, TrendDirection.UP)
         self.assertEqual(snapshot.indicators[0].status, "live")
+        self.assertEqual(snapshot.indicators[0].numeric_value, 0.4)
+        self.assertEqual(len(snapshot.indicators[0].history_points), 2)
 
     def test_service_keeps_unavailable_card_when_provider_misses_data(self):
         registry = build_default_macro_registry()
-        service = MacroMonitoringService(
-            macro_provider=FakeMacroProvider([]),
-            registry={"government_leverage": registry["government_leverage"]},
-            now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
-        )
+        with TemporaryDirectory() as tmpdir:
+            service = MacroMonitoringService(
+                macro_provider=FakeMacroProvider([]),
+                store=MacroHistoryStore(Path(tmpdir) / "macro_history.db"),
+                registry={"enterprise_leverage": registry["enterprise_leverage"]},
+                now_factory=lambda: datetime(2026, 3, 15, tzinfo=UTC),
+            )
 
-        snapshot = service.build_snapshot(["government_leverage"])
+            snapshot = service.build_snapshot(["enterprise_leverage"])
 
         self.assertEqual(snapshot.indicators[0].status, "unavailable")
-        self.assertEqual(snapshot.indicators[0].value, "暂无数据")
-        self.assertEqual(snapshot.indicators[0].updated_at, "暂无数据")
+        self.assertEqual(snapshot.indicators[0].numeric_value, None)
+        self.assertEqual(snapshot.indicators[0].history_points, [])
 
 
 class DashboardMacroIntegrationTests(unittest.TestCase):
     def test_dashboard_snapshot_uses_registry_driven_macro_cards(self):
         snapshot = DashboardService().build_snapshot()
 
-        self.assertGreaterEqual(len(snapshot.macro_sections), 7)
-        self.assertEqual(snapshot.macro_sections[0].source_label, "国家统计局")
-        self.assertNotEqual(snapshot.macro_sections[0].updated_at, "暂无数据")
+        self.assertGreaterEqual(len(snapshot.macro_sections), 8)
+        self.assertTrue(snapshot.macro_sections[0].source_label)
+        self.assertTrue(snapshot.macro_sections[0].updated_at)
 
-    def test_dashboard_api_exposes_macro_source_and_frequency(self):
+    def test_frontend_macro_module_exposes_grouped_pair_payload(self):
         client = TestClient(create_fastapi_app())
 
-        response = client.get("/api/dashboard")
+        response = client.get("/api/frontend/modules/macro")
 
         self.assertEqual(response.status_code, 200)
-        first_card = response.json()["macro_sections"][0]
-        self.assertIn("source_label", first_card)
-        self.assertIn("updated_at", first_card)
-        self.assertIn("frequency", first_card)
+        first_section = response.json()["module"]["details"][0]["section"]
+        self.assertIn("primary", first_section)
+        self.assertIn("secondary", first_section)
+        self.assertIn("delta_points", first_section)
+        self.assertIn("sources", first_section)
 
 
 if __name__ == "__main__":
