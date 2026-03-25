@@ -24,6 +24,7 @@ from ..providers import (
     GoogleNewsSearchProvider,
     NewsNowModeProvider,
     NewsNowSourceMode,
+    OfficialMacroDataProvider,
     ProviderAvailability,
     PublicRssNewsProvider,
     SampleMacroProvider,
@@ -94,6 +95,12 @@ class MetricCard:
     value: str
     context: str
     status: str
+    source_url: str = ""
+    period_label: str = ""
+    unit: str = ""
+    numeric_value: float | None = None
+    pair_key: str = ""
+    history_points: List[dict] = field(default_factory=list)
     previous_value: str = "暂无数据"
     change_label: str = "暂无变化信息"
     trend: str = "unavailable"
@@ -339,7 +346,11 @@ class DashboardService:
 
     def build_macro_module(self, *, force_refresh: bool = False) -> tuple[str, List[MetricCard]]:
         """Build one frontend-ready macro module."""
-        return self._get_or_build_module("module:macro", self._build_macro_module_uncached, force_refresh=force_refresh)
+        return self._get_or_build_module(
+            "module:macro",
+            lambda: self._build_macro_module_uncached(force_refresh=force_refresh),
+            force_refresh=force_refresh,
+        )
 
     def build_market_module(self, *, force_refresh: bool = False) -> tuple[str, List[MarketCard]]:
         """Build one frontend-ready market module."""
@@ -379,7 +390,7 @@ class DashboardService:
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         with ThreadPoolExecutor(max_workers=4) as executor:
             news_future = executor.submit(news_service.build_snapshot)
-            macro_future = executor.submit(self._macro_service.build_snapshot)
+            macro_future = executor.submit(self._build_macro_service_snapshot, force_refresh=force_refresh)
             market_future = executor.submit(self._build_market_service_snapshot, force_refresh=force_refresh)
             events_future = executor.submit(self._build_events_service_snapshot, force_refresh=force_refresh)
             news_snapshot = news_future.result()
@@ -431,15 +442,23 @@ class DashboardService:
         news_status = self._build_data_status(news_provider=news_provider, search_provider=search_provider)[0]
         return generated_at, effective_news_mode, news_sections, news_status
 
-    def _build_macro_module_uncached(self) -> tuple[str, List[MetricCard]]:
+    def _build_macro_module_uncached(self, *, force_refresh: bool = False) -> tuple[str, List[MetricCard]]:
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        macro_snapshot = self._macro_service.build_snapshot()
+        macro_snapshot = self._build_macro_service_snapshot(force_refresh=force_refresh)
         return generated_at, self._build_macro_sections_from_snapshot(macro_snapshot)
 
     def _build_market_module_uncached(self, *, force_refresh: bool = False) -> tuple[str, List[MarketCard]]:
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         market_snapshot = self._build_market_service_snapshot(force_refresh=force_refresh)
         return generated_at, self._build_market_sections_from_snapshot(market_snapshot)
+
+    def _build_macro_service_snapshot(self, *, force_refresh: bool):
+        try:
+            return self._macro_service.build_snapshot(refresh_store=force_refresh)
+        except TypeError as error:
+            if "refresh_store" not in str(error):
+                raise
+            return self._macro_service.build_snapshot()
 
     def _build_events_module_uncached(self, *, force_refresh: bool = False) -> tuple[str, List[EventSectionView]]:
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -735,6 +754,19 @@ class DashboardService:
                 value=item.value,
                 context=item.context,
                 status=item.status,
+                source_url=getattr(item, "source_url", ""),
+                period_label=getattr(item, "period_label", ""),
+                unit=getattr(item, "unit", ""),
+                numeric_value=getattr(item, "numeric_value", None),
+                pair_key=getattr(item, "pair_key", ""),
+                history_points=[
+                    {
+                        "period_end": point.period_end,
+                        "period_label": point.period_label,
+                        "value": point.value,
+                    }
+                    for point in getattr(item, "history_points", [])
+                ],
                 previous_value=item.previous_value,
                 change_label=item.change_label,
                 trend=item.trend.value,
@@ -835,7 +867,7 @@ class DashboardService:
     def _build_macro_provider(self, *, prefer_live_data: bool):
         if not prefer_live_data:
             return SampleMacroProvider()
-        return FallbackMacroProvider(AkshareMacroDataProvider(), SampleMacroProvider())
+        return FallbackMacroProvider(OfficialMacroDataProvider(), SampleMacroProvider())
 
     def _build_market_provider(self, *, prefer_live_data: bool):
         if not prefer_live_data:

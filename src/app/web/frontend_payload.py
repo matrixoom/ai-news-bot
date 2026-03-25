@@ -1,10 +1,11 @@
 """Frontend payload builder for the separated web dashboard."""
+
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import re
 from typing import Any
 
+from ...domain import build_default_macro_pair_registry
 from ...providers.newsnow_provider import get_upstream_service_status
 from ...services.dashboard_service import (
     DashboardSnapshot,
@@ -14,8 +15,6 @@ from ...services.dashboard_service import (
     MetricCard,
     NewsSectionView,
 )
-
-MACRO_TREND_MONTHS = 12
 
 
 def build_frontend_payload(snapshot: DashboardSnapshot) -> dict[str, Any]:
@@ -103,16 +102,16 @@ def build_frontend_macro_module_payload(
         "module": {
             "id": "macro",
             "label": "宏观指标",
-            "note": f"{len(sections)} 个指标",
-            "description": "宏观数据",
+            "note": f"{len(sections)} 组对比图",
+            "description": "官方宏观历史序列与差值比较",
             "status": "loading" if module_loading else _group_status(sections),
             "loading": module_loading,
             "details": [
                 {
                     "id": section["key"],
-                    "label": section["label"],
+                    "label": section["title"],
                     "kind": "macro",
-                    "note": section["latest_value"],
+                    "note": section["summary"],
                     "section": section,
                 }
                 for section in sections
@@ -262,32 +261,42 @@ def _build_macro_sections(snapshot: DashboardSnapshot, generated_at: str) -> lis
 
 
 def _build_macro_sections_from_views(macro_sections: list[MetricCard], generated_at: str) -> list[dict[str, Any]]:
-    month_labels = _last_month_labels(generated_at, MACRO_TREND_MONTHS)
+    _ = generated_at
+    cards_by_code = {card.key: card for card in macro_sections}
+    pair_registry = build_default_macro_pair_registry()
     sections: list[dict[str, Any]] = []
-    for card in macro_sections:
-        latest = _extract_float(card.value)
-        unit = _extract_unit(card.value)
-        points = _build_trend_points(
-            key=card.key,
-            latest_value=latest,
-            trend=card.trend,
-            labels=month_labels,
-        )
+    for pair in pair_registry.values():
+        primary = cards_by_code.get(pair.primary_code)
+        secondary = cards_by_code.get(pair.secondary_code)
+        if primary is None or secondary is None:
+            continue
+        primary_points = _normalize_macro_points(primary)
+        secondary_points = _normalize_macro_points(secondary)
+        merged_points = _merge_macro_pair_points(primary_points, secondary_points)
+        delta_points = [
+            {
+                "period_end": item["period_end"],
+                "period_label": item["period_label"],
+                "value": round(item["primary_value"] - item["secondary_value"], 4),
+            }
+            for item in merged_points
+            if item["primary_value"] is not None and item["secondary_value"] is not None
+        ]
         sections.append(
             {
-                "key": card.key,
-                "label": card.label,
-                "status": card.status,
-                "latest_value": card.value,
-                "previous_value": card.previous_value,
-                "change_label": card.change_label,
-                "trend": card.trend,
-                "frequency": card.frequency,
-                "source_label": card.source_label,
-                "updated_at": card.updated_at,
-                "context": card.context,
-                "unit": unit,
-                "points": points,
+                "key": pair.key,
+                "title": pair.title,
+                "status": _group_status(
+                    [{"status": primary.status}, {"status": secondary.status}],
+                    fallback="compatible",
+                ),
+                "description": pair.description,
+                "summary": f"{primary.label}: {primary.value} | {secondary.label}: {secondary.value}",
+                "primary": _build_macro_indicator_payload(primary, primary_points),
+                "secondary": _build_macro_indicator_payload(secondary, secondary_points),
+                "delta_label": pair.delta_label,
+                "delta_points": delta_points,
+                "sources": _dedupe_macro_sources(primary, secondary),
             }
         )
     return sections
@@ -358,49 +367,87 @@ def _group_status(items: list[dict[str, Any]], *, fallback: str = "compatible") 
     return statuses[0] if statuses else fallback
 
 
-def _build_trend_points(
-    *,
-    key: str,
-    latest_value: float | None,
-    trend: str,
-    labels: list[str],
-) -> list[dict[str, Any]]:
-    if latest_value is None:
-        return [{"period": label, "value": None} for label in labels]
-
-    slope_sign = {"up": 1.0, "down": -1.0, "flat": 0.0}.get(trend, 0.0)
-    span = max(abs(latest_value) * 0.12, 0.2)
-    start = latest_value - (slope_sign * span)
-    wobble = max(abs(latest_value) * 0.015, 0.03)
-    wobble_seed = (sum(ord(char) for char in key) % 7) + 1
-    points: list[dict[str, Any]] = []
-    divisor = max(len(labels) - 1, 1)
-    for index, label in enumerate(labels):
-        progress = index / divisor
-        trend_value = start + ((latest_value - start) * progress)
-        wobble_value = ((index % wobble_seed) - (wobble_seed / 2)) * (wobble / wobble_seed)
-        points.append({"period": label, "value": round(trend_value + wobble_value, 3)})
-    points[-1]["value"] = round(latest_value, 3)
+def _normalize_macro_points(card: MetricCard) -> list[dict[str, Any]]:
+    points = []
+    for point in list(getattr(card, "history_points", []) or []):
+        value = point.get("value")
+        if not isinstance(value, (int, float)):
+            continue
+        points.append(
+            {
+                "period_end": str(point.get("period_end") or ""),
+                "period_label": str(point.get("period_label") or ""),
+                "value": float(value),
+            }
+        )
+    points.sort(key=lambda item: item["period_end"])
     return points
 
 
-def _last_month_labels(generated_at: str, count: int) -> list[str]:
-    try:
-        anchor = datetime.fromisoformat(generated_at.replace("Z", "+00:00")).astimezone(UTC)
-    except ValueError:
-        anchor = datetime.now(UTC)
+def _build_macro_indicator_payload(card: MetricCard, points: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "key": card.key,
+        "label": card.label,
+        "status": card.status,
+        "latest_value": card.value,
+        "previous_value": card.previous_value,
+        "change_label": card.change_label,
+        "trend": card.trend,
+        "frequency": card.frequency,
+        "source_label": card.source_label,
+        "source_url": getattr(card, "source_url", ""),
+        "updated_at": card.updated_at,
+        "period_label": getattr(card, "period_label", ""),
+        "context": card.context,
+        "unit": getattr(card, "unit", "") or _extract_unit(card.value),
+        "points": points,
+    }
 
-    year = anchor.year
-    month = anchor.month
-    labels: list[str] = []
-    for offset in reversed(range(count)):
-        y = year
-        m = month - offset
-        while m <= 0:
-            m += 12
-            y -= 1
-        labels.append(f"{y:04d}-{m:02d}")
-    return labels
+
+def _merge_macro_pair_points(
+    primary_points: list[dict[str, Any]],
+    secondary_points: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_period: dict[str, dict[str, Any]] = {}
+    for point in primary_points:
+        entry = by_period.setdefault(
+            point["period_end"],
+            {
+                "period_end": point["period_end"],
+                "period_label": point["period_label"],
+                "primary_value": None,
+                "secondary_value": None,
+            },
+        )
+        entry["primary_value"] = point["value"]
+    for point in secondary_points:
+        entry = by_period.setdefault(
+            point["period_end"],
+            {
+                "period_end": point["period_end"],
+                "period_label": point["period_label"],
+                "primary_value": None,
+                "secondary_value": None,
+            },
+        )
+        entry["secondary_value"] = point["value"]
+        if not entry["period_label"]:
+            entry["period_label"] = point["period_label"]
+    return [by_period[key] for key in sorted(by_period)]
+
+
+def _dedupe_macro_sources(primary: MetricCard, secondary: MetricCard) -> list[dict[str, str]]:
+    sources = []
+    seen = set()
+    for card in (primary, secondary):
+        source_label = card.source_label
+        source_url = getattr(card, "source_url", "")
+        key = (source_label, source_url)
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.append({"label": source_label, "url": source_url})
+    return sources
 
 
 def _extract_float(text: str) -> float | None:

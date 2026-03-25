@@ -6,6 +6,7 @@ from typing import Protocol, Sequence, runtime_checkable
 
 from ..domain.external_data import (
     EventHorizon,
+    MacroIndicatorSeries,
     MacroIndicatorReading,
     MarketIndexSnapshot,
     NewsCategory,
@@ -101,6 +102,14 @@ class MacroDataProvider(Protocol):
         indicator_codes: Sequence[str],
     ) -> Sequence[MacroIndicatorReading]:
         """Return normalized macro readings for requested indicators."""
+
+    def fetch_history_series(
+        self,
+        *,
+        indicator_codes: Sequence[str],
+        start_date: date,
+    ) -> Sequence[MacroIndicatorSeries]:
+        """Return normalized macro history series for requested indicators."""
 
     def healthcheck(self) -> ProviderStatus:
         """Return current provider availability."""

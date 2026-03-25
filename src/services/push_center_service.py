@@ -188,6 +188,7 @@ class PushCenterService:
                             "channel_type_options": list(SUPPORTED_CHANNEL_TYPES),
                             "source_module_options": list(AVAILABLE_SOURCE_MODULES),
                             "style_options": list(STYLE_OPTIONS),
+                            "config_path": str(self._config_path),
                             "config": self._public_config(config),
                             "preview": preview,
                             "scheduler": {

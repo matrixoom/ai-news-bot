@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from ..domain.external_data import (
+    MacroHistoryPoint,
     MacroIndicatorReading,
+    MacroIndicatorSeries,
     MarketIndexHistoryPoint,
     MarketIndexSnapshot,
     NewsCategory,
@@ -26,19 +28,19 @@ class SampleNewsProvider:
                     self.provider_key,
                     "OpenAI Blog",
                     NewsCategory.TECHNOLOGY,
-                    "工作流智能体开始进入生产环境落地",
+                    "Workflow agents are moving into production environments",
                     "https://openai.example/agents",
                     f"{today}T08:00:00Z",
-                    "官方说明生产级智能体方案正在推进。",
+                    "Official notes suggest agentic production patterns are accelerating.",
                 ),
                 NewsItem(
                     self.provider_key,
                     "TechCrunch AI",
                     NewsCategory.TECHNOLOGY,
-                    "芯片厂商继续扩张 AI 推理算力计划",
+                    "Chip vendors continue expanding AI inference capacity",
                     "https://tech.example/chips",
                     f"{today}T09:15:00Z",
-                    "推理产能与相关资本开支仍处于高位。",
+                    "Inference capacity and related capex remain elevated.",
                 ),
             ),
             NewsCategory.FINANCE: (
@@ -46,19 +48,19 @@ class SampleNewsProvider:
                     self.provider_key,
                     "Reuters Finance",
                     NewsCategory.FINANCE,
-                    "流动性环境仍是宏观市场的核心锚点",
+                    "Liquidity conditions remain central to macro pricing",
                     "https://finance.example/liquidity",
                     f"{today}T07:40:00Z",
-                    "市场仍围绕流动性与增长组合进行定价。",
+                    "Markets continue to price around liquidity and growth mix.",
                 ),
                 NewsItem(
                     self.provider_key,
                     "Bloomberg Markets",
                     NewsCategory.FINANCE,
-                    "数据密集周前资金配置转向谨慎筛选",
+                    "Positioning turns more cautious before a dense data week",
                     "https://finance.example/positioning",
                     f"{today}T10:00:00Z",
-                    "跨资产仓位仍呈现选择性配置。",
+                    "Cross-asset positioning remains selective.",
                 ),
             ),
             NewsCategory.POLICY: (
@@ -66,19 +68,19 @@ class SampleNewsProvider:
                     self.provider_key,
                     "State Council",
                     NewsCategory.POLICY,
-                    "政策工作方案强调产业与信用协同",
+                    "Policy plan emphasizes industrial and credit coordination",
                     "https://policy.example/workplan",
                     f"{today}T08:20:00Z",
-                    "官方工作方案继续突出协同发力方向。",
+                    "The official work plan continues to stress coordinated support.",
                 ),
                 NewsItem(
                     self.provider_key,
                     "Xinhua",
                     NewsCategory.POLICY,
-                    "官方释放宏观政策稳步执行信号",
+                    "Official communication reinforces steady macro execution",
                     "https://policy.example/execution",
                     f"{today}T11:00:00Z",
-                    "政策执行节奏仍是当前主要观察点。",
+                    "Execution rhythm remains a core policy watchpoint.",
                 ),
             ),
         }
@@ -88,7 +90,7 @@ class SampleNewsProvider:
         return list(self._items.get(category, ()))[:limit]
 
     def healthcheck(self):
-        return ProviderStatus(self.provider_key, ProviderAvailability.DEGRADED, "样例数据", "2026-03-15T00:00:00Z")
+        return ProviderStatus(self.provider_key, ProviderAvailability.DEGRADED, "sample data", "2026-03-15T00:00:00Z")
 
 
 class SampleSearchProvider:
@@ -101,8 +103,8 @@ class SampleSearchProvider:
                 SearchResultItem(
                     self.provider_key,
                     "AI platform release today",
-                    "工作流智能体开始进入生产环境落地",
-                    "搜索侧低位补充",
+                    "Workflow agents are moving into production environments",
+                    "Search-side low-latency backfill",
                     "https://theverge.example/agents",
                     None,
                 ),
@@ -111,8 +113,8 @@ class SampleSearchProvider:
                 SearchResultItem(
                     self.provider_key,
                     "macro market liquidity today",
-                    "流动性环境仍是宏观市场的核心锚点",
-                    "搜索侧低位补充",
+                    "Liquidity conditions remain central to macro pricing",
+                    "Search-side low-latency backfill",
                     "https://markets.example/liquidity",
                     f"{today}T10:30:00Z",
                 ),
@@ -121,8 +123,8 @@ class SampleSearchProvider:
                 SearchResultItem(
                     self.provider_key,
                     "policy briefing today",
-                    "政策工作方案强调产业与信用协同",
-                    "搜索侧低位补充",
+                    "Policy plan emphasizes industrial and credit coordination",
+                    "Search-side low-latency backfill",
                     "https://xinhua.example/workplan",
                     None,
                 ),
@@ -134,103 +136,123 @@ class SampleSearchProvider:
         return list(self._items.get(query, ()))[:limit]
 
     def healthcheck(self):
-        return ProviderStatus(self.provider_key, ProviderAvailability.DEGRADED, "样例数据", "2026-03-15T00:00:00Z")
+        return ProviderStatus(self.provider_key, ProviderAvailability.DEGRADED, "sample data", "2026-03-15T00:00:00Z")
 
 
 class SampleMacroProvider:
     provider_key = "sample-macro"
 
-    def fetch_latest_readings(self, *, indicator_codes):
-        sample_map = {
-            "cpi": MacroIndicatorReading(
-                self.provider_key,
-                "cpi",
-                "CPI",
-                0.3,
-                "%",
-                "2026-02",
-                "2026-03-09",
-                "https://www.stats.gov.cn/",
-                previous_value=0.1,
-                change_value=0.2,
-                change_kind="MoM",
-                trend_summary="通胀压力小幅抬升。",
-            ),
-            "ppi": MacroIndicatorReading(
-                self.provider_key,
-                "ppi",
-                "PPI",
-                -1.2,
-                "%",
-                "2026-02",
-                "2026-03-09",
-                "https://www.stats.gov.cn/",
-                previous_value=-1.5,
-                change_value=0.3,
-                change_kind="MoM",
-                trend_summary="工业品价格收缩正在缓和。",
-            ),
-            "gdp_nominal": MacroIndicatorReading(
-                self.provider_key,
-                "gdp_nominal",
-                "Nominal GDP Growth",
-                5.1,
-                "%",
-                "2026-Q1",
-                "2026-04-18",
-                "https://www.stats.gov.cn/",
-                previous_value=4.8,
-                change_value=0.3,
-                change_kind="YoY",
-                trend_summary="名义 GDP 增速小幅回升。",
-            ),
-            "gdp_real": MacroIndicatorReading(
-                self.provider_key,
-                "gdp_real",
-                "Real GDP",
-                4.9,
-                "%",
-                "2026-Q1",
-                "2026-04-18",
-                "https://www.stats.gov.cn/",
-                previous_value=4.8,
-                change_value=0.1,
-                change_kind="YoY",
-                trend_summary="实际增长整体保持稳定。",
-            ),
-            "social_financing": MacroIndicatorReading(
-                self.provider_key,
-                "social_financing",
-                "Social Financing",
-                9.4,
-                "tn yuan",
-                "2026-02",
-                "2026-03-14",
-                "https://www.pbc.gov.cn/",
-                previous_value=8.9,
-                change_value=0.5,
-                change_kind="vs prior month",
-                trend_summary="信用脉冲温和改善。",
-            ),
-            "household_leverage": MacroIndicatorReading(
-                self.provider_key,
-                "household_leverage",
-                "Household Leverage",
-                62.1,
-                "%",
-                "2025-Q4",
-                "2026-02-20",
-                "https://www.stats.gov.cn/",
-                previous_value=61.7,
-                change_value=0.4,
-                change_kind="vs prior quarter",
-                trend_summary="杠杆压力仍在缓慢上行。",
-            ),
+    def fetch_history_series(self, *, indicator_codes, start_date):
+        _ = start_date
+        monthly_periods = [
+            ("2025-03", date(2025, 3, 31)),
+            ("2025-04", date(2025, 4, 30)),
+            ("2025-05", date(2025, 5, 31)),
+            ("2025-06", date(2025, 6, 30)),
+            ("2025-07", date(2025, 7, 31)),
+            ("2025-08", date(2025, 8, 31)),
+            ("2025-09", date(2025, 9, 30)),
+            ("2025-10", date(2025, 10, 31)),
+            ("2025-11", date(2025, 11, 30)),
+            ("2025-12", date(2025, 12, 31)),
+            ("2026-01", date(2026, 1, 31)),
+            ("2026-02", date(2026, 2, 28)),
+        ]
+        quarterly_periods = [
+            ("2024-Q4", date(2024, 12, 31)),
+            ("2025-Q1", date(2025, 3, 31)),
+            ("2025-Q2", date(2025, 6, 30)),
+            ("2025-Q3", date(2025, 9, 30)),
+            ("2025-Q4", date(2025, 12, 31)),
+        ]
+        sample_points = {
+            "cpi": [-0.4, -0.1, 0.2, 0.1, 0.3, 0.4, 0.6, 0.5, 0.4, 0.3, 0.1, 0.3],
+            "ppi": [-2.7, -2.5, -2.2, -1.9, -1.7, -1.6, -1.5, -1.4, -1.4, -1.3, -1.5, -1.2],
+            "household_new_loans": [-0.18, 0.21, 0.42, 0.37, 0.44, 0.31, 0.29, 0.35, 0.41, 0.22, -0.08, -0.19],
+            "enterprise_new_loans": [3.10, 1.82, 1.54, 1.38, 1.61, 1.45, 1.58, 1.63, 1.49, 1.82, 2.31, 2.97],
+            "gdp_nominal": [4.6, 4.9, 5.0, 5.2, 5.5],
+            "gdp_real": [4.8, 5.0, 5.1, 5.0, 4.9],
+            "household_leverage": [58.7, 59.4, 60.2, 61.0, 61.8],
+            "enterprise_leverage": [131.5, 132.0, 132.6, 133.1, 133.8],
         }
-        return [sample_map[code] for code in indicator_codes if code in sample_map]
+        display_names = {
+            "cpi": "CPI",
+            "ppi": "PPI",
+            "gdp_nominal": "Nominal GDP Growth",
+            "gdp_real": "Real GDP Growth",
+            "household_new_loans": "Household New Loans",
+            "enterprise_new_loans": "Enterprise New Loans",
+            "household_leverage": "Household Leverage",
+            "enterprise_leverage": "Enterprise Leverage",
+        }
+        source_urls = {
+            "cpi": "https://www.stats.gov.cn/",
+            "ppi": "https://www.stats.gov.cn/",
+            "gdp_nominal": "https://www.stats.gov.cn/",
+            "gdp_real": "https://www.stats.gov.cn/",
+            "household_new_loans": "https://www.pbc.gov.cn/",
+            "enterprise_new_loans": "https://www.pbc.gov.cn/",
+            "household_leverage": "https://www.pbc.gov.cn/",
+            "enterprise_leverage": "https://www.pbc.gov.cn/",
+        }
+        series_map = {}
+        for code, values in sample_points.items():
+            periods = monthly_periods if len(values) == len(monthly_periods) else quarterly_periods
+            unit = "tn yuan" if "new_loans" in code else "%"
+            released_at = "2026-03-14" if "new_loans" in code else "2026-03-09"
+            points = tuple(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_label,
+                    value=value,
+                    unit=unit,
+                    source_url=source_urls[code],
+                    released_at=released_at,
+                )
+                for (period_label, period_end), value in zip(periods, values, strict=True)
+            )
+            series_map[code] = MacroIndicatorSeries(
+                provider=self.provider_key,
+                indicator_code=code,
+                display_name=display_names[code],
+                unit=unit,
+                source_url=source_urls[code],
+                points=points,
+            )
+        return [series_map[code] for code in indicator_codes if code in series_map]
+
+    def fetch_latest_readings(self, *, indicator_codes):
+        series_map = {
+            item.indicator_code: item
+            for item in self.fetch_history_series(indicator_codes=indicator_codes, start_date=date(2025, 1, 1))
+        }
+        readings = []
+        for code in indicator_codes:
+            series = series_map.get(code)
+            if not series or not series.points:
+                continue
+            latest = series.points[-1]
+            previous = series.points[-2] if len(series.points) > 1 else None
+            readings.append(
+                MacroIndicatorReading(
+                    self.provider_key,
+                    code,
+                    series.display_name,
+                    latest.value,
+                    latest.unit,
+                    latest.period_label,
+                    latest.released_at,
+                    latest.source_url,
+                    previous_value=previous.value if previous else None,
+                    change_value=(latest.value - previous.value) if previous else None,
+                    change_kind="vs prior release" if previous else None,
+                    trend_summary=None,
+                )
+            )
+        return readings
 
     def healthcheck(self):
-        return ProviderStatus(self.provider_key, ProviderAvailability.DEGRADED, "样例数据", "2026-03-15T00:00:00Z")
+        return ProviderStatus(self.provider_key, ProviderAvailability.DEGRADED, "sample data", "2026-03-15T00:00:00Z")
 
 
 class SampleMarketDataProvider:
@@ -292,4 +314,4 @@ class SampleMarketDataProvider:
         return snapshots
 
     def healthcheck(self):
-        return ProviderStatus(self.provider_key, ProviderAvailability.DEGRADED, "样例数据", "2026-03-15T00:00:00Z")
+        return ProviderStatus(self.provider_key, ProviderAvailability.DEGRADED, "sample data", "2026-03-15T00:00:00Z")

@@ -107,6 +107,30 @@ class MacroIndicatorReading:
 
 
 @dataclass(frozen=True)
+class MacroHistoryPoint:
+    """One historical macro reading used for charting and storage."""
+
+    period_end: date
+    period_label: str
+    value: float
+    unit: str
+    source_url: str
+    released_at: str
+
+
+@dataclass(frozen=True)
+class MacroIndicatorSeries:
+    """Historical series for one macro indicator."""
+
+    provider: str
+    indicator_code: str
+    display_name: str
+    unit: str
+    source_url: str
+    points: tuple[MacroHistoryPoint, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class ResearchFinding:
     """Structured event or policy finding backed by sources."""
 

@@ -196,9 +196,15 @@ class PushCenterModuleTests(unittest.TestCase):
         config_response = self.client.put("/api/push/config", json=payload)
         self.assertEqual(config_response.status_code, 200)
         config_json = config_response.json()
+        self.assertEqual(
+            config_json["module"]["details"][0]["section"]["config_path"],
+            str(self.config_path),
+        )
         email_config = config_json["module"]["details"][0]["section"]["config"]["email"]
         self.assertEqual(email_config["smtp_server"], "smtp.example.com")
         self.assertEqual(email_config["smtp_port"], 2525)
+        saved_config = json.loads(self.config_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved_config["schedules"][0]["times"], ["08:00", "12:00", "17:00"])
 
         preview_response = self.client.post("/api/push/preview", json=payload)
         self.assertEqual(preview_response.status_code, 200)

@@ -29,6 +29,12 @@ const MARKET_CHART_RANGE_OPTIONS = [
   { key: "90d", label: "3月", days: 90, minCoverageDays: 75 },
   { key: "180d", label: "6月", days: 180, minCoverageDays: 150 },
 ];
+const MACRO_CHART_RANGE_OPTIONS = [
+  { key: "1y", label: "近1年", days: 366, minCoverageDays: 180, minPoints: 4 },
+  { key: "2y", label: "近2年", days: 731, minCoverageDays: 360, minPoints: 6 },
+  { key: "5y", label: "近5年", days: 1826, minCoverageDays: 720, minPoints: 10 },
+  { key: "all", label: "全部", days: null, minCoverageDays: 0, minPoints: 2 },
+];
 
 const MODULE_CONFIGS = [
   {
@@ -82,6 +88,7 @@ const viewState = {
   activeModuleId: "news",
   activeDetailByModule: {},
   activeMarketChartRangeByDetail: {},
+  activeMacroChartRangeBySection: {},
   pendingRequestByModule: {},
   refreshTimerByModule: {},
   generatedAt: "",
@@ -122,7 +129,9 @@ function applyTheme(theme, { persist = true } = {}) {
   renderThemeToggle();
   const module = currentModule();
   const detail = currentDetail(module);
-  if (detail?.kind === "market") {
+  if (module?.id === "macro") {
+    renderMacroOverviewCharts(module);
+  } else if (detail?.kind === "market") {
     renderMarketTrendChart(detail.section, getActiveMarketChartRange(detail.id, detail.section));
   }
 }
@@ -248,6 +257,27 @@ function groupStatus(items) {
 }
 
 function modulePayloadFromLegacy(payload, moduleId) {
+  if (moduleId === "macro") {
+    const sections = payload.macro_sections || [];
+    return {
+      generated_at: payload.generated_at,
+      module: {
+        id: "macro",
+        label: "瀹忚鎸囨爣",
+        note: `${sections.length} 缁勫姣斿浘`,
+        description: "瀹樻柟瀹忚鍘嗗彶搴忓垪涓庡樊鍊兼瘮杈?",
+        status: groupStatus(sections),
+        details: sections.map((section) => ({
+          id: section.key,
+          label: section.title,
+          kind: "macro",
+          note: section.summary,
+          section,
+        })),
+      },
+    };
+  }
+
   if (moduleId === "news") {
     const sections = payload.news_sections || [];
     return {
@@ -266,27 +296,6 @@ function modulePayloadFromLegacy(payload, moduleId) {
           label: section.title,
           kind: "news",
           note: `${section.item_count || 0} 条`,
-          section,
-        })),
-      },
-    };
-  }
-
-  if (moduleId === "macro") {
-    const sections = payload.macro_sections || [];
-    return {
-      generated_at: payload.generated_at,
-      module: {
-        id: "macro",
-        label: "宏观指标",
-        note: `${sections.length} 个指标`,
-        description: "宏观数据",
-        status: groupStatus(sections),
-        details: sections.map((section) => ({
-          id: section.key,
-          label: section.label,
-          kind: "macro",
-          note: section.latest_value,
           section,
         })),
       },
@@ -503,6 +512,127 @@ function renderMarketChartRangeSwitch(detailId, section) {
         .join("")}
     </div>
   `;
+}
+
+function getMacroRangeOption(rangeKey) {
+  return MACRO_CHART_RANGE_OPTIONS.find((option) => option.key === rangeKey) || MACRO_CHART_RANGE_OPTIONS[1];
+}
+
+function filterMacroSeriesByRange(points, rangeKey, { fallbackToAll = true } = {}) {
+  const option = getMacroRangeOption(rangeKey);
+  const datedPoints = (Array.isArray(points) ? points : []).filter((point) => parseTradeDate(point.period_end));
+  if (!datedPoints.length || rangeKey === "all" || !option.days) {
+    return datedPoints;
+  }
+  const lastDate = parseTradeDate(datedPoints[datedPoints.length - 1].period_end);
+  if (!lastDate) {
+    return datedPoints;
+  }
+  const startDate = new Date(lastDate.getTime() - option.days * 24 * 60 * 60 * 1000);
+  const filtered = datedPoints.filter((point) => {
+    const periodDate = parseTradeDate(point.period_end);
+    return periodDate && periodDate >= startDate;
+  });
+  return fallbackToAll && filtered.length < 2 ? datedPoints : filtered;
+}
+
+function collectMacroLabels(primaryPoints, secondaryPoints) {
+  const labels = [];
+  const seen = new Set();
+  [...primaryPoints, ...secondaryPoints].forEach((point) => {
+    const label = point.period_label || point.period_end;
+    if (label && !seen.has(label)) {
+      seen.add(label);
+      labels.push(label);
+    }
+  });
+  return labels;
+}
+
+function buildMacroCoverageLabel(primaryPoints, secondaryPoints) {
+  const datedPoints = [...primaryPoints, ...secondaryPoints]
+    .filter((point) => parseTradeDate(point.period_end))
+    .sort((left, right) => left.period_end.localeCompare(right.period_end));
+  if (!datedPoints.length) {
+    return "暂无历史区间";
+  }
+  const first = datedPoints[0];
+  const last = datedPoints[datedPoints.length - 1];
+  return `${first.period_label || first.period_end} - ${last.period_label || last.period_end}`;
+}
+
+function getAvailableMacroChartRanges(section) {
+  const primaryPoints = Array.isArray(section?.primary?.points) ? section.primary.points : [];
+  const secondaryPoints = Array.isArray(section?.secondary?.points) ? section.secondary.points : [];
+  const datedPoints = [...primaryPoints, ...secondaryPoints]
+    .filter((point) => parseTradeDate(point.period_end))
+    .sort((left, right) => left.period_end.localeCompare(right.period_end));
+  if (!datedPoints.length) {
+    return MACRO_CHART_RANGE_OPTIONS.map((option) => ({ ...option, available: false }));
+  }
+  const firstDate = parseTradeDate(datedPoints[0].period_end);
+  const lastDate = parseTradeDate(datedPoints[datedPoints.length - 1].period_end);
+  const coverageDays = firstDate && lastDate ? Math.max(0, Math.round((lastDate - firstDate) / (24 * 60 * 60 * 1000))) : 0;
+  return MACRO_CHART_RANGE_OPTIONS.map((option) => {
+    if (option.key === "all") {
+      return { ...option, available: collectMacroLabels(primaryPoints, secondaryPoints).length >= option.minPoints };
+    }
+    const filteredPrimary = filterMacroSeriesByRange(primaryPoints, option.key, { fallbackToAll: false });
+    const filteredSecondary = filterMacroSeriesByRange(secondaryPoints, option.key, { fallbackToAll: false });
+    return {
+      ...option,
+      available:
+        coverageDays >= option.minCoverageDays
+        && collectMacroLabels(filteredPrimary, filteredSecondary).length >= option.minPoints,
+    };
+  });
+}
+
+function getActiveMacroChartRange(sectionKey, section) {
+  const rangeOptions = getAvailableMacroChartRanges(section);
+  const saved = viewState.activeMacroChartRangeBySection[sectionKey];
+  if (saved && rangeOptions.some((option) => option.key === saved && option.available)) {
+    return saved;
+  }
+  const preferred = ["2y", "1y", "5y", "all"];
+  const fallback = preferred.find((key) => rangeOptions.some((option) => option.key === key && option.available))
+    || rangeOptions.find((option) => option.available)?.key
+    || "all";
+  viewState.activeMacroChartRangeBySection[sectionKey] = fallback;
+  return fallback;
+}
+
+function renderMacroChartRangeSwitch(sectionKey, section) {
+  const rangeOptions = getAvailableMacroChartRanges(section);
+  if (!rangeOptions.some((option) => option.available)) {
+    return "";
+  }
+  const activeRange = getActiveMacroChartRange(sectionKey, section);
+  return `
+    <div class="chart-range-switch" role="group" aria-label="宏观历史范围切换">
+      ${rangeOptions
+        .map((option) => `
+          <button
+            type="button"
+            class="chart-range-button ${option.key === activeRange ? "active" : ""}"
+            data-macro-range="${escapeHtml(option.key)}"
+            data-macro-section="${escapeHtml(sectionKey)}"
+            ${option.available ? "" : "disabled"}
+            title="${escapeHtml(option.available ? `切换到${option.label}` : `${option.label}数据不足，暂不可切换`)}"
+          >${escapeHtml(option.label)}</button>
+        `)
+        .join("")}
+    </div>
+  `;
+}
+
+function formatMacroChartValue(value, unit = "") {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "-";
+  }
+  const abs = Math.abs(value);
+  const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)}${unit}`;
 }
 
 function updateGeneratedAt(value) {
@@ -784,8 +914,198 @@ function renderMarketTrendChart(section, rangeKey = "30d") {
   chart.resize();
 }
 
+function renderMacroComparisonChart(section, rootId, rangeKey = "all") {
+  const root = document.getElementById(rootId);
+  if (!root) {
+    return;
+  }
+  const primaryPoints = filterMacroSeriesByRange(
+    Array.isArray(section?.primary?.points) ? section.primary.points : [],
+    rangeKey,
+  );
+  const secondaryPoints = filterMacroSeriesByRange(
+    Array.isArray(section?.secondary?.points) ? section.secondary.points : [],
+    rangeKey,
+  );
+  if (!primaryPoints.length && !secondaryPoints.length) {
+    root.innerHTML = marketChartEmptyState("暂无可绘制的宏观历史序列");
+    return;
+  }
+  if (!window.echarts) {
+    root.innerHTML = marketChartEmptyState("ECharts 未加载，无法绘制宏观对比图");
+    return;
+  }
+
+  root.innerHTML = "";
+  const computedStyle = window.getComputedStyle(document.documentElement);
+  const ink = (computedStyle.getPropertyValue("--ink") || "#e7edf5").trim();
+  const muted = (computedStyle.getPropertyValue("--muted") || "#91a0b1").trim();
+  const line = (computedStyle.getPropertyValue("--line") || "rgba(140, 160, 180, 0.18)").trim();
+  const accent2 = (computedStyle.getPropertyValue("--accent-2") || "#31b8c4").trim();
+  const ok = (computedStyle.getPropertyValue("--ok") || "#37c48d").trim();
+  const labels = collectMacroLabels(primaryPoints, secondaryPoints);
+  const valueByLabel = (points) => {
+    const map = new Map();
+    points.forEach((point) => map.set(point.period_label || point.period_end, point.value));
+    return labels.map((label) => (map.has(label) ? map.get(label) : null));
+  };
+  const chart = window.echarts.getInstanceByDom(root) || window.echarts.init(root);
+  marketChartInstances.set(rootId, chart);
+  chart.setOption(
+    {
+      animation: false,
+      color: [accent2, ok],
+      grid: { left: 54, right: 24, top: 48, bottom: 42 },
+      legend: {
+        top: 8,
+        textStyle: { color: muted, fontSize: 11 },
+        data: [section.primary.label, section.secondary.label],
+      },
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: getCurrentTheme() === "light" ? "rgba(255,255,255,0.95)" : "rgba(10,13,17,0.96)",
+        borderColor: line,
+        textStyle: { color: ink },
+        valueFormatter(value) {
+          return formatMacroChartValue(value, section.primary.unit || "");
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: labels,
+        boundaryGap: false,
+        axisLabel: { color: muted, fontSize: 10, hideOverlap: true },
+        axisLine: { lineStyle: { color: line } },
+      },
+      yAxis: {
+        type: "value",
+        scale: true,
+        axisLabel: {
+          color: muted,
+          fontSize: 10,
+          formatter(value) {
+            return formatMacroChartValue(value, section.primary.unit || "");
+          },
+        },
+        splitLine: { lineStyle: { color: line, type: "dashed" } },
+      },
+      series: [
+        {
+          name: section.primary.label,
+          type: "line",
+          showSymbol: labels.length <= 18,
+          symbolSize: 6,
+          smooth: 0.18,
+          lineStyle: { width: 2.4 },
+          data: valueByLabel(primaryPoints),
+        },
+        {
+          name: section.secondary.label,
+          type: "line",
+          showSymbol: labels.length <= 18,
+          symbolSize: 6,
+          smooth: 0.18,
+          lineStyle: { width: 2.4 },
+          data: valueByLabel(secondaryPoints),
+        },
+      ],
+    },
+    true,
+  );
+  chart.resize();
+}
+
+function getLatestMacroDelta(section) {
+  const deltaPoints = Array.isArray(section?.delta_points) ? section.delta_points : [];
+  return deltaPoints.length ? deltaPoints[deltaPoints.length - 1] : null;
+}
+
 function renderMacroCard(section) {
-  return `<article class="metric-card"><div class="card-head"><h4>${escapeHtml(section.label)}</h4>${statusBadge(section.status)}</div><div class="metric-row"><p class="metric-value">${escapeHtml(section.latest_value)}</p><span class="metric-sub">趋势: ${escapeHtml(trendMap[section.trend] || section.trend)}</span></div><p class="card-meta">${escapeHtml(section.change_label)}</p><div class="chart-wrap">${buildLineChart(section.points || [])}</div><p class="card-meta">来源: ${escapeHtml(section.source_label)} | 更新时间: ${escapeHtml(section.updated_at)}</p><p class="card-meta">${escapeHtml(section.context)}</p></article>`;
+  const sectionKey = section.key || section.primary?.key || section.secondary?.key || "macro";
+  const activeRange = getActiveMacroChartRange(sectionKey, section);
+  const activeRangeLabel = getMacroRangeOption(activeRange).label;
+  const rangeSwitch = renderMacroChartRangeSwitch(sectionKey, section);
+  const latestDelta = getLatestMacroDelta(section);
+  const filteredPrimary = filterMacroSeriesByRange(section.primary?.points || [], activeRange);
+  const filteredSecondary = filterMacroSeriesByRange(section.secondary?.points || [], activeRange);
+  const sources = Array.isArray(section.sources) ? section.sources : [];
+  const sourceLine = sources.length
+    ? sources.map((item) => item.label).join(" / ")
+    : `${section.primary.source_label || ""}${section.secondary.source_label ? ` / ${section.secondary.source_label}` : ""}`;
+  const coverageLabel = buildMacroCoverageLabel(filteredPrimary, filteredSecondary);
+  const context = section.primary.context || section.secondary.context || "";
+  return `
+    <article class="info-card macro-grid-card">
+      <div class="card-head macro-card-head">
+        <div class="macro-card-title">
+          <h4>${escapeHtml(section.title)}</h4>
+          <p class="detail-copy">${escapeHtml(section.description || "")}</p>
+        </div>
+        <div class="market-chart-tools">${rangeSwitch}${statusBadge(section.status)}</div>
+      </div>
+      <div class="macro-summary-grid">
+        <article class="plain-card macro-summary-item">
+          <div class="card-head"><h4>${escapeHtml(section.primary.label)}</h4><span class="metric-sub">${escapeHtml(trendMap[section.primary.trend] || section.primary.trend)}</span></div>
+          <p class="metric-value">${escapeHtml(section.primary.latest_value)}</p>
+          <p class="card-meta">${escapeHtml(section.primary.change_label)}</p>
+          <p class="card-meta">${escapeHtml(section.primary.period_label)} | ${escapeHtml(section.primary.updated_at)}</p>
+        </article>
+        <article class="plain-card macro-summary-item">
+          <div class="card-head"><h4>${escapeHtml(section.secondary.label)}</h4><span class="metric-sub">${escapeHtml(trendMap[section.secondary.trend] || section.secondary.trend)}</span></div>
+          <p class="metric-value">${escapeHtml(section.secondary.latest_value)}</p>
+          <p class="card-meta">${escapeHtml(section.secondary.change_label)}</p>
+          <p class="card-meta">${escapeHtml(section.secondary.period_label)} | ${escapeHtml(section.secondary.updated_at)}</p>
+        </article>
+      </div>
+      <article class="info-card market-chart-panel macro-chart-panel">
+        <div class="card-head">
+          <h4>${escapeHtml(section.summary)}</h4>
+          <span class="metric-sub">${escapeHtml(activeRangeLabel)}</span>
+        </div>
+        <p class="card-meta">
+          显示范围: ${escapeHtml(activeRangeLabel)}
+          | 历史覆盖: ${escapeHtml(coverageLabel)}
+          ${latestDelta ? `| 最新${escapeHtml(section.delta_label)}: ${escapeHtml(formatMacroChartValue(latestDelta.value, section.primary.unit || ""))}` : ""}
+        </p>
+        <div id="macroCompareChart-${escapeHtml(sectionKey)}" class="market-trend-chart macro-trend-chart" aria-label="${escapeHtml(`${section.title} comparison chart`)}"></div>
+      </article>
+      <div class="macro-card-foot">
+        <p class="card-meta">来源: ${escapeHtml(sourceLine)}</p>
+        ${context ? `<p class="card-meta">${escapeHtml(context)}</p>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function renderMacroOverview(module) {
+  if (!module.details?.length) {
+    return `<article class="info-card"><p class="detail-copy">当前宏观模块暂无可展示内容。</p></article>`;
+  }
+  return `
+    <div class="content-stack">
+      <article class="info-card macro-overview-intro">
+        <div class="card-head">
+          <h4>${escapeHtml(module.label)}总览</h4>
+          ${statusBadge(module.status)}
+        </div>
+        <p class="detail-copy">按组展示宏观指标对比图。桌面端一行两张图，每张图独立切换时间跨度，方便直接横向比较。</p>
+      </article>
+      <div class="macro-overview-grid">
+        ${module.details.map((detail) => renderMacroCard(detail.section)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderMacroOverviewCharts(module) {
+  if (module?.id !== "macro") {
+    return;
+  }
+  (module.details || []).forEach((detail) => {
+    const sectionKey = detail.section?.key || detail.id;
+    const activeRange = getActiveMacroChartRange(sectionKey, detail.section);
+    renderMacroComparisonChart(detail.section, `macroCompareChart-${sectionKey}`, activeRange);
+  });
 }
 
 function renderTable(headers, rows, options = {}) {
@@ -1042,6 +1362,7 @@ function renderPushScheduleRow(schedule, index, moduleOptions) {
 function renderPushWorkspace(detail) {
   const section = detail.section || {};
   const config = section.config || {};
+  const configPath = section.config_path || ".data/push_center.json";
   const email = config.email || {};
   const preview = section.preview || {};
   const moduleOptions = section.source_module_options || [];
@@ -1137,16 +1458,20 @@ function renderPushWorkspace(detail) {
         </article>
       </div>
 
-      <article class="info-card push-control-card push-schedule-card">
-        <div class="card-head">
-          <h4>定时任务</h4>
-          <button type="button" class="module-refresh-button" data-add-schedule>新增任务</button>
-        </div>
-        <p class="detail-copy">可以为不同模块分别配置不同推送时间。目前默认已预置 08:00 / 12:00 / 17:00。</p>
-        <div id="pushScheduleList" class="content-stack">
-          ${schedules.map((schedule, index) => renderPushScheduleRow(schedule, index, moduleOptions)).join("")}
-        </div>
-      </article>
+        <article class="info-card push-control-card push-schedule-card">
+          <div class="card-head">
+            <h4>定时任务</h4>
+            <div class="push-schedule-actions">
+              <button type="button" class="module-refresh-button" data-push-action="save">保存定时配置</button>
+              <button type="button" class="module-refresh-button" data-add-schedule>新增任务</button>
+            </div>
+          </div>
+          <p class="detail-copy">可以为不同模块分别配置不同推送时间。目前默认已预置 08:00 / 12:00 / 17:00，修改后需要点击保存配置。</p>
+          <p class="card-meta">当前配置文件: ${escapeHtml(configPath)}</p>
+          <div id="pushScheduleList" class="content-stack">
+            ${schedules.map((schedule, index) => renderPushScheduleRow(schedule, index, moduleOptions)).join("")}
+          </div>
+        </article>
     </div>
   `;
 }
@@ -1239,22 +1564,12 @@ function renderErrorCard(message, moduleId) {
 }
 
 function renderModuleContent(module, detail) {
+  if (module.id === "macro") {
+    return renderMacroOverview(module);
+  }
+
   if (detail.kind === "news") {
     return `<div class="content-stack"><article class="info-card"><div class="card-head"><h4>${escapeHtml(detail.section.title)}</h4>${statusBadge(detail.section.status)}</div><p class="detail-copy">${escapeHtml(detail.section.description)}</p></article><div class="table-scroll">${renderNewsTable(detail.section)}</div></div>`;
-  }
-  if (detail.kind === "macro") {
-    return `<div class="content-stack">${renderMacroCard(detail.section)}${renderTable(
-      [
-        { label: "Field" },
-        { label: "Value", className: "cell-grow" },
-      ],
-      [
-        [{ text: "变化标签", className: "cell-tight cell-cyan" }, { text: detail.section.change_label, className: "cell-grow" }],
-        [{ text: "来源", className: "cell-tight cell-cyan" }, { text: detail.section.source_label, className: "cell-grow" }],
-        [{ text: "更新时间", className: "cell-tight cell-cyan" }, { text: detail.section.updated_at, className: "cell-grow cell-mono" }],
-        [{ text: "频率", className: "cell-tight cell-cyan" }, { text: detail.section.frequency || "unknown", className: "cell-grow" }],
-      ],
-    )}</div>`;
   }
   if (detail.kind === "market") {
     const historyWindow = detail.section.data_window_label || "最近可用窗口";
@@ -1332,6 +1647,24 @@ function bindContentActions() {
       renderModulePanel();
     });
   });
+  document.querySelectorAll("[data-macro-range]").forEach((node) => {
+    node.addEventListener("click", () => {
+      if (node.disabled) {
+        return;
+      }
+      const module = currentModule();
+      if (module?.id !== "macro") {
+        return;
+      }
+      const rangeKey = node.getAttribute("data-macro-range");
+      const sectionKey = node.getAttribute("data-macro-section");
+      if (!rangeKey || !sectionKey) {
+        return;
+      }
+      viewState.activeMacroChartRangeBySection[sectionKey] = rangeKey;
+      renderModulePanel();
+    });
+  });
   document.querySelectorAll("[data-add-schedule]").forEach((node) => {
     node.addEventListener("click", () => {
       const detail = currentPushDetail();
@@ -1384,14 +1717,15 @@ function bindContentActions() {
         flash: { status: "compatible", message: action === "send" ? "正在发送..." : "正在处理..." },
       });
       renderModulePanel();
-      try {
-        if (action === "save") {
-          const payload = await requestPushApi("/api/push/config", draft, "PUT");
-          applyModulePayload(payload);
-          updatePushSection({ flash: { status: "compatible", message: "配置已保存。" } });
-          renderModulePanel();
-          return;
-        }
+        try {
+          if (action === "save") {
+            const payload = await requestPushApi("/api/push/config", draft, "PUT");
+            applyModulePayload(payload);
+            const savedPath = payload?.module?.details?.[0]?.section?.config_path || ".data/push_center.json";
+            updatePushSection({ flash: { status: "compatible", message: `配置已保存到 ${savedPath}。` } });
+            renderModulePanel();
+            return;
+          }
         if (action === "preview") {
           const payload = await requestPushApi("/api/push/preview", draft, "POST");
           updatePushSection({
@@ -1456,21 +1790,24 @@ function renderModulePanel() {
   }
 
   viewState.activeDetailByModule[module.id] = detail.id;
-  document.getElementById("activeModuleTitle").textContent = detail.label;
+  document.getElementById("activeModuleTitle").textContent = module.id === "macro" ? `${module.label}总览` : detail.label;
   document.getElementById("detailTabs").innerHTML =
-    module.details.length > 1
-      ? module.details
-          .map(
-            (item) => `<button type="button" class="detail-tab ${item.id === detail.id ? "active" : ""}" data-detail-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`,
-          )
-          .join("")
-      : "";
+    module.id === "macro"
+      ? ""
+      : module.details.length > 1
+        ? module.details
+            .map(
+              (item) => `<button type="button" class="detail-tab ${item.id === detail.id ? "active" : ""}" data-detail-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`,
+            )
+            .join("")
+        : "";
   document.getElementById("contentStage").innerHTML = renderModuleContent(module, detail);
   bindContentActions();
-  if (detail.kind === "market") {
+  if (module.id === "macro") {
+    renderMacroOverviewCharts(module);
+  } else if (detail.kind === "market") {
     renderMarketTrendChart(detail.section, getActiveMarketChartRange(detail.id, detail.section));
-  }
-  if (detail.kind === "push") {
+  } else if (detail.kind === "push") {
     renderPushPreviewFrame(detail.section?.preview);
   }
 }
