@@ -267,11 +267,11 @@ def _build_macro_sections_from_views(macro_sections: list[MetricCard], generated
     sections: list[dict[str, Any]] = []
     for pair in pair_registry.values():
         primary = cards_by_code.get(pair.primary_code)
-        secondary = cards_by_code.get(pair.secondary_code)
-        if primary is None or secondary is None:
+        secondary = cards_by_code.get(pair.secondary_code) if pair.secondary_code else None
+        if primary is None:
             continue
         primary_points = _normalize_macro_points(primary)
-        secondary_points = _normalize_macro_points(secondary)
+        secondary_points = _normalize_macro_points(secondary) if secondary is not None else []
         merged_points = _merge_macro_pair_points(primary_points, secondary_points)
         delta_points = [
             {
@@ -282,18 +282,21 @@ def _build_macro_sections_from_views(macro_sections: list[MetricCard], generated
             for item in merged_points
             if item["primary_value"] is not None and item["secondary_value"] is not None
         ]
+        summary_parts = [f"{primary.label}: {primary.value}"]
+        if secondary is not None:
+            summary_parts.append(f"{secondary.label}: {secondary.value}")
         sections.append(
             {
                 "key": pair.key,
                 "title": pair.title,
                 "status": _group_status(
-                    [{"status": primary.status}, {"status": secondary.status}],
+                    [{"status": primary.status}, *([{"status": secondary.status}] if secondary is not None else [])],
                     fallback="compatible",
                 ),
                 "description": pair.description,
-                "summary": f"{primary.label}: {primary.value} | {secondary.label}: {secondary.value}",
+                "summary": " | ".join(summary_parts),
                 "primary": _build_macro_indicator_payload(primary, primary_points),
-                "secondary": _build_macro_indicator_payload(secondary, secondary_points),
+                "secondary": _build_macro_indicator_payload(secondary, secondary_points) if secondary is not None else None,
                 "delta_label": pair.delta_label,
                 "delta_points": delta_points,
                 "sources": _dedupe_macro_sources(primary, secondary),
@@ -436,10 +439,12 @@ def _merge_macro_pair_points(
     return [by_period[key] for key in sorted(by_period)]
 
 
-def _dedupe_macro_sources(primary: MetricCard, secondary: MetricCard) -> list[dict[str, str]]:
+def _dedupe_macro_sources(primary: MetricCard, secondary: MetricCard | None) -> list[dict[str, str]]:
     sources = []
     seen = set()
     for card in (primary, secondary):
+        if card is None:
+            continue
         source_label = card.source_label
         source_url = getattr(card, "source_url", "")
         key = (source_label, source_url)

@@ -34,6 +34,13 @@ class Task03DocumentationTests(unittest.TestCase):
         self.assertIn("03-route-map-and-viewmodel.md", content)
         self.assertIn("tests/test_task03_web_app_shell.py", content)
 
+    def test_frontend_shell_keeps_push_module_lazy_loaded(self):
+        content = Path("src/app/web/static/app.js").read_text(encoding="utf-8")
+
+        self.assertIn('if (module.id === "push") {', content)
+        self.assertIn('note: "按需加载"', content)
+        self.assertIn('loadModule(module.id, { resetContent: true });', content)
+
 
 class FastAPIWebShellTests(unittest.TestCase):
     def setUp(self):
@@ -697,6 +704,46 @@ class LiveProviderResilienceTests(unittest.TestCase):
         self.assertEqual(snapshots[0].close_price, 3932.0)
         self.assertEqual(snapshots[0].currency, "HKD")
         self.assertEqual(len(snapshots[0].history_points), 2)
+
+    def test_market_provider_uses_hstech_spot_quote_when_daily_series_lags_after_close(self):
+        provider = AkshareMarketDataProvider()
+
+        class FakeAkshare:
+            @staticmethod
+            def stock_hk_index_daily_sina(symbol: str):
+                self.assertEqual(symbol, "HSTECH")
+                return pd.DataFrame(
+                    [
+                        {"date": "2026-03-24", "close": 4830.89},
+                        {"date": "2026-03-25", "close": 4922.94},
+                    ]
+                )
+
+            @staticmethod
+            def stock_hk_index_spot_sina():
+                return pd.DataFrame(
+                    [
+                        {"代码": "HSTECH", "名称": "恒生科技指数", "最新价": 4761.54, "昨收": 4922.94},
+                    ]
+                )
+
+        with patch.object(provider, "_load_akshare", return_value=FakeAkshare()), patch.object(
+            provider,
+            "_should_use_hk_spot_for_trade_date",
+            return_value=True,
+        ):
+            snapshots = provider.fetch_index_snapshots(
+                symbols=["HSTECH"],
+                trade_date=date(2026, 3, 26),
+            )
+
+        self.assertEqual([item.symbol for item in snapshots], ["HSTECH"])
+        self.assertEqual(snapshots[0].trade_date, date(2026, 3, 26))
+        self.assertAlmostEqual(snapshots[0].close_price, 4761.54, places=2)
+        self.assertEqual(
+            [point.trade_date for point in snapshots[0].history_points],
+            [date(2026, 3, 24), date(2026, 3, 25), date(2026, 3, 26)],
+        )
 
 
 if __name__ == "__main__":

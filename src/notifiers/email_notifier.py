@@ -8,6 +8,7 @@ import ipaddress
 import os
 import socket
 import smtplib
+import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
@@ -151,7 +152,11 @@ class EmailNotifier:
                 return
             except smtplib.SMTPServerDisconnected as error:
                 errors.append(error)
-                if index + 1 < len(candidates):
+                if self._should_retry_with_next_candidate(
+                    candidate,
+                    error,
+                    has_more_candidates=index + 1 < len(candidates),
+                ):
                     logger.warning(
                         "SMTP disconnected during %s connection to %s:%s, retrying alternate mode.",
                         candidate["label"],
@@ -162,9 +167,33 @@ class EmailNotifier:
                 raise
             except Exception as error:
                 errors.append(error)
+                if self._should_retry_with_next_candidate(
+                    candidate,
+                    error,
+                    has_more_candidates=index + 1 < len(candidates),
+                ):
+                    logger.warning(
+                        "SMTP %s connection to %s:%s failed with %s, retrying alternate mode.",
+                        candidate["label"],
+                        self.smtp_server,
+                        candidate["port"],
+                        error,
+                    )
+                    continue
                 raise
         if errors:
             raise errors[-1]
+
+    def _should_retry_with_next_candidate(
+        self,
+        candidate: dict[str, object],
+        error: Exception,
+        *,
+        has_more_candidates: bool,
+    ) -> bool:
+        if not has_more_candidates or not candidate.get("use_tls") or candidate.get("use_ssl"):
+            return False
+        return isinstance(error, (smtplib.SMTPServerDisconnected, ssl.SSLError, OSError))
 
     def _connection_candidates(self) -> list[dict[str, object]]:
         candidates = [

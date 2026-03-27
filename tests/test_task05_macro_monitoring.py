@@ -58,18 +58,27 @@ class MacroRegistryTests(unittest.TestCase):
             set(registry),
             {
                 "cpi",
-                "ppi",
+                "copper_gold_ratio",
+                "enterprise_leverage",
+                "enterprise_new_loans",
                 "gdp_nominal",
                 "gdp_real",
+                "gold_price",
                 "household_new_loans",
-                "enterprise_new_loans",
                 "household_leverage",
-                "enterprise_leverage",
+                "nvidia_stock_price",
+                "oil_price",
+                "ppi",
+                "us_10y_yield",
+                "us_credit_spread",
+                "usd_cny",
             },
         )
         self.assertEqual(registry["cpi"].frequency, MacroFrequency.MONTHLY)
         self.assertEqual(registry["gdp_real"].frequency, MacroFrequency.QUARTERLY)
         self.assertEqual(registry["enterprise_new_loans"].unit, "tn yuan")
+        self.assertEqual(registry["usd_cny"].frequency, MacroFrequency.DAILY)
+        self.assertEqual(registry["us_10y_yield"].unit, "pct")
 
 
 class MacroHistoryStoreTests(unittest.TestCase):
@@ -179,7 +188,7 @@ class DashboardMacroIntegrationTests(unittest.TestCase):
     def test_dashboard_snapshot_uses_registry_driven_macro_cards(self):
         snapshot = DashboardService().build_snapshot()
 
-        self.assertGreaterEqual(len(snapshot.macro_sections), 8)
+        self.assertGreaterEqual(len(snapshot.macro_sections), 15)
         self.assertTrue(snapshot.macro_sections[0].source_label)
         self.assertTrue(snapshot.macro_sections[0].updated_at)
 
@@ -189,11 +198,17 @@ class DashboardMacroIntegrationTests(unittest.TestCase):
         response = client.get("/api/frontend/modules/macro")
 
         self.assertEqual(response.status_code, 200)
-        first_section = response.json()["module"]["details"][0]["section"]
+        sections = [detail["section"] for detail in response.json()["module"]["details"]]
+        first_section = sections[0]
         self.assertIn("primary", first_section)
-        self.assertIn("secondary", first_section)
         self.assertIn("delta_points", first_section)
         self.assertIn("sources", first_section)
+        self.assertTrue(first_section["sources"][0]["label"])
+        self.assertTrue(first_section["sources"][0]["url"].startswith("http"))
+        gold_oil = next(section for section in sections if section["key"] == "gold_oil")
+        self.assertIsNotNone(gold_oil["secondary"])
+        nvidia = next(section for section in sections if section["key"] == "nvidia_stock_price")
+        self.assertIsNone(nvidia["secondary"])
 
 
 if __name__ == "__main__":

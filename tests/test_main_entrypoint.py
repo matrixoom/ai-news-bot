@@ -11,7 +11,7 @@ class MainEntrypointTests(unittest.TestCase):
         result = main.main([])
 
         self.assertEqual(result, 0)
-        run_dev_server.assert_called_once_with(host="127.0.0.1", port=8000)
+        run_dev_server.assert_called_once_with(host="127.0.0.1", port=8000, reload=True)
         run_push_job.assert_not_called()
 
     @patch("main.run_dev_server")
@@ -20,7 +20,16 @@ class MainEntrypointTests(unittest.TestCase):
         result = main.main(["web", "--host", "0.0.0.0", "--port", "9000"])
 
         self.assertEqual(result, 0)
-        run_dev_server.assert_called_once_with(host="0.0.0.0", port=9000)
+        run_dev_server.assert_called_once_with(host="0.0.0.0", port=9000, reload=True)
+        run_push_job.assert_not_called()
+
+    @patch("main.run_dev_server")
+    @patch("main.run_push_job")
+    def test_main_supports_disabling_reload(self, run_push_job, run_dev_server):
+        result = main.main(["web", "--no-reload"])
+
+        self.assertEqual(result, 0)
+        run_dev_server.assert_called_once_with(host="127.0.0.1", port=8000, reload=False)
         run_push_job.assert_not_called()
 
     @patch("main.run_dev_server")

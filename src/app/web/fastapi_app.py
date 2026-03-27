@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,6 +20,8 @@ from .frontend_payload import (
     build_frontend_payload,
     build_frontend_status_module_payload,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def create_fastapi_app(
@@ -246,6 +249,7 @@ def create_fastapi_app(
         try:
             return JSONResponse(push_service.update_config(payload))
         except Exception:
+            logger.exception("push config update failed")
             return JSONResponse(
                 {"error": "push_config_update_failed"},
                 status_code=400,
@@ -256,6 +260,7 @@ def create_fastapi_app(
         try:
             return JSONResponse(push_service.build_preview_response(payload))
         except Exception:
+            logger.exception("push preview failed")
             return JSONResponse(
                 {"error": "push_preview_failed"},
                 status_code=400,
@@ -267,6 +272,7 @@ def create_fastapi_app(
             response = push_service.trigger_push(payload)
             return JSONResponse(response, status_code=200 if response.get("ok") else 502)
         except Exception:
+            logger.exception("push trigger failed")
             return JSONResponse(
                 {"error": "push_trigger_failed"},
                 status_code=400,

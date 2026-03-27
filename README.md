@@ -122,6 +122,14 @@ powershell -ExecutionPolicy Bypass -File scripts/init-newsnow-submodule.ps1 -Ski
 uv run python main.py web --host 127.0.0.1 --port 8000
 ```
 
+Hot reload is enabled by default in web mode. Backend Python code changes under `src/` will trigger an automatic restart.
+
+If you need to disable reload:
+
+```powershell
+uv run python main.py web --host 127.0.0.1 --port 8000 --no-reload
+```
+
 Open `http://127.0.0.1:8000/`.
 
 ### 5. Run the push job
@@ -151,11 +159,20 @@ powershell -ExecutionPolicy Bypass -File scripts/init-newsnow-submodule.ps1
 uv run python main.py web --host 127.0.0.1 --port 8000
 ```
 
+This command now runs in hot reload mode by default for backend development.
+
 ### 4. Open the frontend
 
 ```text
 http://127.0.0.1:8000/
 ```
+
+Frontend loading contract:
+
+- The homepage shell must not block on slow modules.
+- `news`, `macro`, `market`, `events`, and `status` hydrate asynchronously after first paint.
+- `push` is intentionally lazy-loaded only when the user opens the push center, because preview generation is much heavier than the other modules.
+- Future frontend changes should preserve this behavior.
 
 ### 5. Switch news mode when needed
 

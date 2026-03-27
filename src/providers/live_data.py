@@ -1,15 +1,18 @@
 """Live external-data providers with sample-data fallback wrappers."""
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from html import unescape
+import io
 import inspect
 import json
 import os
 import re
 from typing import Any, Callable, Iterable, Sequence
 from urllib.parse import quote_plus, urljoin
+from zoneinfo import ZoneInfo
 
 import feedparser
 from openai import OpenAI
@@ -99,6 +102,18 @@ def _month_end(year: int, month: int) -> date:
 
 def _quarter_end(year: int, quarter: int) -> date:
     return _month_end(year, quarter * 3)
+
+
+def _iter_month_starts(start_date: date, end_date: date) -> Iterable[tuple[int, int]]:
+    year = start_date.year
+    month = start_date.month
+    while (year, month) <= (end_date.year, end_date.month):
+        yield year, month
+        if month == 12:
+            year += 1
+            month = 1
+        else:
+            month += 1
 
 
 def _parse_nbs_period_code(code: str) -> tuple[str, date]:
@@ -458,7 +473,6 @@ class AkshareMarketDataProvider:
         ),
         "HSTECH": (
             ("stock_hk_index_daily_sina", {"symbol": "HSTECH"}),
-            ("stock_hk_index_daily_em", {"symbol": "HSTECF2L"}),
         ),
     }
 
@@ -485,6 +499,12 @@ class AkshareMarketDataProvider:
                 continue
 
             eligible.sort(key=lambda item: item["trade_date"])
+            eligible = self._augment_hstech_with_spot_quote(
+                akshare=akshare,
+                symbol=symbol,
+                records=eligible,
+                trade_date=trade_date,
+            )
             current_record = eligible[-1]
             lookback = tuple(item["close_price"] for item in eligible[-20:-1])
             history_points = tuple(
@@ -591,6 +611,80 @@ class AkshareMarketDataProvider:
                 except ValueError:
                     continue
         return records
+
+    def _augment_hstech_with_spot_quote(
+        self,
+        *,
+        akshare,
+        symbol: str,
+        records: list[dict[str, Any]],
+        trade_date: date,
+    ) -> list[dict[str, Any]]:
+        if symbol != "HSTECH" or not records or not self._should_use_hk_spot_for_trade_date(trade_date):
+            return records
+
+        latest_record = records[-1]
+        if latest_record["trade_date"] >= trade_date:
+            return records
+
+        spot_quote = self._load_hk_index_spot_quote(akshare=akshare, symbol=symbol)
+        latest_price = spot_quote.get("latest_price")
+        previous_close = spot_quote.get("previous_close")
+        if latest_price is None or previous_close is None:
+            return records
+
+        if abs(float(previous_close) - float(latest_record["close_price"])) > 0.5:
+            logger.warning(
+                "Skip HK spot quote for %s because previous close %.4f does not match latest daily close %.4f",
+                symbol,
+                float(previous_close),
+                float(latest_record["close_price"]),
+            )
+            return records
+
+        return [
+            *records,
+            {
+                "trade_date": trade_date,
+                "close_price": float(latest_price),
+            },
+        ]
+
+    def _should_use_hk_spot_for_trade_date(self, trade_date: date) -> bool:
+        shanghai_now = datetime.now(UTC).astimezone(ZoneInfo("Asia/Shanghai"))
+        if trade_date != shanghai_now.date():
+            return False
+        return (shanghai_now.hour, shanghai_now.minute) >= (16, 15)
+
+    def _load_hk_index_spot_quote(self, *, akshare, symbol: str) -> dict[str, float]:
+        if not hasattr(akshare, "stock_hk_index_spot_sina"):
+            return {}
+
+        frame = akshare.stock_hk_index_spot_sina()
+        if frame is None or getattr(frame, "empty", True):
+            return {}
+
+        code_column = next((column for column in frame.columns if str(column).strip() in {"代码", "symbol", "Symbol"}), None)
+        if code_column is None:
+            return {}
+
+        matched = frame[frame[code_column].astype(str) == symbol]
+        if matched.empty:
+            return {}
+
+        row = matched.iloc[-1].to_dict()
+        latest_price = _pick_first(row, ("最新价", "latest", "Latest"))
+        previous_close = _pick_first(row, ("昨收", "previous_close", "Previous Close"))
+        if latest_price is None or previous_close is None:
+            return {}
+
+        try:
+            return {
+                "latest_price": float(latest_price),
+                "previous_close": float(previous_close),
+            }
+        except (TypeError, ValueError):
+            return {}
 
     def healthcheck(self) -> ProviderStatus:
         return ProviderStatus(
@@ -729,6 +823,114 @@ class OfficialMacroDataProvider:
                 points=tuple(enterprise_leverage),
             )
 
+        if "usd_cny" in requested:
+            try:
+                result["usd_cny"] = MacroIndicatorSeries(
+                    provider=self.provider_key,
+                    indicator_code="usd_cny",
+                    display_name="人民币兑美元中间价",
+                    unit="CNY/USD",
+                    source_url=self._safe_rmb_history_url(),
+                    points=tuple(self._fetch_safe_usd_cny_points(start_date=start_date)),
+                )
+            except Exception as exc:
+                logger.warning("Official macro fetch failed for usd_cny: %s", exc)
+
+        if requested & {"gold_price", "oil_price", "copper_gold_ratio"}:
+            try:
+                commodity_points = self._fetch_world_bank_commodity_points(start_date=start_date - timedelta(days=40))
+                if "gold_price" in requested:
+                    result["gold_price"] = MacroIndicatorSeries(
+                        provider=self.provider_key,
+                        indicator_code="gold_price",
+                        display_name="Gold",
+                        unit="USD/troy oz",
+                        source_url=self._world_bank_pink_sheet_url(),
+                        points=tuple(commodity_points["gold_price"]),
+                    )
+                if "oil_price" in requested:
+                    result["oil_price"] = MacroIndicatorSeries(
+                        provider=self.provider_key,
+                        indicator_code="oil_price",
+                        display_name="WTI Crude",
+                        unit="USD/bbl",
+                        source_url=self._world_bank_pink_sheet_url(),
+                        points=tuple(commodity_points["oil_price"]),
+                    )
+                if "copper_gold_ratio" in requested:
+                    result["copper_gold_ratio"] = MacroIndicatorSeries(
+                        provider=self.provider_key,
+                        indicator_code="copper_gold_ratio",
+                        display_name="Copper/Gold Ratio",
+                        unit="ratio",
+                        source_url=self._world_bank_pink_sheet_url(),
+                        points=tuple(
+                            self._build_copper_gold_ratio_points(
+                                copper_points=commodity_points["copper_price"],
+                                gold_points=commodity_points["gold_price"],
+                                start_date=start_date,
+                            )
+                        ),
+                    )
+            except Exception as exc:
+                logger.warning("Official macro fetch failed for World Bank commodities: %s", exc)
+
+        treasury_daily_10y_points: list[MacroHistoryPoint] | None = None
+        if requested & {"us_10y_yield", "us_credit_spread"}:
+            try:
+                treasury_daily_10y_points = self._fetch_treasury_10y_daily_points(start_date=start_date - timedelta(days=40))
+                if "us_10y_yield" in requested:
+                    result["us_10y_yield"] = MacroIndicatorSeries(
+                        provider=self.provider_key,
+                        indicator_code="us_10y_yield",
+                        display_name="US 10Y Treasury",
+                        unit="pct",
+                        source_url="https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve",
+                        points=tuple(point for point in treasury_daily_10y_points if point.period_end >= start_date),
+                    )
+            except Exception as exc:
+                treasury_daily_10y_points = None
+                logger.warning("Official macro fetch failed for us_10y_yield: %s", exc)
+
+        if "us_credit_spread" in requested:
+            try:
+                treasury_monthly_10y_points = self._build_monthly_average_points(
+                    points=treasury_daily_10y_points or [],
+                    unit="pct",
+                    source_url="https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve",
+                    start_date=start_date,
+                )
+                hqm_points = self._fetch_treasury_hqm_10y_points(start_date=start_date - timedelta(days=370))
+                result["us_credit_spread"] = MacroIndicatorSeries(
+                    provider=self.provider_key,
+                    indicator_code="us_credit_spread",
+                    display_name="US Credit Spread",
+                    unit="pct",
+                    source_url="https://home.treasury.gov/data/treasury-coupon-issues-and-corporate-bond-yield-curve/corporate-bond-yield-curve",
+                    points=tuple(
+                        self._build_credit_spread_points(
+                            corporate_points=hqm_points,
+                            treasury_points=treasury_monthly_10y_points,
+                            start_date=start_date,
+                        )
+                    ),
+                )
+            except Exception as exc:
+                logger.warning("Official macro fetch failed for us_credit_spread: %s", exc)
+
+        if "nvidia_stock_price" in requested:
+            try:
+                result["nvidia_stock_price"] = MacroIndicatorSeries(
+                    provider=self.provider_key,
+                    indicator_code="nvidia_stock_price",
+                    display_name="NVIDIA",
+                    unit="USD",
+                    source_url="https://www.nasdaq.com/market-activity/stocks/nvda/historical",
+                    points=tuple(self._fetch_nasdaq_stock_history_points(symbol="NVDA", start_date=start_date)),
+                )
+            except Exception as exc:
+                logger.warning("Official macro fetch failed for nvidia_stock_price: %s", exc)
+
         return [result[code] for code in indicator_codes if code in result and result[code].points]
 
     def fetch_latest_readings(
@@ -759,6 +961,333 @@ class OfficialMacroDataProvider:
                 )
             )
         return readings
+
+    def _world_bank_pink_sheet_url(self) -> str:
+        return (
+            "https://thedocs.worldbank.org/en/doc/"
+            "74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Historical-Data-Monthly.xlsx"
+        )
+
+    def _safe_rmb_history_url(self) -> str:
+        return "https://www.safe.gov.cn/AppStructured/hlw/RMBQuery.do"
+
+    def _safe_rmb_export_url(self) -> str:
+        return "https://www.safe.gov.cn/AppStructured/hlw/exportRMBExcel.do"
+
+    def _fetch_safe_usd_cny_points(self, *, start_date: date) -> list[MacroHistoryPoint]:
+        import pandas as pd  # type: ignore
+
+        end_date = date.today()
+        response = self._session.post(
+            self._safe_rmb_export_url(),
+            data={
+                "startDate": start_date.isoformat(),
+                "endDate": end_date.isoformat(),
+                "queryYN": "true",
+            },
+            timeout=30,
+            verify=False,
+        )
+        response.raise_for_status()
+        frame = pd.read_excel(io.BytesIO(response.content))
+        date_column = frame.columns[0]
+        usd_column = frame.columns[1]
+        points: list[MacroHistoryPoint] = []
+        for _, row in frame.iterrows():
+            raw_date = row.get(date_column)
+            raw_value = self._coerce_numeric_field(row.get(usd_column))
+            if raw_date is None or raw_value is None:
+                continue
+            if hasattr(raw_date, "date"):
+                period_end = raw_date.date()
+            elif hasattr(raw_date, "to_pydatetime"):
+                period_end = raw_date.to_pydatetime().date()
+            else:
+                period_end = datetime.strptime(str(raw_date).strip(), "%Y-%m-%d").date()
+            if period_end < start_date:
+                continue
+            # SAFE stores RMB midpoint as price per 100 foreign currency units.
+            usd_cny = raw_value / 100
+            points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_end.isoformat(),
+                    value=round(usd_cny, 4),
+                    unit="CNY/USD",
+                    source_url=self._safe_rmb_history_url(),
+                    released_at=period_end.isoformat(),
+                )
+            )
+        points.sort(key=lambda item: item.period_end)
+        return points
+
+    def _fetch_world_bank_commodity_points(self, *, start_date: date) -> dict[str, list[MacroHistoryPoint]]:
+        import pandas as pd  # type: ignore
+
+        raw = pd.read_excel(self._world_bank_pink_sheet_url(), sheet_name="Monthly Prices", header=None)
+        commodity_names = [str(value).strip() for value in raw.iloc[4].tolist()]
+        data = raw.iloc[6:].copy()
+        data.columns = ["period_code", *commodity_names[1:]]
+        data = data.dropna(subset=["period_code"])
+
+        def pick_column(name_fragment: str) -> str:
+            for column in data.columns:
+                if name_fragment.lower() in str(column).lower():
+                    return str(column)
+            raise KeyError(f"Missing World Bank commodity column containing: {name_fragment}")
+
+        gold_column = pick_column("Gold")
+        oil_column = pick_column("Crude oil, WTI")
+        copper_column = pick_column("Copper")
+        source_url = self._world_bank_pink_sheet_url()
+
+        result = {
+            "gold_price": [],
+            "oil_price": [],
+            "copper_price": [],
+        }
+        for _, row in data.iterrows():
+            period_code = str(row["period_code"]).strip()
+            match = re.fullmatch(r"(\d{4})M(\d{2})", period_code)
+            if match is None:
+                continue
+            year = int(match.group(1))
+            month = int(match.group(2))
+            period_end = _month_end(year, month)
+            if period_end < start_date:
+                continue
+            period_label = f"{year:04d}-{month:02d}"
+            values = {
+                "gold_price": self._coerce_numeric_field(row[gold_column]),
+                "oil_price": self._coerce_numeric_field(row[oil_column]),
+                "copper_price": self._coerce_numeric_field(row[copper_column]),
+            }
+            units = {
+                "gold_price": "USD/troy oz",
+                "oil_price": "USD/bbl",
+                "copper_price": "USD/mt",
+            }
+            for code, value in values.items():
+                if value is None:
+                    continue
+                result[code].append(
+                    MacroHistoryPoint(
+                        period_end=period_end,
+                        period_label=period_label,
+                        value=round(value, 4),
+                        unit=units[code],
+                        source_url=source_url,
+                        released_at=period_end.isoformat(),
+                    )
+                )
+        return result
+
+    def _build_copper_gold_ratio_points(
+        self,
+        *,
+        copper_points: Sequence[MacroHistoryPoint],
+        gold_points: Sequence[MacroHistoryPoint],
+        start_date: date,
+    ) -> list[MacroHistoryPoint]:
+        gold_by_period = {point.period_end: point for point in gold_points}
+        points: list[MacroHistoryPoint] = []
+        for copper in copper_points:
+            gold = gold_by_period.get(copper.period_end)
+            if gold is None or gold.value == 0:
+                continue
+            copper_per_lb = copper.value / 2204.6226218488
+            ratio = copper_per_lb / gold.value
+            if copper.period_end < start_date:
+                continue
+            points.append(
+                MacroHistoryPoint(
+                    period_end=copper.period_end,
+                    period_label=copper.period_label,
+                    value=round(ratio, 6),
+                    unit="ratio",
+                    source_url=copper.source_url,
+                    released_at=copper.released_at,
+                )
+            )
+        return points
+
+    def _fetch_treasury_10y_daily_points(self, *, start_date: date) -> list[MacroHistoryPoint]:
+        points: list[MacroHistoryPoint] = []
+        today = date.today()
+        for year, month in _iter_month_starts(start_date, today):
+            period_key = f"{year:04d}{month:02d}"
+            url = (
+                "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+                f"daily-treasury-rates.csv/all/{period_key}"
+                f"?field_tdr_date_value_month={period_key}&type=daily_treasury_yield_curve&page&_format=csv"
+            )
+            response = self._session.get(url, timeout=30)
+            response.raise_for_status()
+            reader = csv.DictReader(io.StringIO(response.text))
+            for row in reader:
+                raw_date = str(row.get("Date", "")).strip()
+                raw_value = str(row.get("10 Yr", "")).strip()
+                if not raw_date or not raw_value:
+                    continue
+                period_end = datetime.strptime(raw_date, "%m/%d/%Y").date()
+                if period_end < start_date:
+                    continue
+                value = self._coerce_numeric_field(raw_value)
+                if value is None:
+                    continue
+                points.append(
+                    MacroHistoryPoint(
+                        period_end=period_end,
+                        period_label=period_end.isoformat(),
+                        value=round(value, 4),
+                        unit="pct",
+                        source_url=url,
+                        released_at=period_end.isoformat(),
+                    )
+                )
+        points.sort(key=lambda item: item.period_end)
+        return points
+
+    def _build_monthly_average_points(
+        self,
+        *,
+        points: Sequence[MacroHistoryPoint],
+        unit: str,
+        source_url: str,
+        start_date: date,
+    ) -> list[MacroHistoryPoint]:
+        monthly: dict[tuple[int, int], list[float]] = {}
+        for point in points:
+            monthly.setdefault((point.period_end.year, point.period_end.month), []).append(point.value)
+        result: list[MacroHistoryPoint] = []
+        for year_month in sorted(monthly):
+            year, month = year_month
+            period_end = _month_end(year, month)
+            if period_end < start_date:
+                continue
+            values = monthly[year_month]
+            result.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=f"{year:04d}-{month:02d}",
+                    value=round(sum(values) / len(values), 4),
+                    unit=unit,
+                    source_url=source_url,
+                    released_at=period_end.isoformat(),
+                )
+            )
+        return result
+
+    def _fetch_treasury_hqm_10y_points(self, *, start_date: date) -> list[MacroHistoryPoint]:
+        import pandas as pd  # type: ignore
+
+        url = "https://home.treasury.gov/system/files/226/hqm_qh_pars.xls"
+        frame = pd.read_excel(url, sheet_name="Sheet1", header=3)
+        columns = list(frame.columns)
+        ten_year_column = columns[4]
+        points: list[MacroHistoryPoint] = []
+        for _, row in frame.iterrows():
+            raw_period = str(row["Date"]).strip()
+            raw_value = self._coerce_numeric_field(row[ten_year_column])
+            if not raw_period or raw_period.lower() == "nan" or raw_value is None:
+                continue
+            period_anchor = datetime.strptime(raw_period, "%b %Y").date()
+            period_end = _month_end(period_anchor.year, period_anchor.month)
+            if period_end < start_date:
+                continue
+            points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=f"{period_anchor.year:04d}-{period_anchor.month:02d}",
+                    value=round(raw_value, 4),
+                    unit="pct",
+                    source_url=url,
+                    released_at=period_end.isoformat(),
+                )
+            )
+        return points
+
+    def _build_credit_spread_points(
+        self,
+        *,
+        corporate_points: Sequence[MacroHistoryPoint],
+        treasury_points: Sequence[MacroHistoryPoint],
+        start_date: date,
+    ) -> list[MacroHistoryPoint]:
+        treasury_by_period = {point.period_end: point for point in treasury_points}
+        points: list[MacroHistoryPoint] = []
+        for corporate in corporate_points:
+            treasury = treasury_by_period.get(corporate.period_end)
+            if treasury is None:
+                continue
+            if corporate.period_end < start_date:
+                continue
+            spread = corporate.value - treasury.value
+            points.append(
+                MacroHistoryPoint(
+                    period_end=corporate.period_end,
+                    period_label=corporate.period_label,
+                    value=round(spread, 4),
+                    unit="pct",
+                    source_url=corporate.source_url,
+                    released_at=corporate.released_at,
+                )
+            )
+        return points
+
+    def _fetch_nasdaq_stock_history_points(self, *, symbol: str, start_date: date) -> list[MacroHistoryPoint]:
+        url = (
+            f"https://api.nasdaq.com/api/quote/{symbol}/historical"
+            f"?assetclass=stocks&fromdate={start_date.isoformat()}&limit=500&todate={date.today().isoformat()}"
+        )
+        source_url = f"https://www.nasdaq.com/market-activity/stocks/{symbol.lower()}/historical"
+        response = self._session.get(
+            url,
+            headers={
+                "Accept": "application/json",
+                "Origin": "https://www.nasdaq.com",
+                "Referer": f"https://www.nasdaq.com/market-activity/stocks/{symbol.lower()}/historical",
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        rows = (((payload.get("data") or {}).get("tradesTable") or {}).get("rows") or [])
+        points: list[MacroHistoryPoint] = []
+        for row in rows:
+            raw_date = str(row.get("date", "")).strip()
+            raw_close = str(row.get("close", "")).strip()
+            if not raw_date or not raw_close:
+                continue
+            period_end = datetime.strptime(raw_date, "%m/%d/%Y").date()
+            if period_end < start_date:
+                continue
+            value = self._coerce_numeric_field(raw_close)
+            if value is None:
+                continue
+            points.append(
+                MacroHistoryPoint(
+                    period_end=period_end,
+                    period_label=period_end.isoformat(),
+                    value=round(value, 4),
+                    unit="USD",
+                    source_url=source_url,
+                    released_at=period_end.isoformat(),
+                )
+            )
+        points.sort(key=lambda item: item.period_end)
+        return points
+
+    def _coerce_numeric_field(self, value: Any) -> float | None:
+        if value is None:
+            return None
+        text = str(value).strip().replace(",", "").replace("$", "")
+        if not text or text.lower() in {"nan", "nd", "n/a", "бн"}:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
 
     def _fetch_nbs_monthly_cpi_points(self, *, start_date: date) -> list[MacroHistoryPoint]:
         points = self._fetch_nbs_series_points(dbcode="hgyd", code="A01010G", transform=lambda value: value - 100)

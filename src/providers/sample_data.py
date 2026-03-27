@@ -165,58 +165,160 @@ class SampleMacroProvider:
             ("2025-Q3", date(2025, 9, 30)),
             ("2025-Q4", date(2025, 12, 31)),
         ]
-        sample_points = {
-            "cpi": [-0.4, -0.1, 0.2, 0.1, 0.3, 0.4, 0.6, 0.5, 0.4, 0.3, 0.1, 0.3],
-            "ppi": [-2.7, -2.5, -2.2, -1.9, -1.7, -1.6, -1.5, -1.4, -1.4, -1.3, -1.5, -1.2],
-            "household_new_loans": [-0.18, 0.21, 0.42, 0.37, 0.44, 0.31, 0.29, 0.35, 0.41, 0.22, -0.08, -0.19],
-            "enterprise_new_loans": [3.10, 1.82, 1.54, 1.38, 1.61, 1.45, 1.58, 1.63, 1.49, 1.82, 2.31, 2.97],
-            "gdp_nominal": [4.6, 4.9, 5.0, 5.2, 5.5],
-            "gdp_real": [4.8, 5.0, 5.1, 5.0, 4.9],
-            "household_leverage": [58.7, 59.4, 60.2, 61.0, 61.8],
-            "enterprise_leverage": [131.5, 132.0, 132.6, 133.1, 133.8],
-        }
-        display_names = {
-            "cpi": "CPI",
-            "ppi": "PPI",
-            "gdp_nominal": "Nominal GDP Growth",
-            "gdp_real": "Real GDP Growth",
-            "household_new_loans": "Household New Loans",
-            "enterprise_new_loans": "Enterprise New Loans",
-            "household_leverage": "Household Leverage",
-            "enterprise_leverage": "Enterprise Leverage",
-        }
-        source_urls = {
-            "cpi": "https://www.stats.gov.cn/",
-            "ppi": "https://www.stats.gov.cn/",
-            "gdp_nominal": "https://www.stats.gov.cn/",
-            "gdp_real": "https://www.stats.gov.cn/",
-            "household_new_loans": "https://www.pbc.gov.cn/",
-            "enterprise_new_loans": "https://www.pbc.gov.cn/",
-            "household_leverage": "https://www.pbc.gov.cn/",
-            "enterprise_leverage": "https://www.pbc.gov.cn/",
+        daily_periods = [
+            ("2026-03-11", date(2026, 3, 11)),
+            ("2026-03-12", date(2026, 3, 12)),
+            ("2026-03-13", date(2026, 3, 13)),
+            ("2026-03-16", date(2026, 3, 16)),
+            ("2026-03-17", date(2026, 3, 17)),
+            ("2026-03-18", date(2026, 3, 18)),
+            ("2026-03-19", date(2026, 3, 19)),
+            ("2026-03-20", date(2026, 3, 20)),
+            ("2026-03-23", date(2026, 3, 23)),
+            ("2026-03-24", date(2026, 3, 24)),
+            ("2026-03-25", date(2026, 3, 25)),
+        ]
+        series_specs = {
+            "cpi": {
+                "periods": monthly_periods,
+                "values": [-0.4, -0.1, 0.2, 0.1, 0.3, 0.4, 0.6, 0.5, 0.4, 0.3, 0.1, 0.3],
+                "display_name": "CPI",
+                "unit": "%",
+                "source_url": "https://www.stats.gov.cn/",
+                "released_at": "2026-03-09",
+            },
+            "ppi": {
+                "periods": monthly_periods,
+                "values": [-2.7, -2.5, -2.2, -1.9, -1.7, -1.6, -1.5, -1.4, -1.4, -1.3, -1.5, -1.2],
+                "display_name": "PPI",
+                "unit": "%",
+                "source_url": "https://www.stats.gov.cn/",
+                "released_at": "2026-03-09",
+            },
+            "household_new_loans": {
+                "periods": monthly_periods,
+                "values": [-0.18, 0.21, 0.42, 0.37, 0.44, 0.31, 0.29, 0.35, 0.41, 0.22, -0.08, -0.19],
+                "display_name": "Household New Loans",
+                "unit": "tn yuan",
+                "source_url": "https://www.pbc.gov.cn/",
+                "released_at": "2026-03-14",
+            },
+            "enterprise_new_loans": {
+                "periods": monthly_periods,
+                "values": [3.10, 1.82, 1.54, 1.38, 1.61, 1.45, 1.58, 1.63, 1.49, 1.82, 2.31, 2.97],
+                "display_name": "Enterprise New Loans",
+                "unit": "tn yuan",
+                "source_url": "https://www.pbc.gov.cn/",
+                "released_at": "2026-03-14",
+            },
+            "gdp_nominal": {
+                "periods": quarterly_periods,
+                "values": [4.6, 4.9, 5.0, 5.2, 5.5],
+                "display_name": "Nominal GDP Growth",
+                "unit": "%",
+                "source_url": "https://www.stats.gov.cn/",
+                "released_at": "2026-01-17",
+            },
+            "gdp_real": {
+                "periods": quarterly_periods,
+                "values": [4.8, 5.0, 5.1, 5.0, 4.9],
+                "display_name": "Real GDP Growth",
+                "unit": "%",
+                "source_url": "https://www.stats.gov.cn/",
+                "released_at": "2026-01-17",
+            },
+            "household_leverage": {
+                "periods": quarterly_periods,
+                "values": [58.7, 59.4, 60.2, 61.0, 61.8],
+                "display_name": "Household Leverage",
+                "unit": "%",
+                "source_url": "https://www.pbc.gov.cn/",
+                "released_at": "2026-01-17",
+            },
+            "enterprise_leverage": {
+                "periods": quarterly_periods,
+                "values": [131.5, 132.0, 132.6, 133.1, 133.8],
+                "display_name": "Enterprise Leverage",
+                "unit": "%",
+                "source_url": "https://www.pbc.gov.cn/",
+                "released_at": "2026-01-17",
+            },
+            "usd_cny": {
+                "periods": daily_periods,
+                "values": [7.2441, 7.2387, 7.2308, 7.2261, 7.2142, 7.2054, 7.2120, 7.1988, 7.1876, 7.1819, 7.1764],
+                "display_name": "USD/CNY",
+                "unit": "CNY/USD",
+                "source_url": "https://www.federalreserve.gov/RELEASES/H10/hist/dat00_ch.htm",
+                "released_at": "2026-03-25",
+            },
+            "gold_price": {
+                "periods": monthly_periods,
+                "values": [2325.4, 2358.9, 2411.6, 2442.8, 2488.2, 2551.3, 2664.5, 2738.9, 2792.4, 2864.7, 3011.8, 3128.6],
+                "display_name": "Gold",
+                "unit": "USD/troy oz",
+                "source_url": "https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Historical-Data-Monthly.xlsx",
+                "released_at": "2026-03-03",
+            },
+            "oil_price": {
+                "periods": monthly_periods,
+                "values": [81.2, 79.4, 78.1, 76.8, 75.9, 74.3, 71.5, 69.8, 67.4, 63.9, 61.7, 64.6],
+                "display_name": "WTI Crude",
+                "unit": "USD/bbl",
+                "source_url": "https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Historical-Data-Monthly.xlsx",
+                "released_at": "2026-03-03",
+            },
+            "us_10y_yield": {
+                "periods": daily_periods,
+                "values": [4.28, 4.24, 4.21, 4.18, 4.16, 4.14, 4.20, 4.27, 4.31, 4.39, 4.33],
+                "display_name": "US 10Y Treasury",
+                "unit": "pct",
+                "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve",
+                "released_at": "2026-03-25",
+            },
+            "us_credit_spread": {
+                "periods": monthly_periods,
+                "values": [0.92, 0.95, 0.98, 1.01, 0.97, 0.93, 0.90, 0.88, 0.91, 0.94, 0.99, 1.04],
+                "display_name": "US Credit Spread",
+                "unit": "pct",
+                "source_url": "https://home.treasury.gov/data/treasury-coupon-issues-and-corporate-bond-yield-curve/corporate-bond-yield-curve",
+                "released_at": "2026-03-03",
+            },
+            "copper_gold_ratio": {
+                "periods": monthly_periods,
+                "values": [0.00171, 0.00168, 0.00166, 0.00165, 0.00161, 0.00158, 0.00154, 0.00149, 0.00146, 0.00141, 0.00137, 0.00133],
+                "display_name": "Copper/Gold Ratio",
+                "unit": "ratio",
+                "source_url": "https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Historical-Data-Monthly.xlsx",
+                "released_at": "2026-03-03",
+            },
+            "nvidia_stock_price": {
+                "periods": daily_periods,
+                "values": [154.9, 156.8, 158.6, 160.4, 164.2, 167.7, 171.3, 172.7, 175.6, 175.2, 176.4],
+                "display_name": "NVIDIA",
+                "unit": "USD",
+                "source_url": "https://api.nasdaq.com/api/quote/NVDA/historical?assetclass=stocks",
+                "released_at": "2026-03-25",
+            },
         }
         series_map = {}
-        for code, values in sample_points.items():
-            periods = monthly_periods if len(values) == len(monthly_periods) else quarterly_periods
-            unit = "tn yuan" if "new_loans" in code else "%"
-            released_at = "2026-03-14" if "new_loans" in code else "2026-03-09"
+        for code, spec in series_specs.items():
             points = tuple(
                 MacroHistoryPoint(
                     period_end=period_end,
                     period_label=period_label,
                     value=value,
-                    unit=unit,
-                    source_url=source_urls[code],
-                    released_at=released_at,
+                    unit=spec["unit"],
+                    source_url=spec["source_url"],
+                    released_at=spec["released_at"],
                 )
-                for (period_label, period_end), value in zip(periods, values, strict=True)
+                for (period_label, period_end), value in zip(spec["periods"], spec["values"], strict=True)
             )
             series_map[code] = MacroIndicatorSeries(
                 provider=self.provider_key,
                 indicator_code=code,
-                display_name=display_names[code],
-                unit=unit,
-                source_url=source_urls[code],
+                display_name=spec["display_name"],
+                unit=spec["unit"],
+                source_url=spec["source_url"],
                 points=points,
             )
         return [series_map[code] for code in indicator_codes if code in series_map]
