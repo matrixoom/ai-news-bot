@@ -8,6 +8,20 @@ import math
 
 from .dashboard_service import DashboardSnapshot
 
+MARKET_SIGNAL_LABELS = {
+    "breakout": "突破",
+    "constructive": "偏强",
+    "neutral": "中性",
+    "pressured": "承压",
+}
+
+MARKET_SIGNAL_EXPLANATIONS = {
+    "突破": "标准: 最新乖离率 >= +3.0%。也就是收盘价显著高于 MA20。含义: 趋势动能较强，通常对应风险偏好提升和资金追涨。",
+    "偏强": "标准: 0.0% <= 最新乖离率 < +3.0%。也就是收盘价位于 MA20 上方，但尚未达到强突破阈值。含义: 趋势偏多但未过热，适合继续跟踪。",
+    "中性": "标准: -3.0% <= 最新乖离率 < 0.0%。也就是收盘价略低于 MA20，但仍处在模型平衡区间。含义: 市场偏震荡，方向确认度较低。",
+    "承压": "标准: 最新乖离率 < -3.0%。也就是收盘价明显低于 MA20。含义: 趋势偏弱，通常对应风险偏好回落和防御情绪升温。",
+}
+
 
 class PushReportService:
     """Render dashboard data into reusable markdown and HTML push reports."""
@@ -73,7 +87,7 @@ class PushReportService:
             )
             for card in snapshot.market_sections:
                 lines.append(
-                    f"| {card.label} | {card.close_value} | {card.ma20_value} | {card.deviation_pct} | {card.signal} |"
+                    f"| {card.label} | {card.close_value} | {card.ma20_value} | {card.deviation_pct} | {self._market_signal_label(card.signal)} |"
                 )
             lines.extend(
                 [
@@ -217,6 +231,7 @@ class PushReportService:
         return self._wrap_stacked_blocks(sections, top_padding=18)
 
     def _build_market_column(self, snapshot: DashboardSnapshot) -> str:
+        signal_header = self._market_signal_header_html()
         summary_rows = "".join(
             f"""
 <tr>
@@ -224,7 +239,7 @@ class PushReportService:
   <td style="padding:10px 0;border-top:1px solid #d0c3a8;text-align:right;">{escape(card.close_value)}</td>
   <td style="padding:10px 0;border-top:1px solid #d0c3a8;text-align:right;">{escape(card.ma20_value)}</td>
   <td style="padding:10px 0;border-top:1px solid #d0c3a8;text-align:right;">{escape(card.deviation_pct)}</td>
-  <td style="padding:10px 0;border-top:1px solid #d0c3a8;text-align:right;letter-spacing:0.08em;text-transform:uppercase;color:#8b5e00;">{escape(card.signal)}</td>
+  <td style="padding:10px 0;border-top:1px solid #d0c3a8;text-align:right;letter-spacing:0.08em;color:#8b5e00;">{escape(self._market_signal_label(card.signal))}</td>
 </tr>"""
             for card in snapshot.market_sections
         )
@@ -244,7 +259,7 @@ class PushReportService:
           <th style="padding:0 0 10px;text-align:right;border-bottom:1px solid #171717;">收盘</th>
           <th style="padding:0 0 10px;text-align:right;border-bottom:1px solid #171717;">MA20</th>
           <th style="padding:0 0 10px;text-align:right;border-bottom:1px solid #171717;">偏离</th>
-          <th style="padding:0 0 10px;text-align:right;border-bottom:1px solid #171717;">信号</th>
+          <th style="padding:0 0 10px;text-align:right;border-bottom:1px solid #171717;">{signal_header}</th>
         </tr>
       </thead>
       <tbody>{summary_rows or '<tr><td colspan="5" style="padding-top:10px;">暂无市场模型数据。</td></tr>'}</tbody>
@@ -265,7 +280,7 @@ class PushReportService:
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
     <tr>
       <td style="font-size:18px;font-weight:700;line-height:1.4;">{escape(card.label)}</td>
-      <td align="right" style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8b5e00;white-space:nowrap;">{escape(card.signal)}</td>
+      <td align="right" style="font-size:12px;letter-spacing:0.12em;color:#8b5e00;white-space:nowrap;">{escape(self._market_signal_label(card.signal))}</td>
     </tr>
   </table>
   <div style="margin-top:10px;">{self._render_market_combo_chart(trend["chart_points"], label=card.label)}</div>
@@ -281,6 +296,31 @@ class PushReportService:
   </table>
   <p style="margin:10px 0 0;font-size:13px;line-height:1.7;color:#4f4a40;">{escape(card.explanation)}</p>
 </article>"""
+
+    def _market_signal_label(self, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        return MARKET_SIGNAL_LABELS.get(normalized, value or "暂无数据")
+
+    def _market_signal_help_text(self) -> str:
+        return (
+            "信号定义: 基于最新收盘价相对 MA20 的位置与乖离率生成。&#10;"
+            "计算公式: 乖离率 = (收盘价 - MA20) / MA20 * 100%。&#10;"
+            "前提: 至少需要 20 个交易日数据才能计算 MA20 和信号。&#10;&#10;"
+            + "&#10;".join(
+            f"{label}: {MARKET_SIGNAL_EXPLANATIONS[label]}"
+            for label in ("突破", "偏强", "中性", "承压")
+            )
+        )
+
+    def _market_signal_header_html(self) -> str:
+        tooltip = self._market_signal_help_text()
+        return (
+            "信号 "
+            f"<span title=\"{tooltip}\" "
+            "style=\"display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;"
+            "border:1px solid #8b5e00;border-radius:50%;font-size:11px;line-height:1;color:#8b5e00;"
+            "cursor:help;vertical-align:middle;\">?</span>"
+        )
 
     def _build_market_trend_summary(self, card) -> dict[str, object]:
         chart_points = self._normalize_market_chart_points(self._extract_recent_market_points(card))

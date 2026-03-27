@@ -1,5 +1,6 @@
 import smtplib
 import socket
+import ssl
 import unittest
 from unittest.mock import patch
 
@@ -58,6 +59,39 @@ class EmailNotifierTests(unittest.TestCase):
         ), patch(
             "src.notifiers.email_notifier.smtplib.SMTP",
             side_effect=smtplib.SMTPServerDisconnected("Connection unexpectedly closed"),
+        ), patch(
+            "src.notifiers.email_notifier.smtplib.SMTP_SSL",
+            new=FallbackSmtpSslClient,
+        ):
+            sent = notifier.send("hello", subject="Test")
+
+        self.assertTrue(sent)
+        self.assertEqual(len(FallbackSmtpSslClient.instances), 1)
+        client = FallbackSmtpSslClient.instances[0]
+        self.assertEqual(client.host, "smtp.qq.com")
+        self.assertEqual(client.port, 465)
+        self.assertEqual(client.login_calls, [("571255945@qq.com", "secret")])
+        self.assertEqual(len(client.sendmail_calls), 1)
+
+    def test_qq_server_falls_back_to_ssl_when_starttls_tls_handshake_hits_eof(self):
+        notifier = EmailNotifier(
+            smtp_server="smtp.qq.com",
+            smtp_port=587,
+            smtp_use_tls=True,
+            username="571255945@qq.com",
+            password="secret",
+            from_address="571255945@qq.com",
+            email_to="receiver@example.com",
+        )
+
+        with patch(
+            "src.notifiers.email_notifier.socket.getaddrinfo",
+            return_value=[
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("203.0.113.10", 0)),
+            ],
+        ), patch(
+            "src.notifiers.email_notifier.smtplib.SMTP",
+            side_effect=ssl.SSLEOFError("EOF occurred in violation of protocol"),
         ), patch(
             "src.notifiers.email_notifier.smtplib.SMTP_SSL",
             new=FallbackSmtpSslClient,

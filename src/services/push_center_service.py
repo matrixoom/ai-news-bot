@@ -168,6 +168,7 @@ class PushCenterService:
     def build_module_payload(self, *, force_refresh_preview: bool = False) -> dict[str, Any]:
         config = self._load_config()
         preview = self._build_preview(config, force_refresh=force_refresh_preview)
+        recent_runs = self._read_recent_runs()
         note = f"{len(config['schedules'])} 个任务 / {len(config['selected_module_ids'])} 个模块"
         return {
             "generated_at": _utc_now_iso(),
@@ -191,6 +192,7 @@ class PushCenterService:
                             "config_path": str(self._config_path),
                             "config": self._public_config(config),
                             "preview": preview,
+                            "recent_runs": recent_runs,
                             "scheduler": {
                                 "enabled": self._scheduler_thread is not None,
                                 "check_interval_seconds": self._scheduler_check_seconds,
@@ -395,6 +397,10 @@ class PushCenterService:
             "module_ids": selected_modules,
         }
         recent_runs = self._record_recent_run(run_record)
+        if failed:
+            logger.warning("push-center %s run completed with failures: %s", trigger, detail)
+        else:
+            logger.info("push-center %s run completed successfully", trigger)
         return {
             "ok": bool(sent),
             "preview": preview,

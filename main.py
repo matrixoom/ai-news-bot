@@ -33,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=8000,
         help="Port for the web server in web mode.",
     )
+    parser.add_argument(
+        "--reload",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable hot reload for the web server in web mode. Use --no-reload to disable it.",
+    )
     return parser
 
 
@@ -43,7 +49,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.mode == "push":
         return run_push_job()
 
-    run_dev_server(host=args.host, port=args.port)
+    run_dev_server(host=args.host, port=args.port, reload=args.reload)
     return 0
 
 

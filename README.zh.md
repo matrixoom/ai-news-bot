@@ -120,6 +120,14 @@ powershell -ExecutionPolicy Bypass -File scripts/init-newsnow-submodule.ps1 -Ski
 uv run python main.py web --host 127.0.0.1 --port 8000
 ```
 
+`web` 模式现在默认开启热加载，`src/` 下后端 Python 代码修改后会自动重启服务。
+
+如果你想关闭热加载：
+
+```powershell
+uv run python main.py web --host 127.0.0.1 --port 8000 --no-reload
+```
+
 浏览器访问：
 
 - `http://127.0.0.1:8000/`
@@ -151,11 +159,20 @@ powershell -ExecutionPolicy Bypass -File scripts/init-newsnow-submodule.ps1
 uv run python main.py web --host 127.0.0.1 --port 8000
 ```
 
+该命令默认就是后端热加载模式，开发时不需要手动反复重启。
+
 ### 4. 打开前端页面
 
 ```text
 http://127.0.0.1:8000/
 ```
+
+前端加载约束：
+
+- 首页 shell 不能被慢模块阻塞。
+- `news`、`macro`、`market`、`events`、`status` 都是在首屏渲染后异步补齐。
+- `push` 模块必须保持按需加载，只在用户进入推送中心时再请求，因为它要生成完整预览，明显比其他模块更重。
+- 后续前端改动需要保持这条约束，不要把 `push` 恢复成首页预加载。
 
 ### 5. 按需切换新闻模式
 

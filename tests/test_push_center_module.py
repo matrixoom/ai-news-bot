@@ -111,7 +111,8 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertIn("config", detail["section"])
         self.assertIn("preview", detail["section"])
         self.assertIn("schedules", detail["section"]["config"])
-        self.assertNotIn("recent_runs", detail["section"])
+        self.assertIn("recent_runs", detail["section"])
+        self.assertEqual(detail["section"]["recent_runs"], [])
         self.assertTrue(self.config_path.with_name("push-center.template.json").exists())
 
     def test_frontend_push_module_refresh_forces_latest_preview(self):
@@ -422,7 +423,7 @@ class PushCenterModuleTests(unittest.TestCase):
         )
         try:
             payload = migrated_service.build_module_payload()
-            self.assertNotIn("recent_runs", payload["module"]["details"][0]["section"])
+            self.assertEqual(len(payload["module"]["details"][0]["section"]["recent_runs"]), 1)
             migrated_config = self._read_json(legacy_config_path)
             self.assertNotIn("recent_runs", migrated_config)
             self.assertNotIn("scheduler_history", migrated_config)

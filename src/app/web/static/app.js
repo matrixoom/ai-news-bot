@@ -17,6 +17,7 @@ const signalMap = {
   unavailable: "不可用",
 };
 const trendMap = { up: "上行", down: "下行", flat: "持平", unavailable: "不可用" };
+const macroFrequencyMap = { daily: "日度", monthly: "月度", quarterly: "季度", yearly: "年度", unavailable: "未知" };
 const NEWS_MODE_LABELS = { hybrid: "Hybrid", api: "API", upstream: "Upstream" };
 const NEWS_MODE_OPTIONS = [
   { value: "hybrid", label: "Hybrid" },
@@ -631,8 +632,20 @@ function formatMacroChartValue(value, unit = "") {
     return "-";
   }
   const abs = Math.abs(value);
-  const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
-  return `${value.toFixed(digits)}${unit}`;
+  const digits = unit === "ratio" ? 4 : abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  if (unit === "%" || unit === "pct") {
+    return `${value.toFixed(Math.max(1, digits))}%`;
+  }
+  if (unit === "tn yuan") {
+    return `${value.toFixed(2)}万亿`;
+  }
+  if (unit === "CNY/USD") {
+    return `${value.toFixed(4)}`;
+  }
+  if (unit === "ratio") {
+    return value.toFixed(4);
+  }
+  return `${value.toFixed(digits)}${unit ? ` ${unit}` : ""}`;
 }
 
 function updateGeneratedAt(value) {
@@ -919,12 +932,14 @@ function renderMacroComparisonChart(section, rootId, rangeKey = "all") {
   if (!root) {
     return;
   }
+  const primary = section?.primary || null;
+  const secondary = section?.secondary || null;
   const primaryPoints = filterMacroSeriesByRange(
-    Array.isArray(section?.primary?.points) ? section.primary.points : [],
+    Array.isArray(primary?.points) ? primary.points : [],
     rangeKey,
   );
   const secondaryPoints = filterMacroSeriesByRange(
-    Array.isArray(section?.secondary?.points) ? section.secondary.points : [],
+    Array.isArray(secondary?.points) ? secondary.points : [],
     rangeKey,
   );
   if (!primaryPoints.length && !secondaryPoints.length) {
@@ -949,6 +964,30 @@ function renderMacroComparisonChart(section, rootId, rangeKey = "all") {
     points.forEach((point) => map.set(point.period_label || point.period_end, point.value));
     return labels.map((label) => (map.has(label) ? map.get(label) : null));
   };
+  const legendData = [primary?.label, secondary?.label].filter(Boolean);
+  const series = [];
+  if (primary) {
+    series.push({
+      name: primary.label,
+      type: "line",
+      showSymbol: labels.length <= 18,
+      symbolSize: 6,
+      smooth: 0.18,
+      lineStyle: { width: 2.4 },
+      data: valueByLabel(primaryPoints),
+    });
+  }
+  if (secondary) {
+    series.push({
+      name: secondary.label,
+      type: "line",
+      showSymbol: labels.length <= 18,
+      symbolSize: 6,
+      smooth: 0.18,
+      lineStyle: { width: 2.4 },
+      data: valueByLabel(secondaryPoints),
+    });
+  }
   const chart = window.echarts.getInstanceByDom(root) || window.echarts.init(root);
   marketChartInstances.set(rootId, chart);
   chart.setOption(
@@ -959,7 +998,7 @@ function renderMacroComparisonChart(section, rootId, rangeKey = "all") {
       legend: {
         top: 8,
         textStyle: { color: muted, fontSize: 11 },
-        data: [section.primary.label, section.secondary.label],
+        data: legendData,
       },
       tooltip: {
         trigger: "axis",
@@ -967,7 +1006,7 @@ function renderMacroComparisonChart(section, rootId, rangeKey = "all") {
         borderColor: line,
         textStyle: { color: ink },
         valueFormatter(value) {
-          return formatMacroChartValue(value, section.primary.unit || "");
+          return formatMacroChartValue(value, primary?.unit || "");
         },
       },
       xAxis: {
@@ -984,31 +1023,12 @@ function renderMacroComparisonChart(section, rootId, rangeKey = "all") {
           color: muted,
           fontSize: 10,
           formatter(value) {
-            return formatMacroChartValue(value, section.primary.unit || "");
+            return formatMacroChartValue(value, primary?.unit || "");
           },
         },
         splitLine: { lineStyle: { color: line, type: "dashed" } },
       },
-      series: [
-        {
-          name: section.primary.label,
-          type: "line",
-          showSymbol: labels.length <= 18,
-          symbolSize: 6,
-          smooth: 0.18,
-          lineStyle: { width: 2.4 },
-          data: valueByLabel(primaryPoints),
-        },
-        {
-          name: section.secondary.label,
-          type: "line",
-          showSymbol: labels.length <= 18,
-          symbolSize: 6,
-          smooth: 0.18,
-          lineStyle: { width: 2.4 },
-          data: valueByLabel(secondaryPoints),
-        },
-      ],
+      series,
     },
     true,
   );
@@ -1020,57 +1040,92 @@ function getLatestMacroDelta(section) {
   return deltaPoints.length ? deltaPoints[deltaPoints.length - 1] : null;
 }
 
+function renderMacroSourceLinks(section) {
+  const explicitSources = Array.isArray(section?.sources) ? section.sources : [];
+  const fallbackSources = [section?.primary, section?.secondary]
+    .filter(Boolean)
+    .map((item) => ({ label: item.source_label, url: item.source_url }));
+  const sourceItems = (explicitSources.length ? explicitSources : fallbackSources)
+    .filter((item) => item && item.label);
+
+  if (!sourceItems.length) {
+    return '<span class="card-meta">来源: 暂无数据源信息</span>';
+  }
+
+  return `
+    <div class="macro-source-links">
+      <span class="card-meta">来源:</span>
+      ${sourceItems
+        .map((item) => {
+          const label = escapeHtml(item.label || "数据源");
+          const url = String(item.url || "").trim();
+          if (!url) {
+            return `<span class="macro-source-link is-text">${label}</span>`;
+          }
+          return `<a class="macro-source-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(url)}">${label}</a>`;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderMacroMetricStrip(item, tone = "primary") {
+  return `
+    <article class="macro-metric-strip ${tone}">
+      <div class="macro-metric-top">
+        <h5>${escapeHtml(item.label)}</h5>
+        <span class="macro-metric-chip">${escapeHtml(macroFrequencyMap[item.frequency] || item.frequency || "未知")}</span>
+      </div>
+      <div class="macro-metric-main">
+        <span class="macro-metric-value">${escapeHtml(item.latest_value)}</span>
+        <span class="macro-metric-trend ${escapeHtml(item.trend)}">${escapeHtml(trendMap[item.trend] || item.trend || "未知")}</span>
+      </div>
+      <p class="macro-metric-meta">${escapeHtml(item.change_label)}</p>
+      <p class="macro-metric-meta">${escapeHtml(item.period_label)} | ${escapeHtml(item.updated_at)}</p>
+    </article>
+  `;
+}
+
 function renderMacroCard(section) {
   const sectionKey = section.key || section.primary?.key || section.secondary?.key || "macro";
   const activeRange = getActiveMacroChartRange(sectionKey, section);
-  const activeRangeLabel = getMacroRangeOption(activeRange).label;
   const rangeSwitch = renderMacroChartRangeSwitch(sectionKey, section);
   const latestDelta = getLatestMacroDelta(section);
   const filteredPrimary = filterMacroSeriesByRange(section.primary?.points || [], activeRange);
   const filteredSecondary = filterMacroSeriesByRange(section.secondary?.points || [], activeRange);
-  const sources = Array.isArray(section.sources) ? section.sources : [];
-  const sourceLine = sources.length
-    ? sources.map((item) => item.label).join(" / ")
-    : `${section.primary.source_label || ""}${section.secondary.source_label ? ` / ${section.secondary.source_label}` : ""}`;
   const coverageLabel = buildMacroCoverageLabel(filteredPrimary, filteredSecondary);
-  const context = section.primary.context || section.secondary.context || "";
+  const context = section.primary?.context || section.secondary?.context || "";
+  const summaryItems = [renderMacroMetricStrip(section.primary, "primary")];
+  if (section.secondary) {
+    summaryItems.push(renderMacroMetricStrip(section.secondary, "secondary"));
+  }
+  const quickMeta = [
+    `覆盖 ${coverageLabel}`,
+    latestDelta && section.delta_label
+      ? `${section.delta_label} ${formatMacroChartValue(latestDelta.value, section.primary.unit || "")}`
+      : "",
+  ].filter(Boolean);
   return `
     <article class="info-card macro-grid-card">
       <div class="card-head macro-card-head">
         <div class="macro-card-title">
           <h4>${escapeHtml(section.title)}</h4>
-          <p class="detail-copy">${escapeHtml(section.description || "")}</p>
+          <p class="card-meta">${escapeHtml(section.description || "")}</p>
         </div>
         <div class="market-chart-tools">${rangeSwitch}${statusBadge(section.status)}</div>
       </div>
       <div class="macro-summary-grid">
-        <article class="plain-card macro-summary-item">
-          <div class="card-head"><h4>${escapeHtml(section.primary.label)}</h4><span class="metric-sub">${escapeHtml(trendMap[section.primary.trend] || section.primary.trend)}</span></div>
-          <p class="metric-value">${escapeHtml(section.primary.latest_value)}</p>
-          <p class="card-meta">${escapeHtml(section.primary.change_label)}</p>
-          <p class="card-meta">${escapeHtml(section.primary.period_label)} | ${escapeHtml(section.primary.updated_at)}</p>
-        </article>
-        <article class="plain-card macro-summary-item">
-          <div class="card-head"><h4>${escapeHtml(section.secondary.label)}</h4><span class="metric-sub">${escapeHtml(trendMap[section.secondary.trend] || section.secondary.trend)}</span></div>
-          <p class="metric-value">${escapeHtml(section.secondary.latest_value)}</p>
-          <p class="card-meta">${escapeHtml(section.secondary.change_label)}</p>
-          <p class="card-meta">${escapeHtml(section.secondary.period_label)} | ${escapeHtml(section.secondary.updated_at)}</p>
-        </article>
+        ${summaryItems.join("")}
       </div>
-      <article class="info-card market-chart-panel macro-chart-panel">
-        <div class="card-head">
-          <h4>${escapeHtml(section.summary)}</h4>
-          <span class="metric-sub">${escapeHtml(activeRangeLabel)}</span>
+      <div class="macro-chart-panel">
+        <div class="macro-panel-meta">
+          <span class="macro-panel-label">${escapeHtml(section.summary)}</span>
+          ${quickMeta.map((item) => `<span class="macro-panel-pill">${escapeHtml(item)}</span>`).join("")}
         </div>
-        <p class="card-meta">
-          显示范围: ${escapeHtml(activeRangeLabel)}
-          | 历史覆盖: ${escapeHtml(coverageLabel)}
-          ${latestDelta ? `| 最新${escapeHtml(section.delta_label)}: ${escapeHtml(formatMacroChartValue(latestDelta.value, section.primary.unit || ""))}` : ""}
-        </p>
-        <div id="macroCompareChart-${escapeHtml(sectionKey)}" class="market-trend-chart macro-trend-chart" aria-label="${escapeHtml(`${section.title} comparison chart`)}"></div>
-      </article>
+        <div id="macroCompareChart-${escapeHtml(sectionKey)}" class="market-trend-chart macro-trend-chart" aria-label="${escapeHtml(`${section.title}走势`)}"></div>
+      </div>
       <div class="macro-card-foot">
-        <p class="card-meta">来源: ${escapeHtml(sourceLine)}</p>
+        ${renderMacroSourceLinks(section)}
         ${context ? `<p class="card-meta">${escapeHtml(context)}</p>` : ""}
       </div>
     </article>
@@ -1088,7 +1143,7 @@ function renderMacroOverview(module) {
           <h4>${escapeHtml(module.label)}总览</h4>
           ${statusBadge(module.status)}
         </div>
-        <p class="detail-copy">按组展示宏观指标对比图。桌面端一行两张图，每张图独立切换时间跨度，方便直接横向比较。</p>
+        <p class="detail-copy">紧凑看板模式。大屏单行 3 到 4 张卡片，保留关键数值、趋势和来源链接，弱化冗余说明。</p>
       </article>
       <div class="macro-overview-grid">
         ${module.details.map((detail) => renderMacroCard(detail.section)).join("")}
@@ -1365,6 +1420,7 @@ function renderPushWorkspace(detail) {
   const configPath = section.config_path || ".data/push_center.json";
   const email = config.email || {};
   const preview = section.preview || {};
+  const recentRuns = Array.isArray(section.recent_runs) ? section.recent_runs : [];
   const moduleOptions = section.source_module_options || [];
   const styleOptions = section.style_options || [];
   const schedules = Array.isArray(config.schedules) && config.schedules.length
@@ -1458,7 +1514,7 @@ function renderPushWorkspace(detail) {
         </article>
       </div>
 
-        <article class="info-card push-control-card push-schedule-card">
+      <article class="info-card push-control-card push-schedule-card">
           <div class="card-head">
             <h4>定时任务</h4>
             <div class="push-schedule-actions">
@@ -1471,9 +1527,43 @@ function renderPushWorkspace(detail) {
           <div id="pushScheduleList" class="content-stack">
             ${schedules.map((schedule, index) => renderPushScheduleRow(schedule, index, moduleOptions)).join("")}
           </div>
-        </article>
+      </article>
+
+      <article class="info-card push-control-card">
+        <div class="card-head">
+          <h4>最近执行记录</h4>
+          <span class="tab-note">${escapeHtml(String(recentRuns.length))}</span>
+        </div>
+        ${renderPushRecentRunsTable(recentRuns)}
+      </article>
     </div>
   `;
+}
+
+function renderPushRecentRunsTable(runs) {
+  const rows = (runs || []).map((run) => [
+    { text: run.executed_at || "-", className: "cell-mono cell-tight" },
+    { html: statusBadge(run.status || "unknown"), className: "cell-tight" },
+    { text: run.trigger || "-", className: "cell-tight" },
+    { text: run.job_name || "-", className: "cell-grow" },
+    { text: run.detail || "-", className: "cell-grow" },
+  ]);
+  return renderTable(
+    [
+      { label: "Executed", className: "cell-mono cell-tight" },
+      { label: "Status", className: "cell-tight" },
+      { label: "Trigger", className: "cell-tight" },
+      { label: "Job", className: "cell-grow" },
+      { label: "Detail", className: "cell-grow" },
+    ],
+    rows,
+    {
+      compact: true,
+      emptyText: "暂无推送记录",
+      columnsTemplate: "180px 96px 88px minmax(120px, 1fr) minmax(180px, 2fr)",
+      tableClass: "push-runs-table",
+    },
+  );
 }
 
 function currentPushDetail() {
@@ -1731,6 +1821,7 @@ function bindContentActions() {
           updatePushSection({
             config: payload.config,
             preview: payload.preview,
+            recent_runs: currentPushDetail()?.section?.recent_runs || [],
             flash: { status: "compatible", message: "预览已刷新。" },
           });
           renderModulePanel();
@@ -1740,6 +1831,7 @@ function bindContentActions() {
         updatePushSection({
           config: draft,
           preview: payload.preview,
+          recent_runs: payload.recent_runs || [],
           flash: {
             status: payload.ok ? "compatible" : "degraded",
             message: payload.result?.detail || (payload.ok ? "推送完成。" : "推送失败。"),
@@ -1818,6 +1910,10 @@ function applyRoute(moduleId, detailId) {
   }
   const module = viewState.modules.find((item) => item.id === moduleId) || viewState.modules[0];
   viewState.activeModuleId = module.id;
+  // Keep module hydration on-demand so heavy modules do not block first paint.
+  if (!module.loaded && !module.loading && !module.error) {
+    loadModule(module.id, { resetContent: true });
+  }
   renderModuleNav();
   if (detailId) {
     viewState.activeDetailByModule[module.id] = detailId;
@@ -2025,6 +2121,21 @@ function renderShell() {
 
 function loadAllModules() {
   for (const module of MODULE_CONFIGS) {
+    // Regression guard: the push module builds a full preview and is intentionally
+    // excluded from initial preloading. It must stay on-demand so the homepage
+    // can render quickly while other modules hydrate asynchronously.
+    if (module.id === "push") {
+      replaceModule({
+        id: "push",
+        loading: false,
+        loaded: false,
+        error: "",
+        status: "compatible",
+        note: "按需加载",
+        details: [],
+      });
+      continue;
+    }
     loadModule(module.id);
   }
 }

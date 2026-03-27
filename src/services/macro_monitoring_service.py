@@ -82,7 +82,7 @@ class MacroMonitoringService:
                     provider_key=getattr(self._macro_provider, "provider_key", "unknown-macro-provider"),
                     source_url=definition.source_url,
                     status="unavailable",
-                    warning_message="未获取到可用的宏观历史序列。",
+                    warning_message="数据源未返回可用历史序列。",
                     synced_at=synced_at,
                 )
                 continue
@@ -119,7 +119,7 @@ class MacroMonitoringService:
                 label=definition.display_name,
                 value="暂无数据",
                 previous_value="暂无数据",
-                change_label="等待数据源返回历史序列",
+                change_label="等待数据源返回。",
                 trend=TrendDirection.UNAVAILABLE,
                 source_label=definition.source_label,
                 source_url=definition.source_url,
@@ -176,8 +176,14 @@ class MacroMonitoringService:
     def _format_value(self, value: float, unit: str) -> str:
         if unit == "%":
             return f"{value:.1f}%"
+        if unit == "pct":
+            return f"{value:.2f}%"
         if unit == "tn yuan":
             return f"{value:.2f} 万亿元"
+        if unit == "ratio":
+            return f"{value:.4f}"
+        if unit == "CNY/USD":
+            return f"{value:.4f}"
         text = f"{value:.2f}".rstrip("0").rstrip(".")
         return f"{text} {unit}".strip()
 
@@ -191,11 +197,22 @@ class MacroMonitoringService:
         if previous is None:
             return f"最新期: {latest.period_label}"
         delta = latest.value - previous.value
-        prefix = "较上月" if definition.frequency.value == "monthly" else "较上季"
+        prefix = {
+            "daily": "较前一交易日",
+            "monthly": "较上月",
+            "quarterly": "较上季",
+            "yearly": "较上年",
+        }.get(definition.frequency.value, "较上一期")
         if definition.unit == "%":
             return f"{prefix}: {delta:+.1f} 个百分点"
+        if definition.unit == "pct":
+            return f"{prefix}: {delta:+.2f} 个百分点"
         if definition.unit == "tn yuan":
             return f"{prefix}: {delta:+.2f} 万亿元"
+        if definition.unit == "ratio":
+            return f"{prefix}: {delta:+.4f}"
+        if definition.unit == "CNY/USD":
+            return f"{prefix}: {delta:+.4f}"
         return f"{prefix}: {delta:+.2f}"
 
     def _resolve_trend(self, *, latest: StoredMacroPoint, previous: StoredMacroPoint | None) -> TrendDirection:

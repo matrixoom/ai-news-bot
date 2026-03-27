@@ -872,59 +872,163 @@ li {
 }
 
 .macro-overview-intro {
-  padding: 14px;
+  padding: 10px 12px;
 }
 
 .macro-overview-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
 }
 
 .macro-grid-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 48px),
+    var(--panel-2);
 }
 
 .macro-card-head {
   align-items: start;
-  gap: 10px;
+  gap: 8px;
 }
 
 .macro-card-title {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .macro-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
-.macro-summary-item {
+.macro-metric-strip {
   display: grid;
-  gap: 6px;
-  padding: 12px;
+  gap: 4px;
+  padding: 10px;
   background: var(--panel-3);
   border: 1px solid var(--line);
-  border-radius: 1px;
+  border-radius: 2px;
+}
+
+.macro-metric-top,
+.macro-metric-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.macro-metric-top h5 {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.macro-metric-chip,
+.macro-panel-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.macro-metric-value {
+  font-family: "Cascadia Mono", "IBM Plex Mono", "Consolas", monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.macro-metric-trend {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.macro-metric-trend.up {
+  color: var(--danger);
+}
+
+.macro-metric-trend.down {
+  color: var(--ok);
+}
+
+.macro-metric-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .macro-chart-panel {
-  padding: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 0;
+}
+
+.macro-panel-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.macro-panel-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  flex: 1 1 180px;
 }
 
 .macro-trend-chart {
-  height: 280px;
-  margin-top: 12px;
+  height: 220px;
+  margin-top: 0;
 }
 
 .macro-card-foot {
   display: grid;
   gap: 4px;
+}
+
+.macro-source-links {
+  display: flex;
+  align-items: start;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.macro-source-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--accent-2);
+  background: var(--accent-2-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.macro-source-link:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.macro-source-link.is-text {
+  color: var(--muted);
+  background: var(--panel-3);
 }
 
 .market-focus-row {
