@@ -138,6 +138,23 @@ Open `http://127.0.0.1:8000/`.
 uv run python main.py push
 ```
 
+## Push Center Notes
+
+- Push-center config files live under `.data/`:
+  - `.data/push_center.json`: editable user config
+  - `.data/push_center.state.json`: scheduler runtime state
+  - `.data/push_center.template.json`: generated template snapshot
+- The current default market-report schedule is `08:00`, `12:05`, and `17:00` in `Asia/Shanghai`.
+- The midday slot is intentionally `12:05` rather than `12:00` or `11:45`, so Hong Kong morning trading is closed before the report runs.
+- Push delivery always rebuilds the dashboard snapshot with `force_refresh=True`; it should use the freshest data available immediately before delivery instead of a stale cached dashboard snapshot.
+- Market cards are now session-aware for push refreshes:
+  - Mainland broad indices use the latest closed session after `11:30` and `15:00`
+  - Hong Kong indices such as `HSTECH` use the latest closed session after `12:00` and `16:15`
+- Push execution logs are written to:
+  - `.data/logs/push_center/manual/YYYY-MM/YYYY-MM-DD.jsonl`
+  - `.data/logs/push_center/scheduled/YYYY-MM/YYYY-MM-DD.jsonl`
+- The push-center UI also shows recent execution records, so file logs and UI history should agree.
+
 ## Full Local Workflow
 
 ### 1. Initialize Python dependencies

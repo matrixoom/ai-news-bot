@@ -104,7 +104,7 @@ DEFAULT_PUSH_CONFIG = {
             "enabled": True,
             "module_ids": ["market"],
             "channel_types": ["email"],
-            "times": ["08:00", "12:00", "17:00"],
+            "times": ["08:00", "12:05", "17:00"],
             "timezone": DEFAULT_TIMEZONE,
         }
     ],

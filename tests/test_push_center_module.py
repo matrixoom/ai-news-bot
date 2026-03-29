@@ -187,7 +187,7 @@ class PushCenterModuleTests(unittest.TestCase):
                         "enabled": True,
                         "module_ids": ["market"],
                         "channel_types": ["email"],
-                        "times": ["08:00", "12:00", "17:00"],
+                        "times": ["08:00", "12:05", "17:00"],
                         "timezone": "Asia/Shanghai",
                     }
                 ],
@@ -205,7 +205,7 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertEqual(email_config["smtp_server"], "smtp.example.com")
         self.assertEqual(email_config["smtp_port"], 2525)
         saved_config = json.loads(self.config_path.read_text(encoding="utf-8"))
-        self.assertEqual(saved_config["schedules"][0]["times"], ["08:00", "12:00", "17:00"])
+        self.assertEqual(saved_config["schedules"][0]["times"], ["08:00", "12:05", "17:00"])
 
         preview_response = self.client.post("/api/push/preview", json=payload)
         self.assertEqual(preview_response.status_code, 200)
