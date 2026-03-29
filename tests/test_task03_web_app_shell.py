@@ -729,7 +729,7 @@ class LiveProviderResilienceTests(unittest.TestCase):
 
         with patch.object(provider, "_load_akshare", return_value=FakeAkshare()), patch.object(
             provider,
-            "_should_use_hk_spot_for_trade_date",
+            "_should_use_spot_session_close_for_trade_date",
             return_value=True,
         ):
             snapshots = provider.fetch_index_snapshots(
@@ -743,6 +743,45 @@ class LiveProviderResilienceTests(unittest.TestCase):
         self.assertEqual(
             [point.trade_date for point in snapshots[0].history_points],
             [date(2026, 3, 24), date(2026, 3, 25), date(2026, 3, 26)],
+        )
+
+    def test_market_provider_uses_a_share_spot_quote_when_daily_series_lags_after_morning_close(self):
+        provider = AkshareMarketDataProvider()
+
+        class FakeAkshare:
+            @staticmethod
+            def stock_zh_index_daily_em(symbol: str, start_date: str, end_date: str):
+                self.assertEqual(symbol, "sh000300")
+                return pd.DataFrame(
+                    [
+                        {"date": "2026-03-25", "close": 4001.0},
+                    ]
+                )
+
+            @staticmethod
+            def stock_zh_index_spot_em():
+                return pd.DataFrame(
+                    [
+                        {"代码": "sh000300", "最新价": 4020.5, "昨收": 4001.0},
+                    ]
+                )
+
+        with patch.object(provider, "_load_akshare", return_value=FakeAkshare()), patch.object(
+            provider,
+            "_should_use_spot_session_close_for_trade_date",
+            return_value=True,
+        ):
+            snapshots = provider.fetch_index_snapshots(
+                symbols=["CSI300"],
+                trade_date=date(2026, 3, 26),
+            )
+
+        self.assertEqual([item.symbol for item in snapshots], ["CSI300"])
+        self.assertEqual(snapshots[0].trade_date, date(2026, 3, 26))
+        self.assertAlmostEqual(snapshots[0].close_price, 4020.5, places=2)
+        self.assertEqual(
+            [point.trade_date for point in snapshots[0].history_points],
+            [date(2026, 3, 25), date(2026, 3, 26)],
         )
 
 

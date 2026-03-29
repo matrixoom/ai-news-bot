@@ -1396,7 +1396,7 @@ function renderPushScheduleRow(schedule, index, moduleOptions) {
         </label>
         <label class="push-field">
           <span>执行时间</span>
-          <input type="text" data-schedule-times value="${escapeHtml((schedule?.times || ["08:00"]).join(", "))}" placeholder="08:00, 12:00, 17:00" />
+          <input type="text" data-schedule-times value="${escapeHtml((schedule?.times || ["08:00"]).join(", "))}" placeholder="08:00, 12:05, 17:00" />
         </label>
         <label class="push-field">
           <span>时区</span>
@@ -1425,7 +1425,7 @@ function renderPushWorkspace(detail) {
   const styleOptions = section.style_options || [];
   const schedules = Array.isArray(config.schedules) && config.schedules.length
     ? config.schedules
-    : [{ name: "市场日报", times: ["08:00", "12:00", "17:00"], timezone: "Asia/Shanghai", enabled: true, module_ids: config.selected_module_ids || ["market"] }];
+    : [{ name: "市场日报", times: ["08:00", "12:05", "17:00"], timezone: "Asia/Shanghai", enabled: true, module_ids: config.selected_module_ids || ["market"] }];
   const flash = section.flash || null;
   return `
     <div class="content-stack push-layout" data-push-workspace>
@@ -1522,7 +1522,7 @@ function renderPushWorkspace(detail) {
               <button type="button" class="module-refresh-button" data-add-schedule>新增任务</button>
             </div>
           </div>
-          <p class="detail-copy">可以为不同模块分别配置不同推送时间。目前默认已预置 08:00 / 12:00 / 17:00，修改后需要点击保存配置。</p>
+          <p class="detail-copy">可以为不同模块分别配置不同推送时间。目前默认已预置 08:00 / 12:05 / 17:00，修改后需要点击保存配置。</p>
           <p class="card-meta">当前配置文件: ${escapeHtml(configPath)}</p>
           <div id="pushScheduleList" class="content-stack">
             ${schedules.map((schedule, index) => renderPushScheduleRow(schedule, index, moduleOptions)).join("")}

@@ -475,6 +475,14 @@ class AkshareMarketDataProvider:
             ("stock_hk_index_daily_sina", {"symbol": "HSTECH"}),
         ),
     }
+    _SPOT_CONFIG: dict[str, dict[str, Any]] = {
+        "CSI300": {"market": "cn", "code": "sh000300", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
+        "CSI500": {"market": "cn", "code": "sh000905", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
+        "CSI1000": {"market": "cn", "code": "sh000852", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
+        "SSE": {"market": "cn", "code": "sh000001", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
+        "CHINEXT": {"market": "cn", "code": "sz399006", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
+        "HSTECH": {"market": "hk", "code": "HSTECH", "functions": ("stock_hk_index_spot_sina",)},
+    }
 
     def fetch_index_snapshots(
         self,
@@ -499,7 +507,7 @@ class AkshareMarketDataProvider:
                 continue
 
             eligible.sort(key=lambda item: item["trade_date"])
-            eligible = self._augment_hstech_with_spot_quote(
+            eligible = self._augment_records_with_spot_quote(
                 akshare=akshare,
                 symbol=symbol,
                 records=eligible,
@@ -612,7 +620,7 @@ class AkshareMarketDataProvider:
                     continue
         return records
 
-    def _augment_hstech_with_spot_quote(
+    def _augment_records_with_spot_quote(
         self,
         *,
         akshare,
@@ -620,14 +628,28 @@ class AkshareMarketDataProvider:
         records: list[dict[str, Any]],
         trade_date: date,
     ) -> list[dict[str, Any]]:
-        if symbol != "HSTECH" or not records or not self._should_use_hk_spot_for_trade_date(trade_date):
+        if not records:
+            return records
+        config = self._SPOT_CONFIG.get(symbol)
+        if not config:
             return records
 
         latest_record = records[-1]
         if latest_record["trade_date"] >= trade_date:
             return records
 
-        spot_quote = self._load_hk_index_spot_quote(akshare=akshare, symbol=symbol)
+        if not self._should_use_spot_session_close_for_trade_date(
+            market=str(config.get("market") or ""),
+            trade_date=trade_date,
+        ):
+            return records
+
+        spot_quote = self._load_index_spot_quote(
+            akshare=akshare,
+            symbol=symbol,
+            spot_code=str(config.get("code") or symbol),
+            function_names=tuple(config.get("functions") or ()),
+        )
         latest_price = spot_quote.get("latest_price")
         previous_close = spot_quote.get("previous_close")
         if latest_price is None or previous_close is None:
@@ -650,31 +672,62 @@ class AkshareMarketDataProvider:
             },
         ]
 
-    def _should_use_hk_spot_for_trade_date(self, trade_date: date) -> bool:
+    def _should_use_spot_session_close_for_trade_date(self, *, market: str, trade_date: date) -> bool:
         shanghai_now = datetime.now(UTC).astimezone(ZoneInfo("Asia/Shanghai"))
         if trade_date != shanghai_now.date():
             return False
-        return (shanghai_now.hour, shanghai_now.minute) >= (16, 15)
+        minutes = shanghai_now.hour * 60 + shanghai_now.minute
+        if market == "cn":
+            return (11 * 60 + 30) <= minutes < (13 * 60) or minutes >= (15 * 60)
+        if market == "hk":
+            return (12 * 60) <= minutes < (13 * 60) or minutes >= (16 * 60 + 15)
+        return False
 
-    def _load_hk_index_spot_quote(self, *, akshare, symbol: str) -> dict[str, float]:
-        if not hasattr(akshare, "stock_hk_index_spot_sina"):
-            return {}
+    def _load_index_spot_quote(
+        self,
+        *,
+        akshare,
+        symbol: str,
+        spot_code: str,
+        function_names: Sequence[str],
+    ) -> dict[str, float]:
+        last_error: Exception | None = None
+        for function_name in function_names:
+            if not hasattr(akshare, function_name):
+                continue
+            try:
+                frame = getattr(akshare, function_name)()
+            except Exception as error:
+                last_error = error
+                continue
+            quote = self._extract_spot_quote_from_frame(frame=frame, spot_code=spot_code)
+            if quote:
+                return quote
+        if last_error is not None:
+            logger.warning("AKShare spot quote fetch failed for %s: %s", symbol, last_error)
+        return {}
 
-        frame = akshare.stock_hk_index_spot_sina()
+    def _extract_spot_quote_from_frame(self, *, frame, spot_code: str) -> dict[str, float]:
         if frame is None or getattr(frame, "empty", True):
             return {}
 
-        code_column = next((column for column in frame.columns if str(column).strip() in {"代码", "symbol", "Symbol"}), None)
+        code_column = next(
+            (
+                column for column in frame.columns
+                if str(column).strip() in {"代码", "symbol", "Symbol", "指数代码"}
+            ),
+            None,
+        )
         if code_column is None:
             return {}
 
-        matched = frame[frame[code_column].astype(str) == symbol]
+        matched = frame[frame[code_column].astype(str) == spot_code]
         if matched.empty:
             return {}
 
         row = matched.iloc[-1].to_dict()
-        latest_price = _pick_first(row, ("最新价", "latest", "Latest"))
-        previous_close = _pick_first(row, ("昨收", "previous_close", "Previous Close"))
+        latest_price = _pick_first(row, ("最新价", "最新", "latest", "Latest", "close", "收盘"))
+        previous_close = _pick_first(row, ("昨收", "previous_close", "Previous Close", "昨日收盘"))
         if latest_price is None or previous_close is None:
             return {}
 

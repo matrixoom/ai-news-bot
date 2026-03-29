@@ -138,6 +138,23 @@ uv run python main.py web --host 127.0.0.1 --port 8000 --no-reload
 uv run python main.py push
 ```
 
+## 推送中心说明
+
+- 推送中心相关文件都在 `.data/` 目录下：
+  - `.data/push_center.json`：当前可编辑配置
+  - `.data/push_center.state.json`：调度器运行状态
+  - `.data/push_center.template.json`：生成出来的模板配置快照
+- 当前默认的市场日报时间是 `Asia/Shanghai` 时区下的 `08:00`、`12:05`、`17:00`。
+- 中午档位特意改成了 `12:05`，而不是 `12:00` 或 `11:45`，这样港股上午盘已经收盘，恒生科技这类指数才能按“推送前最近一次已收盘价”生成。
+- 每次推送都会用 `force_refresh=True` 重新构建 dashboard snapshot，所以推送应该拿的是“推送前最新可用数据”，而不是旧的 dashboard 缓存。
+- 市场模块现在按“最近一次已收盘会话”取值：
+  - A 股宽基指数在 `11:30` 和 `15:00` 之后分别可以取上午收盘和全天收盘
+  - 港股指数（如 `HSTECH`）在 `12:00` 和 `16:15` 之后分别可以取上午收盘和全天收盘
+- 推送日志会写到：
+  - `.data/logs/push_center/manual/YYYY-MM/YYYY-MM-DD.jsonl`
+  - `.data/logs/push_center/scheduled/YYYY-MM/YYYY-MM-DD.jsonl`
+- 推送中心页面也会显示最近执行记录，页面看到的历史和磁盘日志应该一致。
+
 ## 完整本地运行流程
 
 ### 1. 初始化 Python 依赖
