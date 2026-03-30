@@ -6,6 +6,7 @@ import { MacroPage } from "../pages/macro-page";
 import { MarketPage } from "../pages/market-page";
 import { NewsPage } from "../pages/news-page";
 import { ModulePlaceholderPage } from "../pages/module-placeholder-page";
+import { StatusPage } from "../pages/status-page";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -40,6 +41,11 @@ export const appRoutes: RouteObject[] = [
         path: "events",
         element: <EventsPage />,
         handle: { title: "Events", description: "Timeline and watch windows" },
+      },
+      {
+        path: "status",
+        element: <StatusPage />,
+        handle: { title: "Status", description: "Freshness and source health" },
       },
       {
         path: "push",
