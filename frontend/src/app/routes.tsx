@@ -1,6 +1,7 @@
 import { Navigate, type RouteObject } from "react-router-dom";
 import { AppShell } from "../layouts/app-shell";
 import { DashboardPage } from "../pages/dashboard-page";
+import { MacroPage } from "../pages/macro-page";
 import { NewsPage } from "../pages/news-page";
 import { ModulePlaceholderPage } from "../pages/module-placeholder-page";
 
@@ -25,7 +26,7 @@ export const appRoutes: RouteObject[] = [
       },
       {
         path: "macro",
-        element: <ModulePlaceholderPage />,
+        element: <MacroPage />,
         handle: { title: "Macro", description: "Indicators and comparisons" },
       },
       {
