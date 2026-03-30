@@ -146,6 +146,41 @@ const macroPayload = {
   },
 };
 
+const marketPayload = {
+  generated_at: "2026-03-30T09:00:00Z",
+  module: {
+    id: "market",
+    label: "Market Models",
+    note: "1 model card",
+    description: "Signal-first market models with a calm watch panel.",
+    status: "live",
+    loading: false,
+    details: [
+      {
+        id: "csi-300",
+        label: "CSI 300",
+        kind: "market",
+        note: "neutral",
+        section: {
+          key: "csi-300",
+          label: "CSI 300",
+          status: "live",
+          close_value: "3,864.2",
+          ma20_value: "3,850.1",
+          signal: "neutral",
+          deviation_pct: 0.4,
+          trade_date: "2026-03-29",
+          source_label: "SSE",
+          explanation: "Benchmarks held near trend support.",
+          data_window_label: "20 sessions",
+          history_warning: "",
+          chart_points: [],
+        },
+      },
+    ],
+  },
+};
+
 describe("Workbench shell", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -178,6 +213,21 @@ describe("Workbench shell", () => {
 
     expect(await screen.findByRole("heading", { name: "Inflation vs growth" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Compare" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("renders the Market route as a real page", async () => {
+    window.history.pushState({}, "", "/market?tab=signals");
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(marketPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "CSI 300" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Signals" })).toHaveAttribute("aria-current", "page");
   });
 
   it("falls back to overview when the tab query is unknown", async () => {
