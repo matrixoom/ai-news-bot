@@ -62,3 +62,4 @@ local/
 # temp
 .tmp*
 tmp
+.worktrees/
