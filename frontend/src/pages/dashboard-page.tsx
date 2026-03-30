@@ -70,7 +70,7 @@ export function DashboardPage() {
         </section>
       </div>
 
-      <p className="sr-only">Module page coming in the next slice.</p>
+      <p className="sr-only">Dashboard overview loaded.</p>
     </div>
   );
 }
