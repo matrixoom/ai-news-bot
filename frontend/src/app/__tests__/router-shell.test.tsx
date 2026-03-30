@@ -98,6 +98,54 @@ const dashboardPayload = {
   ],
 };
 
+const macroPayload = {
+  generated_at: "2026-03-30T09:00:00Z",
+  module: {
+    id: "macro",
+    label: "Macro Intelligence",
+    note: "1 comparison card",
+    description: "Official macro comparisons with source links.",
+    status: "live",
+    loading: false,
+    details: [
+      {
+        id: "inflation-growth",
+        label: "Inflation vs growth",
+        kind: "macro",
+        note: "Consumer prices remain sticky while growth stays resilient.",
+        section: {
+          key: "inflation-growth",
+          title: "Inflation vs growth",
+          status: "live",
+          description: "A calm comparison of price pressure and activity.",
+          summary: "CPI: 0.3% | GDP: 2.4%",
+          primary: {
+            key: "cpi",
+            label: "CPI",
+            status: "live",
+            latest_value: "0.3%",
+            previous_value: "0.2%",
+            change_label: "+0.1 pts",
+            trend: "up",
+            frequency: "monthly",
+            source_label: "National Bureau of Statistics",
+            source_url: "https://example.com/cpi",
+            updated_at: "2026-03-30T08:30:00Z",
+            period_label: "Feb 2026",
+            context: "Price growth stayed contained.",
+            unit: "%",
+            points: [],
+          },
+          secondary: null,
+          delta_label: "Gap",
+          delta_points: [],
+          sources: [{ label: "National Bureau of Statistics", url: "https://example.com/cpi" }],
+        },
+      },
+    ],
+  },
+};
+
 describe("Workbench shell", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -115,6 +163,21 @@ describe("Workbench shell", () => {
     expect(window.location.pathname).toBe("/news");
     expect(window.location.search).toBe("?tab=sources");
     expect(screen.getByRole("link", { name: "Sources" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("renders the Macro route as a real page", async () => {
+    window.history.pushState({}, "", "/macro?tab=compare");
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(macroPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Inflation vs growth" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Compare" })).toHaveAttribute("aria-current", "page");
   });
 
   it("falls back to overview when the tab query is unknown", async () => {
