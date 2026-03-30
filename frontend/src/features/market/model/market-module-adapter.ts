@@ -74,7 +74,15 @@ export function adaptMarketModule(response: MarketModuleRawPayload): MarketModul
   };
 }
 
-function formatDeviation(value: number): string {
+function formatDeviation(value: number | string | null): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === null) {
+    return "n/a";
+  }
+
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
 }

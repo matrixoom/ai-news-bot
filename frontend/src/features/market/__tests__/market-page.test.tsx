@@ -155,4 +155,43 @@ describe("MarketPage", () => {
     expect(await screen.findByRole("heading", { name: "Market overview" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("aria-current", "page");
   });
+
+  it("accepts string deviation labels from the backend contract", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ...marketPayload,
+          module: {
+            ...marketPayload.module,
+            details: [
+              {
+                ...marketPayload.module.details[0],
+                section: {
+                  ...marketPayload.module.details[0].section,
+                  deviation_pct: "+0.4%",
+                },
+              },
+              {
+                ...marketPayload.module.details[1],
+                section: {
+                  ...marketPayload.module.details[1].section,
+                  deviation_pct: "暂无数据",
+                },
+              },
+              marketPayload.module.details[2],
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    renderMarketPage("/market?tab=signals");
+
+    expect(await screen.findByText("+0.4%")).toBeInTheDocument();
+    expect(screen.getByText("暂无数据")).toBeInTheDocument();
+  });
 });
