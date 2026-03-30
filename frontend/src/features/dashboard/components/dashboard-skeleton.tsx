@@ -11,7 +11,7 @@ export function DashboardSkeleton() {
           <div key={index} className="h-36 animate-pulse rounded-3xl bg-slate-200" />
         ))}
       </div>
-      <p className="sr-only">Module page coming in the next slice.</p>
+      <p className="sr-only">Dashboard overview loading.</p>
     </section>
   );
 }
