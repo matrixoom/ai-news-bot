@@ -168,7 +168,7 @@ describe("MarketPage", () => {
                 ...marketPayload.module.details[0],
                 section: {
                   ...marketPayload.module.details[0].section,
-                  deviation_pct: "+0.4%",
+                  deviation_pct: "+1.2%",
                 },
               },
               {
@@ -191,7 +191,8 @@ describe("MarketPage", () => {
 
     renderMarketPage("/market?tab=signals");
 
-    expect(await screen.findByText("+0.4%")).toBeInTheDocument();
+    expect(await screen.findByText("+1.2%")).toBeInTheDocument();
     expect(screen.getByText("暂无数据")).toBeInTheDocument();
+    expect(screen.getByText("+0.4%")).toBeInTheDocument();
   });
 });
