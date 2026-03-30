@@ -68,7 +68,7 @@ export type MarketModuleRawPayload = {
         close_value: string;
         ma20_value: string;
         signal: string;
-        deviation_pct: number;
+        deviation_pct: number | string | null;
         trade_date: string;
         source_label: string;
         explanation: string;
