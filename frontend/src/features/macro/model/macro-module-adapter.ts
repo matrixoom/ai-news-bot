@@ -92,10 +92,11 @@ function dedupeSources(sections: MacroComparisonSection[]): MacroSourceReference
 
   for (const section of sections) {
     for (const source of section.sources) {
-      const existing = sourceMap.get(source.label);
+      const key = `${source.label}::${source.url}`;
+      const existing = sourceMap.get(key);
 
       if (!existing) {
-        sourceMap.set(source.label, {
+        sourceMap.set(key, {
           label: source.label,
           url: source.url,
           sectionTitles: [section.title],
@@ -117,7 +118,7 @@ function uniqueSources(sources: Array<{ label: string; url: string }>): Array<{ 
   const normalized: Array<{ label: string; url: string }> = [];
 
   for (const source of sources) {
-    const key = source.label;
+    const key = `${source.label}::${source.url}`;
 
     if (seen.has(key)) {
       continue;

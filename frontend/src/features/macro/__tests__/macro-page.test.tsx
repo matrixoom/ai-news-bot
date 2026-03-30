@@ -118,14 +118,7 @@ describe("MacroPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders comparison cards, summary text, and sources from the module payload", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify(macroPayload), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
+  function renderMacroPage(initialEntry = "/macro?tab=compare") {
     const router = createMemoryRouter(
       [
         {
@@ -134,7 +127,7 @@ describe("MacroPage", () => {
         },
       ],
       {
-        initialEntries: ["/macro?tab=compare"],
+        initialEntries: [initialEntry],
       },
     );
 
@@ -151,14 +144,26 @@ describe("MacroPage", () => {
         <RouterProvider router={router} />
       </QueryClientProvider>,
     );
+  }
+
+  it("renders comparison cards, summary text, and sources from the module payload", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(macroPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderMacroPage("/macro?tab=compare");
 
     expect(await screen.findByRole("heading", { name: "Inflation vs growth" })).toBeInTheDocument();
     expect(screen.getByText("CPI: 0.3% | GDP: 2.4%")).toBeInTheDocument();
     expect(screen.getAllByText("National Bureau of Statistics").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "National Bureau of Statistics" })[0]).toHaveAttribute(
-      "href",
-      "https://example.com/cpi",
-    );
+    const statsHrefs = screen
+      .getAllByRole("link", { name: "National Bureau of Statistics" })
+      .map((link) => link.getAttribute("href"));
+    expect(statsHrefs).toContain("https://example.com/cpi");
+    expect(statsHrefs).toContain("https://example.com/gdp");
   });
 
   it("falls back to overview when the tab query is unknown", async () => {
@@ -169,33 +174,54 @@ describe("MacroPage", () => {
       }),
     );
 
-    const router = createMemoryRouter(
-      [
-        {
-          path: "/macro",
-          element: <MacroPage />,
-        },
-      ],
-      {
-        initialEntries: ["/macro?tab=nope"],
-      },
-    );
-
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          retry: false,
-        },
-      },
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
+    renderMacroPage("/macro?tab=nope");
 
     expect(await screen.findByRole("heading", { name: "Macro overview" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("renders the loading state inside the shared module frame", () => {
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => new Promise(() => {}));
+
+    renderMacroPage("/macro?tab=compare");
+
+    expect(screen.getByRole("heading", { name: "Macro" })).toBeInTheDocument();
+    expect(screen.getByText("Loading macro comparisons")).toBeInTheDocument();
+    expect(screen.getByText("Source panel loading")).toBeInTheDocument();
+  });
+
+  it("renders the error state inside the shared module frame", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("network down"));
+
+    renderMacroPage("/macro?tab=compare");
+
+    expect(await screen.findByText("Macro module unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Macro" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("renders the empty state inside the shared module frame", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ...macroPayload,
+          module: {
+            ...macroPayload.module,
+            details: [],
+            note: "0 comparison cards",
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    renderMacroPage("/macro?tab=overview");
+
+    expect(await screen.findByText("No macro comparisons yet")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Macro" })).toBeInTheDocument();
+    expect(screen.getByText("Official macro comparisons with side-by-side indicators and source links.")).toBeInTheDocument();
   });
 });

@@ -38,7 +38,7 @@ export function MacroSourcesPanel({ model, activeTab }: MacroSourcesPanelProps) 
             {model.sources.length ? (
               model.sources.map((source) => (
                 <a
-                  key={source.label}
+                  key={`${source.label}-${source.url}`}
                   className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
                   href={source.url}
                 >
