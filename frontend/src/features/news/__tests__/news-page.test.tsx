@@ -12,7 +12,14 @@ const newsPayload = {
     { value: "api", label: "API" },
     { value: "upstream", label: "Upstream" },
   ],
-  upstream_service_status: "available",
+  upstream_service_status: {
+    status: "running",
+    healthy: true,
+    managed: false,
+    is_local: false,
+    base_url: "https://newsnow.example.com",
+    detail: "upstream service is reachable",
+  },
   module: {
     id: "news",
     label: "News Intelligence",
@@ -159,7 +166,8 @@ describe("NewsPage", () => {
     ).toHaveAttribute("href", "https://example.com/ai-chip-makers");
     expect(screen.getByText("Source status")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Operational snapshot" })).toBeInTheDocument();
-    expect(screen.getByText("available")).toBeInTheDocument();
+    expect(screen.getByText("running · healthy")).toBeInTheDocument();
+    expect(screen.getByText("upstream service is reachable")).toBeInTheDocument();
     expect(screen.getAllByText("Hybrid").length).toBeGreaterThan(0);
   });
 });

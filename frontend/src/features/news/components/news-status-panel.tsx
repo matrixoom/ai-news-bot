@@ -14,7 +14,8 @@ export function NewsStatusPanel({ model }: NewsStatusPanelProps) {
 
       <div className="mt-5 space-y-3">
         <StatusRow label="News mode" value={model.newsModeLabel} />
-        <StatusRow label="Upstream" value={model.upstreamServiceStatus} />
+        <StatusRow label="Upstream" value={model.upstreamServiceStatus.summaryLabel} />
+        <StatusRow label="Upstream detail" value={model.upstreamServiceStatus.detail} />
         <StatusRow label="Module state" value={model.moduleStatus} />
         <StatusRow label="Channels" value={`${model.channelSummaries.length}`} />
         <StatusRow label="Headlines" value={`${model.rankedHeadlines.length}`} />

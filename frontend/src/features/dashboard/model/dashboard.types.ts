@@ -1,3 +1,12 @@
+export type DashboardUpstreamServiceStatusRaw = {
+  status: string;
+  healthy: boolean;
+  managed?: boolean;
+  is_local?: boolean;
+  base_url?: string;
+  detail: string;
+};
+
 export type DashboardRawPayload = {
   generated_at: string;
   news_mode: string;
@@ -5,7 +14,7 @@ export type DashboardRawPayload = {
     value: string;
     label: string;
   }>;
-  upstream_service_status: string;
+  upstream_service_status: DashboardUpstreamServiceStatusRaw;
   title: string;
   subtitle: string;
   coverage_note: string;
