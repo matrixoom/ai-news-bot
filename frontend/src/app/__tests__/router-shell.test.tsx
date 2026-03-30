@@ -21,4 +21,19 @@ describe("Workbench shell", () => {
     expect(screen.getByRole("heading", { name: "News" })).toBeInTheDocument();
     expect(screen.getByText("Module page coming in the next slice.")).toBeInTheDocument();
   });
+
+  it("renders the dashboard route with the shared placeholder", async () => {
+    const router = createMemoryRouter(appRoutes, {
+      initialEntries: ["/dashboard"],
+    });
+
+    render(
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByText("Module page coming in the next slice.")).toBeInTheDocument();
+  });
 });

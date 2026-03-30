@@ -35,6 +35,7 @@ export function SidebarNav() {
         <div className="mb-8">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Research Desk</p>
           <h1 className="mt-2 text-xl font-semibold text-slate-950">AI News Bot</h1>
+          <p className="mt-3 text-sm text-slate-600">Loading workspace...</p>
         </div>
         <NavSection items={primaryNavItems} />
       </div>

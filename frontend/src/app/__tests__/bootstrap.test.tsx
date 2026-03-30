@@ -6,5 +6,6 @@ describe("App bootstrap", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { name: "AI News Bot" })).toBeInTheDocument();
+    expect(screen.getByText("Loading workspace...")).toBeInTheDocument();
   });
 });
