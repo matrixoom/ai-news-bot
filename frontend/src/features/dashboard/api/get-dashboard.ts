@@ -1,14 +1,14 @@
-import type { DashboardResponse } from "../model/dashboard.types";
+import type { DashboardRawPayload } from "../model/dashboard.types";
 
-export async function getDashboard(signal?: AbortSignal): Promise<DashboardResponse> {
+export async function getDashboard(signal?: AbortSignal): Promise<DashboardRawPayload> {
   const response = await fetch("/api/frontend/dashboard", {
-    method: "GET",
+    headers: { Accept: "application/json" },
     signal,
   });
 
   if (!response.ok) {
-    throw new Error("Failed to load dashboard");
+    throw new Error(`dashboard request failed: ${response.status}`);
   }
 
-  return (await response.json()) as DashboardResponse;
+  return (await response.json()) as DashboardRawPayload;
 }
