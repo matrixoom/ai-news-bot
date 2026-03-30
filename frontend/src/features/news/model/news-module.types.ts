@@ -9,6 +9,25 @@ export const NEWS_MODULE_TABS: readonly ModuleTabDefinition<NewsModuleTab>[] = [
   { value: "brief", label: "Brief" },
 ];
 
+export type NewsUpstreamServiceStatusRaw = {
+  status: string;
+  healthy: boolean;
+  managed: boolean;
+  is_local: boolean;
+  base_url: string;
+  detail: string;
+};
+
+export type NewsUpstreamServiceStatus = {
+  status: string;
+  healthy: boolean;
+  managed: boolean;
+  isLocal: boolean;
+  baseUrl: string;
+  detail: string;
+  summaryLabel: string;
+};
+
 export type NewsModuleRawPayload = {
   generated_at: string;
   news_mode: string;
@@ -16,7 +35,7 @@ export type NewsModuleRawPayload = {
     value: string;
     label: string;
   }>;
-  upstream_service_status: string;
+  upstream_service_status: NewsUpstreamServiceStatusRaw;
   module: {
     id: "news";
     label: string;
@@ -86,7 +105,7 @@ export type NewsModuleViewModel = {
     value: string;
     label: string;
   }>;
-  upstreamServiceStatus: string;
+  upstreamServiceStatus: NewsUpstreamServiceStatus;
   channelSummaries: NewsChannelSummary[];
   rankedHeadlines: NewsHeadlineView[];
 };

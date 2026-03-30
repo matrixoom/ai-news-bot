@@ -1,4 +1,9 @@
-import type { NewsModuleRawPayload, NewsModuleViewModel } from "./news-module.types";
+import type {
+  NewsModuleRawPayload,
+  NewsModuleViewModel,
+  NewsUpstreamServiceStatus,
+  NewsUpstreamServiceStatusRaw,
+} from "./news-module.types";
 
 export function adaptNewsModule(response: NewsModuleRawPayload): NewsModuleViewModel {
   const channelSummaries = response.module.details.map((detail) => {
@@ -45,8 +50,34 @@ export function adaptNewsModule(response: NewsModuleRawPayload): NewsModuleViewM
     newsModeLabel:
       response.news_mode_options.find((option) => option.value === response.news_mode)?.label ?? response.news_mode,
     newsModeOptions: response.news_mode_options,
-    upstreamServiceStatus: response.upstream_service_status,
+    upstreamServiceStatus: adaptUpstreamServiceStatus(response.upstream_service_status),
     channelSummaries,
     rankedHeadlines,
   };
+}
+
+function adaptUpstreamServiceStatus(status: NewsUpstreamServiceStatusRaw): NewsUpstreamServiceStatus {
+  return {
+    status: status.status,
+    healthy: status.healthy,
+    managed: status.managed,
+    isLocal: status.is_local,
+    baseUrl: status.base_url,
+    detail: status.detail,
+    summaryLabel: buildUpstreamSummaryLabel(status),
+  };
+}
+
+function buildUpstreamSummaryLabel(status: NewsUpstreamServiceStatusRaw): string {
+  const state = status.status.trim() || "unknown";
+
+  if (status.healthy) {
+    return `${state} · healthy`;
+  }
+
+  if (status.managed) {
+    return `${state} · managed`;
+  }
+
+  return state;
 }
