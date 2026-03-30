@@ -1,0 +1,37 @@
+import type { ReactNode } from "react";
+
+type ModulePageFrameProps = {
+  title: string;
+  description: string;
+  toolbar?: ReactNode;
+  lastUpdated?: ReactNode;
+  main: ReactNode;
+  side: ReactNode;
+};
+
+export function ModulePageFrame({ title, description, toolbar, lastUpdated, main, side }: ModulePageFrameProps) {
+  return (
+    <section className="space-y-6">
+      <header className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Module workspace</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{title}</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
+          </div>
+          {(toolbar || lastUpdated) && (
+            <div className="flex flex-col gap-3 lg:items-end">
+              {toolbar}
+              {lastUpdated}
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-6">{main}</div>
+        <aside className="space-y-6">{side}</aside>
+      </div>
+    </section>
+  );
+}
