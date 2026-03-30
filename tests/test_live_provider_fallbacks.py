@@ -1,4 +1,7 @@
 from datetime import date
+import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -97,7 +100,15 @@ class LiveProviderFallbackTests(unittest.TestCase):
         self,
         *_mocks,
     ):
-        snapshot = DashboardService(prefer_live_data=True).build_snapshot(force_refresh=True)
+        with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
+            os.environ,
+            {"EVENTS_OUTLOOK_DB_PATH": str(Path(tmpdir) / "events_outlook.db")},
+            clear=False,
+        ):
+            snapshot = DashboardService(
+                prefer_live_data=True,
+                enable_background_refresh=False,
+            ).build_snapshot(force_refresh=True)
 
         self.assertEqual(len(snapshot.news_sections), 3)
         self.assertEqual(len(snapshot.market_sections), 6)
