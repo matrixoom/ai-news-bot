@@ -72,20 +72,29 @@ export function NewsPage() {
 
   if (!data.channelSummaries.length) {
     return (
-      <EmptyPanelState
-        title="No news channels yet"
-        description="The backend returned an empty module payload."
-        action={
-          <button
-            className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white"
-            onClick={() => {
-              void query.refetch();
-            }}
-            type="button"
-          >
-            Retry
-          </button>
+      <ModulePageFrame
+        description={data.pageDescription}
+        lastUpdated={<LastUpdatedBadge value={data.generatedAt} />}
+        main={
+          <EmptyPanelState
+            title="No news channels yet"
+            description="The backend returned an empty module payload."
+            action={
+              <button
+                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white"
+                onClick={() => {
+                  void query.refetch();
+                }}
+                type="button"
+              >
+                Retry
+              </button>
+            }
+          />
         }
+        side={<NewsStatusPanel model={data} />}
+        title={data.pageTitle}
+        toolbar={toolbar}
       />
     );
   }

@@ -17,7 +17,7 @@ export function ModuleTabBar<TValue extends string>({
   ariaLabel = "Module tabs",
 }: ModuleTabBarProps<TValue>) {
   return (
-    <div aria-label={ariaLabel} className="flex flex-wrap gap-2" role="tablist">
+    <nav aria-label={ariaLabel} className="flex flex-wrap gap-2">
       {tabs.map((tab) => {
         const selected = tab.value === activeTab;
 
@@ -25,20 +25,18 @@ export function ModuleTabBar<TValue extends string>({
           <Link
             key={tab.value}
             aria-current={selected ? "page" : undefined}
-            aria-selected={selected}
             className={[
               "inline-flex items-center rounded-full border px-4 py-2 text-sm font-medium transition",
               selected
                 ? "border-slate-900 bg-slate-900 text-white shadow-sm"
                 : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950",
             ].join(" ")}
-            role="tab"
             to={buildModuleTabHref(pathname, searchParams, tab.value)}
           >
             {tab.label}
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }
