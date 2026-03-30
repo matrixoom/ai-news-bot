@@ -1,6 +1,7 @@
-import { Outlet, useMatches } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { HeaderBar } from "./header-bar";
 import { SidebarNav } from "./sidebar-nav";
+import { primaryNavItems, secondaryNavItems } from "../shared/config/nav-items";
 import type { PageMeta } from "../shared/types/page-meta";
 
 const defaultMeta: PageMeta = {
@@ -9,9 +10,9 @@ const defaultMeta: PageMeta = {
 };
 
 export function AppShell() {
-  const matches = useMatches();
-  const leaf = matches[matches.length - 1];
-  const meta = (leaf?.handle as PageMeta | undefined) ?? defaultMeta;
+  const { pathname } = useLocation();
+  const navItems = [...primaryNavItems, ...secondaryNavItems];
+  const meta = navItems.find((item) => item.to === pathname) ?? defaultMeta;
 
   return (
     <div className="grid min-h-screen grid-cols-[260px_1fr] bg-slate-100">
