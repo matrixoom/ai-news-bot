@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from ...services.dashboard_service import DashboardService, DataStatusItem
@@ -20,6 +20,7 @@ from .frontend_payload import (
     build_frontend_payload,
     build_frontend_status_module_payload,
 )
+from .spa_assets import WORKBENCH_ROUTES, build_spa_unavailable_response, load_spa_assets
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def create_fastapi_app(
     )
 
     static_dir = Path(__file__).resolve().parent / "static"
+    spa_assets = load_spa_assets()
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     def _generated_at_now() -> str:
@@ -278,8 +280,10 @@ def create_fastapi_app(
                 status_code=400,
             )
 
-    @app.get("/", response_class=FileResponse)
-    def homepage() -> FileResponse:
+    @app.get("/")
+    def homepage() -> Response:
+        if spa_assets.is_available:
+            return RedirectResponse(url="/dashboard")
         return FileResponse(static_dir / "index.html")
 
     @app.get("/legacy", response_class=HTMLResponse)
@@ -292,6 +296,14 @@ def create_fastapi_app(
                 render_error_html("Dashboard unavailable", "The dashboard view model could not be built."),
                 status_code=503,
             )
+
+    def workbench_spa_entry() -> Response:
+        if spa_assets.is_available:
+            return FileResponse(spa_assets.index_path)
+        return build_spa_unavailable_response(spa_assets)
+
+    for route_path in WORKBENCH_ROUTES:
+        app.add_api_route(route_path, workbench_spa_entry, methods=["GET"], response_class=HTMLResponse)
 
     @app.get("/{_:path}", response_class=HTMLResponse)
     def not_found(_: str) -> HTMLResponse:

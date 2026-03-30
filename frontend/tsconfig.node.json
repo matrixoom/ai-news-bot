@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "outDir": "./node_modules/.cache/tsconfig.node",
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.node.tsbuildinfo",
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["vite.config.ts", "tailwind.config.ts"]
+}
