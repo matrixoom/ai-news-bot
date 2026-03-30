@@ -35,9 +35,13 @@ export function adaptMarketModule(response: MarketModuleRawPayload): MarketModul
     status: card.status,
   }));
 
-  const averageDeviation = signalCards.length
-    ? signalCards.reduce((sum, card) => sum + parseDeviation(card.deviationLabel), 0) / signalCards.length
-    : 0;
+  const numericDeviations = signalCards
+    .map((card) => parseDeviation(card.deviationLabel))
+    .filter((value): value is number => value !== null);
+
+  const averageDeviation = numericDeviations.length
+    ? numericDeviations.reduce((sum, value) => sum + value, 0) / numericDeviations.length
+    : null;
 
   return {
     generatedAt: response.generated_at,
@@ -87,7 +91,7 @@ function formatDeviation(value: number | string | null): string {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function parseDeviation(value: string): number {
+function parseDeviation(value: string): number | null {
   const parsed = Number.parseFloat(value.replace("%", ""));
-  return Number.isNaN(parsed) ? 0 : parsed;
+  return Number.isNaN(parsed) ? null : parsed;
 }
