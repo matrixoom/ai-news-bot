@@ -2,6 +2,7 @@ import { Navigate, type RouteObject } from "react-router-dom";
 import { AppShell } from "../layouts/app-shell";
 import { DashboardPage } from "../pages/dashboard-page";
 import { MacroPage } from "../pages/macro-page";
+import { MarketPage } from "../pages/market-page";
 import { NewsPage } from "../pages/news-page";
 import { ModulePlaceholderPage } from "../pages/module-placeholder-page";
 
@@ -31,7 +32,7 @@ export const appRoutes: RouteObject[] = [
       },
       {
         path: "market",
-        element: <ModulePlaceholderPage />,
+        element: <MarketPage />,
         handle: { title: "Market", description: "Signals and watchlists" },
       },
       {
