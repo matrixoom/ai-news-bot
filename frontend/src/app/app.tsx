@@ -1,16 +1,25 @@
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppProviders } from "./providers";
-import { appRoutes } from "./routes";
-
-const initialEntry = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-const router = createMemoryRouter(appRoutes, {
-  initialEntries: [initialEntry],
-});
+import { AppShell } from "../layouts/app-shell";
+import { ModulePlaceholderPage } from "../pages/module-placeholder-page";
 
 export function App() {
   return (
     <AppProviders>
-      <RouterProvider router={router} />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<ModulePlaceholderPage />} />
+            <Route path="news" element={<ModulePlaceholderPage />} />
+            <Route path="macro" element={<ModulePlaceholderPage />} />
+            <Route path="market" element={<ModulePlaceholderPage />} />
+            <Route path="events" element={<ModulePlaceholderPage />} />
+            <Route path="push" element={<ModulePlaceholderPage />} />
+            <Route path="settings" element={<ModulePlaceholderPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
     </AppProviders>
   );
 }
