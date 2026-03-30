@@ -1,5 +1,6 @@
 import { Navigate, type RouteObject } from "react-router-dom";
 import { AppShell } from "../layouts/app-shell";
+import { DashboardPage } from "../pages/dashboard-page";
 import { ModulePlaceholderPage } from "../pages/module-placeholder-page";
 
 export const appRoutes: RouteObject[] = [
@@ -13,7 +14,7 @@ export const appRoutes: RouteObject[] = [
       },
       {
         path: "dashboard",
-        element: <ModulePlaceholderPage />,
+        element: <DashboardPage />,
         handle: { title: "Dashboard", description: "Cross-module overview" },
       },
       {
