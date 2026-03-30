@@ -1,7 +1,10 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../../app/app";
+import { EventsPage } from "../../../pages/events-page";
 
 const eventsPayload = {
   generated_at: "2026-03-30T09:00:00Z",
@@ -83,6 +86,39 @@ describe("EventsPage", () => {
     vi.restoreAllMocks();
   });
 
+  function renderEventsApp(initialEntry = "/events?tab=timeline") {
+    window.history.pushState({}, "", initialEntry);
+    render(<App />);
+  }
+
+  function renderEventsPage(initialEntry = "/events?tab=timeline") {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/events",
+          element: <EventsPage />,
+        },
+      ],
+      {
+        initialEntries: [initialEntry],
+      },
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+  }
+
   it("renders time windows, official links, and keeps tab state in the URL", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify(eventsPayload), {
@@ -91,11 +127,9 @@ describe("EventsPage", () => {
       }),
     );
 
-    window.history.pushState({}, "", "/events?tab=timeline");
-
     const user = userEvent.setup();
 
-    render(<App />);
+    renderEventsApp("/events?tab=timeline");
 
     expect(await screen.findByRole("heading", { name: "Next 7 Days" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "National Bureau of Statistics release window" })).toBeInTheDocument();
@@ -118,11 +152,54 @@ describe("EventsPage", () => {
       }),
     );
 
-    window.history.pushState({}, "", "/events?tab=unknown");
-
-    render(<App />);
+    renderEventsApp("/events?tab=unknown");
 
     expect(await screen.findByRole("heading", { name: "Next 7 Days" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Timeline" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("renders the loading state inside the shared module frame", () => {
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => new Promise(() => {}));
+
+    renderEventsPage("/events?tab=timeline");
+
+    expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("Loading event windows")).toBeInTheDocument();
+    expect(screen.getByText("Official links loading")).toBeInTheDocument();
+  });
+
+  it("renders the error state inside the shared module frame", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("network down"));
+
+    renderEventsPage("/events?tab=timeline");
+
+    expect(await screen.findByText("Events module unavailable")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("renders the empty state inside the shared module frame", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ...eventsPayload,
+          module: {
+            ...eventsPayload.module,
+            details: [],
+            note: "0 window cards",
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    renderEventsPage("/events?tab=timeline");
+
+    expect(await screen.findByText("No event windows yet")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("Timeline and watch windows for official calendars.")).toBeInTheDocument();
   });
 });
