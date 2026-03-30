@@ -5,13 +5,13 @@ import { StatCard } from "../features/dashboard/components/stat-card";
 import { useDashboardQuery } from "../features/dashboard/hooks/use-dashboard-query";
 
 export function DashboardPage() {
-  const { data, error, isLoading, retry } = useDashboardQuery();
+  const query = useDashboardQuery();
 
-  if (isLoading) {
+  if (query.isPending) {
     return <DashboardSkeleton />;
   }
 
-  if (error || !data) {
+  if (query.isError || !query.data) {
     return (
       <section className="rounded-[2rem] border border-rose-200 bg-rose-50 p-8 shadow-sm">
         <p className="text-sm font-medium uppercase tracking-[0.16em] text-rose-600">Dashboard unavailable</p>
@@ -19,7 +19,9 @@ export function DashboardPage() {
         <p className="mt-3 text-sm leading-6 text-slate-600">Try refreshing the dashboard data and loading the page again.</p>
         <button
           className="mt-6 rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white"
-          onClick={retry}
+          onClick={() => {
+            void query.refetch();
+          }}
           type="button"
         >
           Retry
@@ -27,6 +29,8 @@ export function DashboardPage() {
       </section>
     );
   }
+
+  const data = query.data;
 
   return (
     <div className="space-y-6">
@@ -57,7 +61,7 @@ export function DashboardPage() {
               <ModuleSnapshotCard
                 key={moduleSnapshot.id}
                 title={moduleSnapshot.title}
-                summary={moduleSnapshot.summary}
+                summary={`${moduleSnapshot.summary} (${moduleSnapshot.status})`}
                 ctaLabel={moduleSnapshot.ctaLabel}
                 ctaHref={moduleSnapshot.ctaHref}
               />
