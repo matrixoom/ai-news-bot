@@ -61,6 +61,30 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 - 兼容旧页面：`/legacy`
 - 健康检查：`/healthz`
 
+## 前端工作区
+
+新的 SPA 前端位于 `frontend/`，技术栈为 `Vite + React + TypeScript`。
+
+安装前端依赖：
+
+```powershell
+cmd /c npm --prefix frontend install
+```
+
+启动前端开发服务器：
+
+```powershell
+cmd /c npm --prefix frontend run dev
+```
+
+构建供 FastAPI 托管的前端产物：
+
+```powershell
+cmd /c npm --prefix frontend run build
+```
+
+当 `frontend/dist/index.html` 存在时，`http://127.0.0.1:8000/` 会重定向到 `/dashboard`，并由 FastAPI 为工作台路由提供编译后的 SPA。迁移期间，旧版服务端页面仍保留在 `/legacy`。
+
 ## 运行模式
 
 命令入口是 `main.py`：

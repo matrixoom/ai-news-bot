@@ -26,6 +26,30 @@ This repository provides two runtime capabilities:
 - Legacy SSR page: `/legacy`
 - Health check: `/healthz`
 
+## Frontend Workspace
+
+The new SPA frontend lives in `frontend/` and is built with `Vite + React + TypeScript`.
+
+Install frontend dependencies:
+
+```powershell
+cmd /c npm --prefix frontend install
+```
+
+Run the frontend dev server:
+
+```powershell
+cmd /c npm --prefix frontend run dev
+```
+
+Build the frontend bundle for FastAPI to serve:
+
+```powershell
+cmd /c npm --prefix frontend run build
+```
+
+When `frontend/dist/index.html` exists, `http://127.0.0.1:8000/` redirects to `/dashboard` and FastAPI serves the compiled SPA for the workbench routes. The legacy server-rendered page remains available at `/legacy` during migration.
+
 ## Runtime Modes
 
 The CLI entrypoint is `main.py`:
