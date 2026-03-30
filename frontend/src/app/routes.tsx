@@ -1,6 +1,5 @@
-import { Navigate, type RouteObject } from "react-router-dom";
+import { type RouteObject } from "react-router-dom";
 import { AppShell } from "../layouts/app-shell";
-import { DashboardPage } from "../pages/dashboard-page";
 import { ModulePlaceholderPage } from "../pages/module-placeholder-page";
 
 export const appRoutes: RouteObject[] = [
@@ -10,11 +9,12 @@ export const appRoutes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: <Navigate to="/dashboard" replace />,
+        element: <ModulePlaceholderPage />,
+        handle: { title: "Dashboard", description: "Cross-module overview" },
       },
       {
         path: "dashboard",
-        element: <DashboardPage />,
+        element: <ModulePlaceholderPage />,
         handle: { title: "Dashboard", description: "Cross-module overview" },
       },
       {
