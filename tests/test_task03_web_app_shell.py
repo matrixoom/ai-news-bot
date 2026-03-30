@@ -121,15 +121,14 @@ class FastAPIWebShellTests(unittest.TestCase):
         self.assertGreaterEqual(len(payload["module"]["details"]), 1)
         self.assertIn("chart_points", payload["module"]["details"][0]["section"])
 
-    def test_root_renders_named_dashboard_panels(self):
-        response = self.client.get("/")
+    def test_legacy_route_renders_named_dashboard_panels(self):
+        response = self.client.get("/legacy")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Trend Insights", response.text)
-        self.assertIn("一级模块导航", response.text)
-        self.assertIn("contentStage", response.text)
-        self.assertIn("loading-spinner", response.text)
-        self.assertNotIn("正在连接后端数据接口", response.text)
+        self.assertIn("财经与政策情报仪表盘", response.text)
+        self.assertIn("数据状态", response.text)
+        self.assertIn("结构化 API", response.text)
+        self.assertNotIn("Workbench unavailable", response.text)
 
     def test_unknown_route_returns_custom_not_found_page(self):
         response = self.client.get("/missing")

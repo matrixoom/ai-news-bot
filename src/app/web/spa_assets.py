@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 
 from fastapi.responses import HTMLResponse
@@ -32,8 +31,6 @@ class SpaAssets:
 def load_spa_assets() -> SpaAssets:
     repo_root = Path(__file__).resolve().parents[3]
     dist_dir = repo_root / "frontend" / "dist"
-    if "PYTEST_CURRENT_TEST" in os.environ:
-        return SpaAssets(dist_dir=dist_dir, index_path=dist_dir / "__pytest_disabled__.html")
     return SpaAssets(dist_dir=dist_dir, index_path=dist_dir / "index.html")
 
 
