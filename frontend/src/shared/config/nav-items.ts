@@ -14,5 +14,6 @@ export const primaryNavItems: NavItem[] = [
 ];
 
 export const secondaryNavItems: NavItem[] = [
+  { to: "/status", title: "Status", description: "Freshness and source health" },
   { to: "/settings", title: "Settings", description: "Preferences and system defaults" },
 ];

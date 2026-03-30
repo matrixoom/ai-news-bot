@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../../app/app";
+import { installWorkbenchFetchMock } from "../../../app/__tests__/workbench-api-mocks";
 import { EventsPage } from "../../../pages/events-page";
 
 const eventsPayload = {
@@ -120,12 +121,7 @@ describe("EventsPage", () => {
   }
 
   it("renders time windows, official links, and keeps tab state in the URL", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify(eventsPayload), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    installWorkbenchFetchMock({ events: eventsPayload });
 
     const user = userEvent.setup();
 
