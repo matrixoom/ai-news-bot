@@ -45,6 +45,9 @@ def create_fastapi_app(
     static_dir = Path(__file__).resolve().parent / "static"
     spa_assets = load_spa_assets()
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    spa_assets_dir = spa_assets.dist_dir / "assets"
+    if spa_assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=spa_assets_dir), name="spa-assets")
 
     def _generated_at_now() -> str:
         return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")

@@ -48,6 +48,32 @@ class FrontendSpaServingTests(unittest.TestCase):
                     self.assertIn("Workbench SPA", response.text)
                     self.assertIn("<div id='app'></div>", response.text)
 
+    def test_compiled_asset_files_are_served_when_spa_bundle_exists(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dist_dir = Path(temp_dir)
+            assets_dir = dist_dir / "assets"
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            index_path = dist_dir / "index.html"
+            js_path = assets_dir / "index-test.js"
+            css_path = assets_dir / "index-test.css"
+            js_path.write_text("console.log('spa');", encoding="utf-8")
+            css_path.write_text("body{background:black;}", encoding="utf-8")
+            index_path.write_text(
+                "<!doctype html><title>Workbench SPA</title>"
+                "<script type='module' src='/assets/index-test.js'></script>"
+                "<link rel='stylesheet' href='/assets/index-test.css'>",
+                encoding="utf-8",
+            )
+            client = self._client_with_spa_assets(SpaAssets(dist_dir=dist_dir, index_path=index_path))
+
+            js_response = client.get("/assets/index-test.js")
+            css_response = client.get("/assets/index-test.css")
+
+        self.assertEqual(js_response.status_code, 200)
+        self.assertIn("console.log('spa');", js_response.text)
+        self.assertEqual(css_response.status_code, 200)
+        self.assertIn("background:black", css_response.text)
+
     def test_root_keeps_legacy_static_homepage_when_compiled_spa_missing(self):
         client = self._client_with_spa_assets(self._missing_spa_assets())
 
