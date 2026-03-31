@@ -42,9 +42,7 @@ def create_fastapi_app(
         openapi_url=None,
     )
 
-    static_dir = Path(__file__).resolve().parent / "static"
     spa_assets = load_spa_assets()
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
     spa_assets_dir = spa_assets.dist_dir / "assets"
     if spa_assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=spa_assets_dir), name="spa-assets")
@@ -287,7 +285,14 @@ def create_fastapi_app(
     def homepage() -> Response:
         if spa_assets.is_available:
             return RedirectResponse(url="/dashboard")
-        return FileResponse(static_dir / "index.html")
+        try:
+            snapshot = service.build_snapshot()
+            return HTMLResponse(render_dashboard_html(snapshot))
+        except Exception:
+            return HTMLResponse(
+                render_error_html("Dashboard unavailable", "The dashboard view model could not be built."),
+                status_code=503,
+            )
 
     @app.get("/legacy", response_class=HTMLResponse)
     def legacy_homepage(news_mode: str | None = None) -> HTMLResponse:

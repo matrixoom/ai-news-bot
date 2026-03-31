@@ -44,7 +44,9 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 
 ### 前端
 
-- 静态前端目录：`src/app/web/static/`
+- SPA 前端源码目录：`frontend/`
+- 编译后由 FastAPI 托管的产物目录：`frontend/dist/`
+- 旧静态前端已移动到 `to_delete/src/app/web/static/`，等待人工核查后再删除
 - 主要模块：
   - 热点新闻
   - 宏观趋势
@@ -387,9 +389,12 @@ uv run python -m pytest tests/test_task04_newsnow_integration.py -k NewsNowAllSo
 - `main.py`
 - `src/app/web/fastapi_app.py`
 - `src/app/web/frontend_payload.py`
-- `src/app/web/static/index.html`
-- `src/app/web/static/styles.css`
-- `src/app/web/static/app.js`
+- `frontend/src/app/routes.tsx`
+- `frontend/src/pages/push-page.tsx`
+- `frontend/src/pages/settings-page.tsx`
+- `to_delete/src/app/web/static/index.html`
+- `to_delete/src/app/web/static/styles.css`
+- `to_delete/src/app/web/static/app.js`
 - `src/providers/newsnow_provider.py`
 - `scripts/init-newsnow-submodule.ps1`
 - `scripts/start-newsnow-upstream.ps1`

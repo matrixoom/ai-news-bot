@@ -2,6 +2,8 @@ import { Outlet, useLocation } from "react-router-dom";
 import { useMarketTicker } from "../shared/hooks/use-market-ticker";
 import { useNewsMode } from "../shared/hooks/use-news-mode";
 import { useThemePreference } from "../shared/hooks/use-theme-preference";
+import { useBooleanWorkbenchPreference } from "../shared/hooks/use-workbench-preference";
+import { SHOW_MARKET_TICKER_STORAGE_KEY } from "../shared/lib/workbench-preferences";
 import { HeaderBar } from "./header-bar";
 import { SidebarNav } from "./sidebar-nav";
 import { primaryNavItems, secondaryNavItems } from "../shared/config/nav-items";
@@ -17,6 +19,7 @@ export function AppShell() {
   const { pathname } = useLocation();
   const { newsMode, newsModeOptions, setNewsMode } = useNewsMode();
   const { theme, toggleTheme } = useThemePreference();
+  const showMarketTicker = useBooleanWorkbenchPreference(SHOW_MARKET_TICKER_STORAGE_KEY, true);
   const statusQuery = useStatusModuleQuery();
   const marketTickerQuery = useMarketTicker();
   const navItems = [...primaryNavItems, ...secondaryNavItems];
@@ -38,6 +41,7 @@ export function AppShell() {
           newsModeOptions={newsModeOptions}
           onNewsModeChange={setNewsMode}
           onThemeToggle={toggleTheme}
+          showMarketTicker={showMarketTicker.value}
           theme={theme}
         />
         <main className="flex-1 p-8">

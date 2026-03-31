@@ -7,6 +7,7 @@ type WorkbenchPayloads = {
   market: Record<string, unknown>;
   events: Record<string, unknown>;
   status: Record<string, unknown>;
+  push: Record<string, unknown>;
 };
 
 type WorkbenchOverrides = Partial<WorkbenchPayloads>;
@@ -338,6 +339,121 @@ export const statusPayload: WorkbenchPayloads["status"] = {
   },
 };
 
+export const pushPayload: WorkbenchPayloads["push"] = {
+  generated_at: "2026-03-30T09:00:00Z",
+  refresh_after_ms: 30000,
+  module: {
+    id: "push",
+    label: "Push Center",
+    note: "1 schedule / 1 module",
+    description: "Configure delivery channels, preview the report, and manage schedules.",
+    status: "compatible",
+    loading: false,
+    details: [
+      {
+        id: "workspace",
+        label: "Push workspace",
+        kind: "push",
+        note: "1 schedule / 1 module",
+        section: {
+          channel_type_options: [
+            {
+              id: "email",
+              label: "Email",
+              enabled: true,
+              description: "SMTP delivery for recurring reports.",
+            },
+          ],
+          source_module_options: [
+            {
+              id: "market",
+              label: "Market",
+              enabled: true,
+              push_ready: true,
+              description: "Primary module for the report.",
+            },
+            {
+              id: "news",
+              label: "News",
+              enabled: false,
+              push_ready: false,
+              description: "Reserved for a follow-up slice.",
+            },
+          ],
+          style_options: [
+            {
+              id: "newspaper",
+              label: "Newspaper",
+              recommended: true,
+              description: "Two-column daily briefing.",
+            },
+            {
+              id: "briefing",
+              label: "Briefing",
+              recommended: false,
+              description: "Compact single-column summary.",
+            },
+          ],
+          config_path: ".data/push_center.json",
+          config: {
+            selected_module_ids: ["market"],
+            report_style: "newspaper",
+            email: {
+              enabled: true,
+              label: "Primary Email",
+              smtp_server: "smtp.example.com",
+              smtp_port: 587,
+              use_tls: true,
+              username: "bot@example.com",
+              password: "secret",
+              from_address: "bot@example.com",
+              to_addresses: "desk@example.com",
+              password_configured: true,
+            },
+            schedules: [
+              {
+                id: "market-daily",
+                name: "Market Daily",
+                enabled: true,
+                module_ids: ["market"],
+                channel_types: ["email"],
+                times: ["08:00", "17:00"],
+                timezone: "Asia/Shanghai",
+              },
+            ],
+          },
+          preview: {
+            ok: true,
+            generated_at: "2026-03-30T09:00:00Z",
+            subject: "Market Daily - 2026-03-30",
+            text_body: "# Market Daily",
+            html_body: "<html><body><h1>Market Daily</h1></body></html>",
+            style: "newspaper",
+            selected_module_ids: ["market"],
+          },
+          recent_runs: [
+            {
+              executed_at: "2026-03-30T08:00:00+08:00",
+              timezone: "Asia/Shanghai",
+              trigger: "scheduled",
+              job_name: "Market Daily",
+              status: "success",
+              detail: "Sent",
+              subject: "Market Daily - 2026-03-30",
+              channel_types: ["email"],
+              module_ids: ["market"],
+            },
+          ],
+          scheduler: {
+            enabled: true,
+            check_interval_seconds: 20,
+          },
+        },
+      },
+    ],
+  },
+};
+
 export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
   const payloads: WorkbenchPayloads = {
     dashboard: overrides.dashboard ?? dashboardPayload,
@@ -346,11 +462,15 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     market: overrides.market ?? marketPayload,
     events: overrides.events ?? eventsPayload,
     status: overrides.status ?? statusPayload,
+    push: overrides.push ?? pushPayload,
   };
 
-  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+  let pushState: any = clone(payloads.push);
+
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const url = new URL(rawUrl, window.location.origin);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
 
     if (url.pathname === "/api/frontend/dashboard") {
       return jsonResponse({
@@ -382,6 +502,115 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
       return jsonResponse(payloads.status);
     }
 
+    if (url.pathname === "/api/frontend/modules/push") {
+      return jsonResponse(pushState);
+    }
+
+    if (url.pathname === "/api/push/config" && method === "PUT") {
+      const nextConfig = await readJsonBody(input, init?.body);
+      const unwrapped = typeof nextConfig?.config === "object" && nextConfig?.config ? nextConfig.config : nextConfig;
+      pushState = {
+        ...pushState,
+        generated_at: "2026-03-30T09:10:00Z",
+        module: {
+          ...pushState.module,
+          details: [
+            {
+              ...pushState.module.details[0],
+              section: {
+                ...pushState.module.details[0].section,
+                config: clone(unwrapped),
+              },
+            },
+          ],
+        },
+      };
+
+      return jsonResponse(pushState);
+    }
+
+    if (url.pathname === "/api/push/preview" && method === "POST") {
+      const nextConfig = await readJsonBody(input, init?.body);
+      const unwrapped = typeof nextConfig?.config === "object" && nextConfig?.config ? nextConfig.config : nextConfig;
+      const nextPreview = {
+        ...pushState.module.details[0].section.preview,
+        generated_at: "2026-03-30T09:12:00Z",
+        style: unwrapped.report_style ?? "newspaper",
+        subject: `Preview for ${unwrapped.report_style ?? "newspaper"}`,
+        html_body: `<html><body><h1>${unwrapped.report_style ?? "newspaper"}</h1></body></html>`,
+        selected_module_ids: unwrapped.selected_module_ids ?? ["market"],
+      };
+      pushState = {
+        ...pushState,
+        module: {
+          ...pushState.module,
+          details: [
+            {
+              ...pushState.module.details[0],
+              section: {
+                ...pushState.module.details[0].section,
+                config: clone(unwrapped),
+                preview: nextPreview,
+              },
+            },
+          ],
+        },
+      };
+
+      return jsonResponse({
+        generated_at: "2026-03-30T09:12:00Z",
+        config: clone(unwrapped),
+        preview: nextPreview,
+      });
+    }
+
+    if (url.pathname === "/api/push/trigger" && method === "POST") {
+      const nextConfig = await readJsonBody(input, init?.body);
+      const unwrapped = typeof nextConfig?.config === "object" && nextConfig?.config ? nextConfig.config : nextConfig;
+      const manualRun = {
+        executed_at: "2026-03-30T09:15:00+08:00",
+        timezone: "Asia/Shanghai",
+        trigger: "manual",
+        job_name: "Manual send",
+        status: "success",
+        detail: "Sent",
+        subject: "Manual push",
+        channel_types: ["email"],
+        module_ids: unwrapped.selected_module_ids ?? ["market"],
+      };
+      pushState = {
+        ...pushState,
+        module: {
+          ...pushState.module,
+          details: [
+            {
+              ...pushState.module.details[0],
+              section: {
+                ...pushState.module.details[0].section,
+                recent_runs: [manualRun, ...pushState.module.details[0].section.recent_runs],
+              },
+            },
+          ],
+        },
+      };
+
+      return jsonResponse({
+        ok: true,
+        preview: clone(pushState.module.details[0].section.preview),
+        recent_runs: clone(pushState.module.details[0].section.recent_runs),
+        result: {
+          status: "success",
+          executed_at: manualRun.executed_at,
+          timezone: manualRun.timezone,
+          trigger: manualRun.trigger,
+          job_name: manualRun.job_name,
+          sent: ["email"],
+          failed: [],
+          detail: manualRun.detail,
+        },
+      });
+    }
+
     throw new Error(`Unexpected fetch request for ${url.pathname}`);
   });
 }
@@ -395,4 +624,16 @@ function jsonResponse(body: unknown) {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+async function readJsonBody(input: RequestInfo | URL, body?: BodyInit | null): Promise<Record<string, any>> {
+  if (input instanceof Request) {
+    return (await input.clone().json()) as Record<string, any>;
+  }
+
+  if (typeof body === "string") {
+    return JSON.parse(body) as Record<string, any>;
+  }
+
+  return {};
 }

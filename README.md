@@ -9,14 +9,16 @@ This repository provides two runtime capabilities:
 
 ### Frontend
 
-- Static SPA served from `src/app/web/static/`
+- SPA source lives in `frontend/`
+- Compiled bundle is served from `frontend/dist/`
+- Archived legacy static shell is quarantined in `to_delete/src/app/web/static/` for manual review
 - Main modules:
   - Hot News
   - Macro Trend
   - Market Models
   - Events Outlook
   - Data Status
-- Entry: `/`
+- Entry: `/` -> `/dashboard` when the compiled SPA is available
 
 ### Backend
 
@@ -383,9 +385,12 @@ uv run python -m pytest tests/test_task04_newsnow_integration.py -k NewsNowAllSo
 - `main.py`
 - `src/app/web/fastapi_app.py`
 - `src/app/web/frontend_payload.py`
-- `src/app/web/static/index.html`
-- `src/app/web/static/styles.css`
-- `src/app/web/static/app.js`
+- `frontend/src/app/routes.tsx`
+- `frontend/src/pages/push-page.tsx`
+- `frontend/src/pages/settings-page.tsx`
+- `to_delete/src/app/web/static/index.html`
+- `to_delete/src/app/web/static/styles.css`
+- `to_delete/src/app/web/static/app.js`
 - `src/providers/newsnow_provider.py`
 - `scripts/init-newsnow-submodule.ps1`
 - `scripts/start-newsnow-upstream.ps1`

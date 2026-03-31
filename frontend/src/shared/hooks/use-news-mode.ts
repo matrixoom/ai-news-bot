@@ -1,4 +1,6 @@
-import { useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { DEFAULT_NEWS_MODE_STORAGE_KEY } from "../lib/workbench-preferences";
 
 export type NewsMode = "hybrid" | "api" | "upstream";
 
@@ -14,8 +16,28 @@ export const NEWS_MODE_OPTIONS: readonly NewsModeOption[] = [
 ];
 
 export function useNewsMode() {
+  const { pathname } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const newsMode = resolveNewsMode(searchParams.get("news_mode"));
+  const requestedMode = searchParams.get("news_mode");
+  const newsMode = requestedMode ? resolveNewsMode(requestedMode) : readStoredNewsMode();
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NEWS_MODE_STORAGE_KEY, newsMode);
+    } catch {
+      // Ignore storage failures and keep the URL as the source of truth.
+    }
+  }, [newsMode]);
+
+  useEffect(() => {
+    if (pathname === "/" || requestedMode || newsMode === "hybrid") {
+      return;
+    }
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set("news_mode", newsMode);
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [newsMode, pathname, requestedMode, searchParams, setSearchParams]);
 
   function setNewsMode(nextMode: NewsMode) {
     if (nextMode === newsMode) {
@@ -38,6 +60,16 @@ export function useNewsMode() {
     setNewsMode,
   };
 }
+
+function readStoredNewsMode(): NewsMode {
+  try {
+    return resolveNewsMode(window.localStorage.getItem(NEWS_MODE_STORAGE_KEY));
+  } catch {
+      return "hybrid";
+  }
+}
+
+const NEWS_MODE_STORAGE_KEY = DEFAULT_NEWS_MODE_STORAGE_KEY;
 
 function resolveNewsMode(value: string | null): NewsMode {
   if (value === "api" || value === "upstream") {
