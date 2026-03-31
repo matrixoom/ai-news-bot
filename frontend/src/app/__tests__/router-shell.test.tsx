@@ -8,6 +8,7 @@ import {
   macroPayload,
   marketPayload,
   newsPayload,
+  pushPayload,
   statusPayload,
 } from "./workbench-api-mocks";
 
@@ -29,6 +30,24 @@ describe("Workbench shell", () => {
 
     expect(await screen.findByRole("heading", { name: "Freshness snapshot" })).toBeInTheDocument();
     expect(screen.getByText("Coverage note")).toBeInTheDocument();
+    expect(screen.queryByText("Module page coming in the next slice.")).not.toBeInTheDocument();
+  });
+
+  it("renders the /push route as a real page instead of the placeholder", async () => {
+    installWorkbenchFetchMock({ push: pushPayload, status: statusPayload, market: marketPayload });
+
+    renderApp("/push");
+
+    expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
+    expect(screen.queryByText("Module page coming in the next slice.")).not.toBeInTheDocument();
+  });
+
+  it("renders the /settings route as a real page instead of the placeholder", async () => {
+    installWorkbenchFetchMock({ status: statusPayload, market: marketPayload });
+
+    renderApp("/settings");
+
+    expect(await screen.findByRole("heading", { name: "Workspace preferences" })).toBeInTheDocument();
     expect(screen.queryByText("Module page coming in the next slice.")).not.toBeInTheDocument();
   });
 
@@ -73,6 +92,20 @@ describe("Workbench shell", () => {
     expect(window.location.pathname).toBe("/dashboard");
   });
 
+  it("honors the stored default route before syncing a non-hybrid news mode into the URL", async () => {
+    installWorkbenchFetchMock({ market: marketPayload, status: statusPayload });
+    window.localStorage.setItem("dashboard-default-route", "/market");
+    window.localStorage.setItem("dashboard-default-news-mode", "api");
+
+    renderApp("/");
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/market");
+      expect(window.location.search).toContain("news_mode=api");
+    });
+    expect(await screen.findByText("CSI 300")).toBeInTheDocument();
+  });
+
   it("updates the news mode in the URL and refetches with the active mode", async () => {
     const fetchMock = installWorkbenchFetchMock({ news: newsPayload, status: statusPayload, market: marketPayload });
     const user = userEvent.setup();
@@ -87,6 +120,29 @@ describe("Workbench shell", () => {
       expect(window.location.search).toContain("news_mode=api");
       expect(screen.getByRole("button", { name: "API" })).toHaveAttribute("aria-pressed", "true");
       expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/frontend/modules/news?news_mode=api"))).toBe(true);
+    });
+  });
+
+  it("keeps the active news mode when navigating to another shell route", async () => {
+    const fetchMock = installWorkbenchFetchMock({ news: newsPayload, status: statusPayload, market: marketPayload });
+    const user = userEvent.setup();
+
+    renderApp("/news?tab=overview");
+
+    expect(await screen.findByRole("button", { name: "Hybrid" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "API" }));
+
+    await waitFor(() => {
+      expect(window.location.search).toContain("news_mode=api");
+    });
+
+    await user.click(screen.getByRole("link", { name: "Status" }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/status");
+      expect(window.location.search).toContain("news_mode=api");
+      expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/frontend/modules/status?news_mode=api"))).toBe(true);
     });
   });
 

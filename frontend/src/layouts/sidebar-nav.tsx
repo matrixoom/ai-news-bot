@@ -1,15 +1,17 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useSearchParams } from "react-router-dom";
 import { primaryNavItems, secondaryNavItems } from "../shared/config/nav-items";
 import { cn } from "../shared/lib/cn";
 import type { NavItem } from "../shared/config/nav-items";
 
 function NavSection({ items }: { items: NavItem[] }) {
+  const [searchParams] = useSearchParams();
+
   return (
     <div className="space-y-1">
       {items.map((item) => (
         <NavLink
           key={item.to}
-          to={item.to}
+          to={buildNavHref(item.to, searchParams)}
           aria-label={item.title}
           className={({ isActive }) =>
             cn(
@@ -26,6 +28,18 @@ function NavSection({ items }: { items: NavItem[] }) {
       ))}
     </div>
   );
+}
+
+function buildNavHref(pathname: string, searchParams: URLSearchParams): string {
+  const nextSearchParams = new URLSearchParams();
+  const newsMode = searchParams.get("news_mode");
+
+  if (newsMode) {
+    nextSearchParams.set("news_mode", newsMode);
+  }
+
+  const query = nextSearchParams.toString();
+  return query ? `${pathname}?${query}` : pathname;
 }
 
 export function SidebarNav() {

@@ -17,6 +17,7 @@ type HeaderBarProps = {
   onNewsModeChange: (nextMode: NewsMode) => void;
   theme: "light" | "dark";
   onThemeToggle: () => void;
+  showMarketTicker: boolean;
 };
 
 export function HeaderBar({
@@ -29,6 +30,7 @@ export function HeaderBar({
   newsModeOptions,
   onNewsModeChange,
   onThemeToggle,
+  showMarketTicker,
   theme,
 }: HeaderBarProps) {
   return (
@@ -51,9 +53,11 @@ export function HeaderBar({
         </div>
       </div>
 
-      <div className="mt-4 border-t border-slate-100 pt-4">
-        <MarketTicker isLoading={marketTickerLoading} items={marketTickerItems} />
-      </div>
+      {showMarketTicker ? (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <MarketTicker isLoading={marketTickerLoading} items={marketTickerItems} />
+        </div>
+      ) : null}
     </header>
   );
 }

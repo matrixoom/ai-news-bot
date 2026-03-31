@@ -5,8 +5,18 @@ import { EventsPage } from "../pages/events-page";
 import { MacroPage } from "../pages/macro-page";
 import { MarketPage } from "../pages/market-page";
 import { NewsPage } from "../pages/news-page";
-import { ModulePlaceholderPage } from "../pages/module-placeholder-page";
+import { PushPage } from "../pages/push-page";
+import { SettingsPage } from "../pages/settings-page";
 import { StatusPage } from "../pages/status-page";
+import { DEFAULT_ROUTE_STORAGE_KEY, readStringPreference } from "../shared/lib/workbench-preferences";
+
+function AppIndexRedirect() {
+  const defaultRoute = readStringPreference(DEFAULT_ROUTE_STORAGE_KEY, "/dashboard");
+  const allowedRoutes = new Set(["/dashboard", "/news", "/macro", "/market", "/events", "/push", "/status", "/settings"]);
+  const nextRoute = allowedRoutes.has(defaultRoute) ? defaultRoute : "/dashboard";
+
+  return <Navigate to={nextRoute} replace />;
+}
 
 export const appRoutes: RouteObject[] = [
   {
@@ -15,7 +25,7 @@ export const appRoutes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: <Navigate to="/dashboard" replace />,
+        element: <AppIndexRedirect />,
       },
       {
         path: "dashboard",
@@ -49,12 +59,12 @@ export const appRoutes: RouteObject[] = [
       },
       {
         path: "push",
-        element: <ModulePlaceholderPage />,
+        element: <PushPage />,
         handle: { title: "Push Center", description: "Templates and schedules" },
       },
       {
         path: "settings",
-        element: <ModulePlaceholderPage />,
+        element: <SettingsPage />,
         handle: { title: "Settings", description: "Preferences and system defaults" },
       },
     ],

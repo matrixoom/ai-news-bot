@@ -65,3 +65,6 @@ tmp
 .worktrees/
 frontend/node_modules/
 frontend/dist/
+to_delete
+.merge-backups
+.superpowers

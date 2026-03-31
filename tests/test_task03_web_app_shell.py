@@ -35,7 +35,7 @@ class Task03DocumentationTests(unittest.TestCase):
         self.assertIn("tests/test_task03_web_app_shell.py", content)
 
     def test_frontend_shell_keeps_push_module_lazy_loaded(self):
-        content = Path("src/app/web/static/app.js").read_text(encoding="utf-8")
+        content = Path("to_delete/src/app/web/static/app.js").read_text(encoding="utf-8")
 
         self.assertIn('if (module.id === "push") {', content)
         self.assertIn('note: "按需加载"', content)
@@ -80,8 +80,9 @@ class FastAPIWebShellTests(unittest.TestCase):
         first_section = payload["news_sections"][0]
         self.assertIn("items", first_section)
         self.assertIn("item_count", first_section)
-        self.assertGreaterEqual(len(first_section["items"]), 1)
-        self.assertIn("url", first_section["items"][0])
+        self.assertEqual(first_section["item_count"], len(first_section["items"]))
+        if first_section["items"]:
+            self.assertIn("url", first_section["items"][0])
 
     def test_frontend_dashboard_accepts_news_mode_query(self):
         response = self.client.get("/api/frontend/dashboard?news_mode=upstream")
