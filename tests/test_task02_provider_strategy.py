@@ -18,7 +18,7 @@ from src.providers import (
 
 class Task02DocumentationTests(unittest.TestCase):
     def test_task02_main_doc_links_all_deliverables(self):
-        content = Path("TASK/02-data-source-feasibility-and-provider-strategy.md").read_text(encoding="utf-8")
+        content = Path("tasks/02-data-source-feasibility-and-provider-strategy.md").read_text(encoding="utf-8")
 
         self.assertIn("Completed for design phase.", content)
         self.assertIn("02-data-source-matrix.md", content)
@@ -27,9 +27,9 @@ class Task02DocumentationTests(unittest.TestCase):
 
     def test_task02_supporting_docs_exist(self):
         expected_paths = [
-            Path("TASK/02-data-source-matrix.md"),
-            Path("TASK/02-provider-contracts.md"),
-            Path("TASK/02-free-data-feasibility-conclusion.md"),
+            Path("tasks/02-data-source-matrix.md"),
+            Path("tasks/02-provider-contracts.md"),
+            Path("tasks/02-free-data-feasibility-conclusion.md"),
         ]
 
         for path in expected_paths:

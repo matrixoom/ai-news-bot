@@ -61,7 +61,7 @@ class FakeMarketProvider:
 
 class Task06DocumentationTests(unittest.TestCase):
     def test_task06_main_doc_links_protocol_and_tests(self):
-        with open("TASK/06-market-models-and-daily-dashboard.md", encoding="utf-8") as handle:
+        with open("tasks/06-market-models-and-daily-dashboard.md", encoding="utf-8") as handle:
             content = handle.read()
 
         self.assertIn("Completed for implementation phase.", content)

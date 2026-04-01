@@ -8,7 +8,7 @@ from src.services import DashboardService, PushReportService
 
 class Task09DocumentationTests(unittest.TestCase):
     def test_task09_main_doc_links_matrix_and_tests(self):
-        with open("TASK/09-testing-strategy-and-delivery-gates.md", encoding="utf-8") as handle:
+        with open("tasks/09-testing-strategy-and-delivery-gates.md", encoding="utf-8") as handle:
             content = handle.read()
 
         self.assertIn("Completed for implementation phase.", content)

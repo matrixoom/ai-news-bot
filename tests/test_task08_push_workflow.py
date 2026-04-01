@@ -48,7 +48,7 @@ class StubReportService:
 
 class Task08DocumentationTests(unittest.TestCase):
     def test_task08_main_doc_links_protocol_and_tests(self):
-        with open("TASK/08-push-workflow-and-automation.md", encoding="utf-8") as handle:
+        with open("tasks/08-push-workflow-and-automation.md", encoding="utf-8") as handle:
             content = handle.read()
 
         self.assertIn("Completed for implementation phase.", content)
