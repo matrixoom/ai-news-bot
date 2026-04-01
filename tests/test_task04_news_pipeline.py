@@ -44,7 +44,7 @@ class FakeSearchProvider:
 
 class Task04DocumentationTests(unittest.TestCase):
     def test_task04_main_doc_links_protocol_and_tests(self):
-        with open("TASK/04-news-intelligence-pipeline.md", encoding="utf-8") as handle:
+        with open("tasks/04-news-intelligence-pipeline.md", encoding="utf-8") as handle:
             content = handle.read()
 
         self.assertIn("Completed for implementation phase.", content)

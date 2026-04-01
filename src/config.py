@@ -110,7 +110,7 @@ class Config:
         """Get the Stage 1 selection prompt template"""
         default_template = """{formatted_news}
 
-## YOUR TASK - STAGE 1: NEWS SELECTION
+## YOUR tasks - STAGE 1: NEWS SELECTION
 
 You are a senior AI industry analyst. Analyze the {total_items} news items above and select exactly 15-20 of the highest-quality items.
 

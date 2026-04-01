@@ -114,7 +114,7 @@ class UnavailableResearchProvider:
 
 class Task07DocumentationTests(unittest.TestCase):
     def test_task07_main_doc_links_protocol_and_tests(self):
-        with open("TASK/07-events-policy-outlook-and-llm-research.md", encoding="utf-8") as handle:
+        with open("tasks/07-events-policy-outlook-and-llm-research.md", encoding="utf-8") as handle:
             content = handle.read()
 
         self.assertIn("Completed for implementation phase.", content)

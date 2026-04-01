@@ -43,7 +43,7 @@ class FakeMacroProvider:
 
 class Task05DocumentationTests(unittest.TestCase):
     def test_task05_main_doc_links_protocol_and_tests(self):
-        content = Path("TASK/05-macro-indicators-monitoring.md").read_text(encoding="utf-8")
+        content = Path("tasks/05-macro-indicators-monitoring.md").read_text(encoding="utf-8")
 
         self.assertIn("Completed for implementation phase.", content)
         self.assertIn("05-indicator-registry-and-display-protocol.md", content)

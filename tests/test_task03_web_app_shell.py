@@ -28,7 +28,7 @@ from src.services.dashboard_service import (
 
 class Task03DocumentationTests(unittest.TestCase):
     def test_task03_main_doc_points_to_route_map_and_tests(self):
-        content = Path("TASK/03-web-homepage-and-app-shell.md").read_text(encoding="utf-8")
+        content = Path("tasks/03-web-homepage-and-app-shell.md").read_text(encoding="utf-8")
 
         self.assertIn("Completed for implementation phase.", content)
         self.assertIn("03-route-map-and-viewmodel.md", content)
