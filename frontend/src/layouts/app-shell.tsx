@@ -11,7 +11,6 @@ import { HeaderBar } from "./header-bar";
 import { SidebarNav } from "./sidebar-nav";
 import { primaryNavItems, secondaryNavItems } from "../shared/config/nav-items";
 import type { PageMeta } from "../shared/types/page-meta";
-import { useStatusModuleQuery } from "../features/status/hooks/use-status-module-query";
 import { cn } from "../shared/lib/cn";
 
 const defaultMeta: PageMeta = {
@@ -21,11 +20,10 @@ const defaultMeta: PageMeta = {
 
 export function AppShell() {
   const { pathname } = useLocation();
-  const { newsMode, newsModeOptions, setNewsMode } = useNewsMode();
-  const { theme, toggleTheme } = useThemePreference();
+  useNewsMode();
+  const { theme, setTheme } = useThemePreference();
   const showMarketTicker = useBooleanWorkbenchPreference(SHOW_MARKET_TICKER_STORAGE_KEY, true);
   const sidebarCollapsed = useBooleanWorkbenchPreference(SIDEBAR_COLLAPSED_STORAGE_KEY, false);
-  const statusQuery = useStatusModuleQuery();
   const marketTickerQuery = useMarketTicker();
   const navItems = [...primaryNavItems, ...secondaryNavItems];
   const meta = navItems.find((item) => item.to === pathname) ?? defaultMeta;
@@ -33,13 +31,13 @@ export function AppShell() {
   return (
     <div
       className={cn(
-        "grid min-h-screen bg-slate-100 transition-[grid-template-columns] duration-200",
+        "grid h-screen overflow-hidden bg-slate-100 transition-[grid-template-columns] duration-200",
         sidebarCollapsed.value ? "grid-cols-[88px_1fr]" : "grid-cols-[280px_1fr]",
       )}
     >
       <aside
         className={cn(
-          "border-r border-slate-200 bg-white transition-all duration-200",
+          "min-h-0 border-r border-slate-200 bg-white transition-all duration-200",
           sidebarCollapsed.value ? "p-3" : "p-6",
         )}
       >
@@ -48,21 +46,16 @@ export function AppShell() {
           onToggleCollapsed={() => sidebarCollapsed.setValue(!sidebarCollapsed.value)}
         />
       </aside>
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-0 flex-col">
         <HeaderBar
-          freshnessNote={statusQuery.data?.coverageNote ?? "Freshness data loading..."}
-          freshnessValue={statusQuery.data?.generatedAt ?? null}
           marketTickerItems={marketTickerQuery.data ?? []}
           marketTickerLoading={marketTickerQuery.isPending}
           meta={meta}
-          newsMode={newsMode}
-          newsModeOptions={newsModeOptions}
-          onNewsModeChange={setNewsMode}
-          onThemeToggle={toggleTheme}
+          onThemeChange={setTheme}
           showMarketTicker={showMarketTicker.value}
           theme={theme}
         />
-        <main className="flex-1 p-8">
+        <main className="flex-1 min-h-0 overflow-y-auto p-8">
           <Outlet />
         </main>
       </div>

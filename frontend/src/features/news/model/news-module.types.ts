@@ -4,7 +4,7 @@ export type NewsModuleTab = "overview" | "channels" | "sources" | "brief";
 
 export const NEWS_MODULE_TABS: readonly ModuleTabDefinition<NewsModuleTab>[] = [
   { value: "overview", label: "Overview" },
-  { value: "channels", label: "Channels" },
+  { value: "channels", label: "Topics" },
   { value: "sources", label: "Sources" },
   { value: "brief", label: "Brief" },
 ];

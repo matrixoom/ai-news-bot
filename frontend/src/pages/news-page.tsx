@@ -8,21 +8,27 @@ import { NewsChannelCard } from "../features/news/components/news-channel-card";
 import { NewsFeedList } from "../features/news/components/news-feed-list";
 import { NewsStatusPanel } from "../features/news/components/news-status-panel";
 import { useNewsModuleQuery } from "../features/news/hooks/use-news-module-query";
+import { useNewsMode } from "../shared/hooks/use-news-mode";
+import { NewsModeSwitch } from "../shared/ui/news-mode-switch";
 import { NEWS_MODULE_TABS, type NewsModuleTab, type NewsModuleViewModel } from "../features/news/model/news-module.types";
 
 export function NewsPage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const query = useNewsModuleQuery();
+  const { newsMode, newsModeOptions, setNewsMode } = useNewsMode();
   const activeTab = resolveModuleTab(searchParams.get("tab"), NEWS_MODULE_TABS, "overview");
   const toolbar = (
-    <ModuleTabBar
-      activeTab={activeTab}
-      ariaLabel="News module tabs"
-      pathname={location.pathname}
-      searchParams={buildModuleTabSearchParams(searchParams, activeTab)}
-      tabs={NEWS_MODULE_TABS}
-    />
+    <div className="flex flex-col gap-3 lg:items-end">
+      <ModuleTabBar
+        activeTab={activeTab}
+        ariaLabel="News module tabs"
+        pathname={location.pathname}
+        searchParams={buildModuleTabSearchParams(searchParams, activeTab)}
+        tabs={NEWS_MODULE_TABS}
+      />
+      <NewsModeSwitch onChange={setNewsMode} options={newsModeOptions} value={newsMode} />
+    </div>
   );
   const frameDescription = query.data?.pageDescription ?? "Fetching the latest channel summaries and headlines.";
 

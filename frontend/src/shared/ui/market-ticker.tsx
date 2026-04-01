@@ -1,3 +1,4 @@
+import { useRef, type WheelEvent } from "react";
 import type { MarketSignalCard } from "../../features/market/model/market-module.types";
 
 type MarketTickerProps = {
@@ -6,6 +7,21 @@ type MarketTickerProps = {
 };
 
 export function MarketTicker({ items, isLoading = false }: MarketTickerProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!scrollRef.current) {
+      return;
+    }
+
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+      return;
+    }
+
+    scrollRef.current.scrollLeft += event.deltaY;
+    event.preventDefault();
+  }
+
   if (isLoading && !items.length) {
     return <p className="text-sm text-slate-500">Market ticker loading...</p>;
   }
@@ -15,23 +31,30 @@ export function MarketTicker({ items, isLoading = false }: MarketTickerProps) {
   }
 
   return (
-    <div aria-label="Market ticker" role="region" className="flex flex-wrap gap-2">
-      {items.map((item) => (
-        <article
-          key={item.key}
-          className="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm shadow-sm"
-        >
-          <div className="leading-tight">
-            <p className="font-medium text-slate-950">{item.label}</p>
-            <p className="text-xs text-slate-500">{item.sourceLabel}</p>
-          </div>
-          <div className="text-right leading-tight">
-            <p className="font-medium text-slate-900">{item.closeValue}</p>
-            <p className="text-xs text-slate-500">{item.signal}</p>
-          </div>
-          <p className="text-xs text-slate-500">{item.tradeDate}</p>
-        </article>
-      ))}
+    <div
+      ref={scrollRef}
+      aria-label="Market ticker"
+      role="region"
+      className="market-ticker-scroll overflow-x-auto"
+      onWheel={handleWheel}
+    >
+      <div className="flex min-w-max gap-1 pb-1">
+        {items.map((item) => (
+          <article
+            key={item.key}
+            className="inline-grid min-w-[168px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-sm shadow-sm"
+          >
+            <div className="leading-tight">
+              <p className="text-[12px] font-semibold text-slate-950">{item.label}</p>
+              <p className="text-[11px] text-slate-500">{item.sourceLabel}</p>
+            </div>
+            <div className="text-right leading-tight">
+              <p className="text-[12px] font-semibold text-slate-900">{item.closeValue}</p>
+              <p className="text-[11px] text-slate-500">{item.signal}</p>
+            </div>
+          </article>
+        ))}
+      </div>
     </div>
   );
 }
