@@ -1,12 +1,11 @@
 import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
 
-export type EventsModuleTab = "timeline" | "calendar" | "watch" | "sources";
+export type EventsModuleTab = "week" | "month" | "halfyear";
 
 export const EVENTS_MODULE_TABS: readonly ModuleTabDefinition<EventsModuleTab>[] = [
-  { value: "timeline", label: "Timeline" },
-  { value: "calendar", label: "Calendar" },
-  { value: "watch", label: "Watch" },
-  { value: "sources", label: "Sources" },
+  { value: "week", label: "近一周" },
+  { value: "month", label: "近1个月" },
+  { value: "halfyear", label: "近6个月" },
 ];
 
 export type EventWindowItemView = {

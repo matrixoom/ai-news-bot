@@ -87,12 +87,12 @@ describe("EventsPage", () => {
     vi.restoreAllMocks();
   });
 
-  function renderEventsApp(initialEntry = "/events?tab=timeline") {
+  function renderEventsApp(initialEntry = "/events?tab=week") {
     window.history.pushState({}, "", initialEntry);
     render(<App />);
   }
 
-  function renderEventsPage(initialEntry = "/events?tab=timeline") {
+  function renderEventsPage(initialEntry = "/events?tab=week") {
     const router = createMemoryRouter(
       [
         {
@@ -125,7 +125,7 @@ describe("EventsPage", () => {
 
     const user = userEvent.setup();
 
-    renderEventsApp("/events?tab=timeline");
+    renderEventsApp("/events?tab=week");
 
     expect(await screen.findByRole("heading", { name: "Next 7 Days" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "National Bureau of Statistics release window" })).toBeInTheDocument();
@@ -134,10 +134,10 @@ describe("EventsPage", () => {
       "https://www.federalreserve.gov/newsevents/calendar.htm",
     );
 
-    await user.click(screen.getByRole("link", { name: "Sources" }));
+    await user.click(screen.getByRole("link", { name: "近1个月" }));
 
-    expect(window.location.search).toBe("?tab=sources");
-    expect(screen.getByRole("link", { name: "Sources" })).toHaveAttribute("aria-current", "page");
+    expect(window.location.search).toBe("?tab=month");
+    expect(screen.getByRole("link", { name: "近1个月" })).toHaveAttribute("aria-current", "page");
   });
 
   it("falls back to timeline when the tab query is unknown", async () => {
@@ -151,13 +151,13 @@ describe("EventsPage", () => {
     renderEventsApp("/events?tab=unknown");
 
     expect(await screen.findByRole("heading", { name: "Next 7 Days" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Timeline" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "近一周" })).toHaveAttribute("aria-current", "page");
   });
 
   it("renders the loading state inside the shared module frame", () => {
     vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => new Promise(() => {}));
 
-    renderEventsPage("/events?tab=timeline");
+    renderEventsPage("/events?tab=week");
 
     expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);
     expect(screen.getByText("Loading event windows")).toBeInTheDocument();
@@ -167,7 +167,7 @@ describe("EventsPage", () => {
   it("renders the error state inside the shared module frame", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("network down"));
 
-    renderEventsPage("/events?tab=timeline");
+    renderEventsPage("/events?tab=week");
 
     expect(await screen.findByText("Events module unavailable")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);
@@ -192,7 +192,7 @@ describe("EventsPage", () => {
       ),
     );
 
-    renderEventsPage("/events?tab=timeline");
+    renderEventsPage("/events?tab=week");
 
     expect(await screen.findByText("No event windows yet")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);

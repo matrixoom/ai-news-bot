@@ -13,7 +13,7 @@ describe("App bootstrap", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "AI News Bot" })).toBeInTheDocument();
-    expect(screen.getByText("Loading workspace...")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Trend Insight" })).toBeInTheDocument();
+    expect(screen.queryByText("Loading workspace...")).not.toBeInTheDocument();
   });
 });

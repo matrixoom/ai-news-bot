@@ -7,10 +7,9 @@ type EventsLinksPanelProps = {
 };
 
 const tabCopy: Record<EventsModuleTab, string> = {
-  timeline: "Timeline mode keeps the next windows stacked in order of urgency.",
-  calendar: "Calendar mode keeps the date cadence in view for the next official releases.",
-  watch: "Watch mode highlights the most actionable items and their likely market impact.",
-  sources: "Sources mode collects the official calendars and coverage links in one place.",
+  week: "近一周视图聚焦 7 天内的高优先级事件与官方日历窗口。",
+  month: "近1个月视图按自然时间窗口聚合未来 30 天事件，便于排期。",
+  halfyear: "近6个月视图保留中期大事件，支持季度级观察和风险提示。",
 };
 
 export function EventsLinksPanel({ model, activeTab }: EventsLinksPanelProps) {

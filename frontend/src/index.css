@@ -6,10 +6,122 @@
   color-scheme: light;
 }
 
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   font-family: Inter, "Segoe UI", sans-serif;
   background: #f4f7fb;
   color: #0f172a;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.market-ticker-scroll {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+}
+
+.market-ticker-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.market-ticker-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgba(100, 116, 139, 0.45);
+}
+
+[data-theme="dark"] .market-ticker-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+[data-theme="dark"] body {
+  background: #020617;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .bg-white {
+  background-color: rgb(15 23 42) !important;
+}
+
+[data-theme="dark"] .bg-white\/95 {
+  background-color: rgb(15 23 42 / 0.95) !important;
+}
+
+[data-theme="dark"] .bg-slate-50 {
+  background-color: rgb(30 41 59) !important;
+}
+
+[data-theme="dark"] .bg-slate-50\/70 {
+  background-color: rgb(30 41 59 / 0.7) !important;
+}
+
+[data-theme="dark"] .bg-slate-100 {
+  background-color: rgb(2 6 23) !important;
+}
+
+[data-theme="dark"] .bg-slate-200 {
+  background-color: rgb(30 41 59) !important;
+}
+
+[data-theme="dark"] .border-slate-100 {
+  border-color: rgb(30 41 59) !important;
+}
+
+[data-theme="dark"] .border-slate-200 {
+  border-color: rgb(51 65 85) !important;
+}
+
+[data-theme="dark"] .border-slate-300 {
+  border-color: rgb(71 85 105) !important;
+}
+
+[data-theme="dark"] .bg-slate-900 {
+  background-color: rgb(51 65 85) !important;
+}
+
+[data-theme="dark"] .border-slate-900 {
+  border-color: rgb(51 65 85) !important;
+}
+
+[data-theme="dark"] .text-slate-950,
+[data-theme="dark"] .text-slate-900 {
+  color: rgb(241 245 249) !important;
+}
+
+[data-theme="dark"] .text-slate-800 {
+  color: rgb(226 232 240) !important;
+}
+
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-slate-600 {
+  color: rgb(203 213 225) !important;
+}
+
+[data-theme="dark"] .text-slate-500 {
+  color: rgb(148 163 184) !important;
+}
+
+[data-theme="dark"] .hover\:bg-slate-100:hover,
+[data-theme="dark"] .hover\:bg-white:hover {
+  background-color: rgb(30 41 59) !important;
+}
+
+[data-theme="dark"] .hover\:text-slate-900:hover,
+[data-theme="dark"] .hover\:text-slate-950:hover {
+  color: rgb(248 250 252) !important;
+}
+
+[data-theme="dark"] .stroke-slate-500 {
+  stroke: rgb(148 163 184) !important;
+}
+
+[data-theme="dark"] .stroke-slate-400 {
+  stroke: rgb(100 116 139) !important;
+}
+
+[data-theme="dark"] .fill-slate-300 {
+  fill: rgb(100 116 139) !important;
 }

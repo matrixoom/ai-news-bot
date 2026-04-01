@@ -21,6 +21,9 @@ export function useThemePreference() {
 
   return {
     theme,
+    setTheme: (nextTheme: ThemePreference) => {
+      setTheme(nextTheme);
+    },
     toggleTheme: () => {
       setTheme((current) => (current === "light" ? "dark" : "light"));
     },
