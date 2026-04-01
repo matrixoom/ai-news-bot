@@ -176,4 +176,41 @@ describe("Workbench shell", () => {
     expect(screen.getByText("Freshness")).toBeInTheDocument();
     expect(screen.getByText(/Mar 30, 9:00 AM UTC/, { selector: "time" })).toBeInTheDocument();
   });
+  it("collapses and expands the sidebar while persisting preference", async () => {
+    installWorkbenchFetchMock({ dashboard: dashboardPayload, status: statusPayload, market: marketPayload });
+    const user = userEvent.setup();
+
+    renderApp("/dashboard");
+
+    await screen.findByRole("heading", { name: "Dashboard" });
+    await user.click(screen.getByRole("button", { name: /collapse sidebar/i }));
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("dashboard-sidebar-collapsed")).toBe("true");
+      expect(screen.getByRole("button", { name: /expand sidebar/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("dashboard-sidebar-collapsed")).toBe("false");
+      expect(screen.getByRole("button", { name: /collapse sidebar/i })).toBeInTheDocument();
+    });
+  });
+
+  it("allows collapsing and expanding a grouped navigation card", async () => {
+    installWorkbenchFetchMock({ news: newsPayload, status: statusPayload, market: marketPayload });
+    const user = userEvent.setup();
+
+    renderApp("/news");
+
+    expect(await screen.findByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /collapse workspace section/i }));
+    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /expand workspace section/i }));
+    expect(await screen.findByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+  });
 });
+
