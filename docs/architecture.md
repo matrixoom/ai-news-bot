@@ -1,0 +1,178 @@
+﻿# 架构与模块边界
+
+本文档定义 `ai-news-bot` 当前架构、模块职责、依赖方向和演进边界。
+
+## 1. 总体架构
+
+项目当前是“前后端分离 + 聚合服务”的形态：
+
+- 前端：`frontend/`（Vite + React + TypeScript）
+- 后端：`src/app/web/fastapi_app.py`（FastAPI）
+- 领域与服务：`src/domain/`、`src/services/`
+- 数据源抽象：`src/providers/`
+- 推送链路：`src/services/push_center_service.py` + `src/services/push_report_service.py` + `src/notifiers/`
+
+运行入口：
+
+- `python main.py web`：启动 Web
+- `python main.py push`：执行推送任务
+
+## 2. 模块分层与职责
+
+### 2.1 Web 入口层（App Layer）
+
+路径：`src/app/web/`
+
+职责：
+
+- 定义 HTTP 路由和状态码
+- 组装服务并返回前端可消费的 payload
+- 提供 SPA 静态资源托管与路由兜底
+
+关键文件：
+
+- `fastapi_app.py`：接口定义与错误处理
+- `frontend_payload.py`：后端领域模型 -> 前端 payload 适配
+- `spa_assets.py`：SPA 入口与静态资源探测
+
+边界：
+
+- 不承担业务计算细节
+- 仅调用 `services` 层
+
+### 2.2 服务编排层（Service Layer）
+
+路径：`src/services/`
+
+职责：
+
+- 组合多数据域结果，形成统一快照
+- 缓存与后台刷新（DashboardService）
+- 推送配置、预览、触发、调度（PushCenterService）
+
+关键服务：
+
+- `DashboardService`
+  - 输出 dashboard snapshot
+  - 支持按模块独立构建：news/macro/market/events/status
+  - 支持 `news_mode` 与 `force_refresh`
+- `PushCenterService`
+  - 管理 `.data/push_center*.json`
+  - 生成预览、发送邮件、定时任务执行
+
+边界：
+
+- 不直接依赖前端组件
+- 通过 provider contract 访问外部数据
+
+### 2.3 领域模型层（Domain Layer）
+
+路径：`src/domain/`
+
+职责：
+
+- 定义领域实体、枚举、结构化结果
+- 表达业务含义（宏观指标、市场信号、事件展望、新闻条目）
+
+边界：
+
+- 不感知 Web 路由
+- 不感知前端展示细节
+
+### 2.4 Provider 抽象层（Provider Layer）
+
+路径：`src/providers/`
+
+职责：
+
+- 统一外部源契约（news/search/macro/market/research）
+- 提供主源 + fallback + sample 的降级组合
+
+契约定义：`src/providers/contracts.py`
+
+边界：
+
+- 对上只暴露标准协议，不泄露第三方 API 细节
+
+### 2.5 前端展示层（Frontend SPA）
+
+路径：`frontend/src/`
+
+职责：
+
+- 路由、页面与可视化交互
+- 通过 `features/*/api` 调用后端接口
+- 通过 `features/*/model/*-adapter.ts` 做响应适配
+
+边界：
+
+- 不直接拼装后端复杂业务逻辑
+- 尽量不依赖后端内部字段命名（通过 adapter 隔离）
+
+## 3. 依赖方向（必须遵守）
+
+推荐依赖方向：
+
+`frontend -> app/web(api) -> services -> providers/contracts -> external sources`
+
+以及：
+
+`services -> domain`
+
+禁止方向：
+
+- `domain -> services`
+- `providers -> frontend`
+- `app/web -> frontend 业务逻辑`
+
+## 4. 核心运行流
+
+### 4.1 仪表盘页面流
+
+1. 前端请求 `/api/frontend/modules/*` 或 `/api/frontend/dashboard`
+2. FastAPI 调用 `DashboardService`
+3. Service 调用各模块服务与 provider
+4. `frontend_payload.py` 组装统一响应
+5. 前端 adapter 转为视图模型
+
+### 4.2 推送流
+
+1. 前端请求 `/api/frontend/modules/push`
+2. 更新配置：`PUT /api/push/config`
+3. 预览：`POST /api/push/preview`
+4. 触发：`POST /api/push/trigger`
+5. 服务写入 `.data/logs/push_center/...` 日志
+
+## 5. 模块边界清单
+
+- `news`
+  - 负责新闻聚合与分类（tech/finance/policy）
+  - 可带 `news_mode`
+- `macro`
+  - 负责宏观指标快照与历史点
+- `market`
+  - 负责指数、MA20、fishbowl 信号
+- `events`
+  - 负责未来事件窗口与官方链接
+- `status`
+  - 负责数据健康状态与覆盖说明
+- `push`
+  - 负责推送配置、预览、执行和调度状态
+
+## 6. 状态与降级策略
+
+- Provider 层支持 `live / degraded / unavailable`
+- Service 层支持 sample fallback
+- Web 层在模块冷启动阶段可返回 `202 + module.loading=true + refresh_after_ms`
+- 前端根据 `refresh_after_ms` 自动轮询或用户手动刷新
+
+## 7. 演进建议
+
+- 新模块接入时，优先按顺序新增：
+  1. domain model
+  2. provider contract/实现
+  3. service 聚合
+  4. api payload builder
+  5. frontend adapter/page
+  6. 对应测试与文档
+- 若替换外部源，优先在 provider 层处理，避免侵入 service 与 frontend。
