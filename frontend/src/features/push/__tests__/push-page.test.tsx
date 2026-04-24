@@ -21,7 +21,7 @@ describe("PushPage", () => {
   }
 
   it("renders configuration, preview, and schedule tabs from the push payload", async () => {
-    installWorkbenchFetchMock({ push: pushPayload, status: statusPayload, market: marketPayload });
+    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, status: statusPayload, market: marketPayload });
     const user = userEvent.setup();
 
     renderPushApp("/push?tab=overview");
@@ -29,12 +29,26 @@ describe("PushPage", () => {
     expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
     expect(screen.getByLabelText("SMTP server")).toHaveValue("smtp.example.com");
     expect(screen.getByTitle("Push preview")).toBeInTheDocument();
+    expect(screen.queryByText("Text fallback")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Schedules" }));
+
+    expect(window.location.search).toContain("tab=schedules");
+    expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTitle("Push preview")).toBeInTheDocument();
+    expect(screen.queryByText("Manual runs and scheduled deliveries")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "History" }));
 
     expect(window.location.search).toContain("tab=history");
     expect(screen.getByRole("link", { name: "History" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByText("Manual runs and scheduled deliveries")).toBeInTheDocument();
+    expect(screen.queryByTitle("Push preview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Text fallback")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send now" })).toBeInTheDocument();
+
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("/api/frontend/modules/push?refresh=1")),
+    ).toBe(true);
   });
 
   it("saves configuration and refreshes preview from the current draft", async () => {

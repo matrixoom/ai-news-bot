@@ -232,13 +232,19 @@ def create_fastapi_app(
             )
 
     @app.get("/api/frontend/modules/push")
-    def frontend_push_module(refresh: bool = False) -> JSONResponse:
+    def frontend_push_module(refresh: bool = False, include_preview: bool = True) -> JSONResponse:
         try:
             if not refresh:
                 loading, detail = push_service.should_serve_loading_module()
                 if loading:
-                    return _loading_response(push_service.build_module_payload(), detail)
-            payload = push_service.build_module_payload(force_refresh_preview=refresh)
+                    return _loading_response(
+                        push_service.build_module_payload(include_preview=include_preview),
+                        detail,
+                    )
+            payload = push_service.build_module_payload(
+                force_refresh_preview=refresh,
+                include_preview=include_preview,
+            )
             payload["refresh_after_ms"] = push_service.frontend_auto_refresh_ms
             return JSONResponse(payload)
         except Exception:

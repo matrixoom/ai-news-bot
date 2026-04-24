@@ -1,4 +1,4 @@
-"""Push center service for configurable previews, delivery, and schedules."""
+﻿"""Push center service for configurable previews, delivery, and schedules."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -13,7 +13,7 @@ from typing import Any, Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..notifiers import EmailNotifier
-from .dashboard_service import DashboardService
+from .dashboard_service import DashboardSection, DashboardService, DashboardSnapshot, SummaryBlock
 from .push_report_service import PushReportService
 
 
@@ -165,9 +165,18 @@ class PushCenterService:
     def frontend_auto_refresh_ms(self) -> int:
         return self._frontend_auto_refresh_ms
 
-    def build_module_payload(self, *, force_refresh_preview: bool = False) -> dict[str, Any]:
+    def build_module_payload(
+        self,
+        *,
+        force_refresh_preview: bool = False,
+        include_preview: bool = True,
+    ) -> dict[str, Any]:
         config = self._load_config()
-        preview = self._build_preview(config, force_refresh=force_refresh_preview)
+        preview = (
+            self._build_preview(config, force_refresh=force_refresh_preview)
+            if include_preview
+            else self._empty_preview(config, error="preview_not_requested")
+        )
         recent_runs = self._read_recent_runs()
         note = f"{len(config['schedules'])} 个任务 / {len(config['selected_module_ids'])} 个模块"
         return {
@@ -237,11 +246,19 @@ class PushCenterService:
         }
 
     def trigger_push(self, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """触发手动发送；若请求携带了与当前配置一致的预览，则直接复用该预览。"""
+        request_payload = payload
         payload = self._unwrap_payload(payload)
         existing = self._load_config()
         normalized = self._normalize_config(payload or {}, base=existing)
         persist = bool((payload or {}).get("persist"))
-        result = self._execute_delivery(normalized, trigger="manual", job_name="手动触发")
+        requested_preview = self._resolve_requested_preview(request_payload, config=normalized)
+        result = self._execute_delivery(
+            normalized,
+            trigger="manual",
+            job_name="手动触发",
+            preview_payload=requested_preview,
+        )
         if persist:
             self._save_config(normalized)
         return result
@@ -299,7 +316,7 @@ class PushCenterService:
             except Exception as error:  # pragma: no cover - defensive background logging
                 logger.warning("push-center scheduler loop failed: %s", error)
 
-    def _build_preview(
+    def _legacy_broken_build_preview(
         self,
         config: Mapping[str, Any],
         *,
@@ -308,7 +325,7 @@ class PushCenterService:
     ) -> dict[str, Any]:
         selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
         try:
-            snapshot = self._dashboard_service.build_snapshot(force_refresh=force_refresh)
+            snapshot = self._build_push_snapshot(selected_modules, force_refresh=force_refresh)
             subject = self._build_subject(snapshot, config, selected_modules)
             text_body = self._report_service.build_markdown(snapshot, module_ids=selected_modules)
             html_body = self._report_service.build_email_html(
@@ -329,13 +346,229 @@ class PushCenterService:
             return {
                 "ok": False,
                 "generated_at": _utc_now_iso(),
-                "subject": "推送预览不可用",
+                "subject": "鎺ㄩ€侀瑙堜笉鍙敤",
                 "text_body": "",
                 "html_body": "",
                 "style": config.get("report_style") or "newspaper",
                 "selected_module_ids": selected_modules,
                 "error": str(error),
             }
+
+    def _legacy_broken_empty_preview(
+        self,
+        config: Mapping[str, Any],
+        *,
+        module_ids: Iterable[str] | None = None,
+        error: str,
+    ) -> dict[str, Any]:
+        selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
+        return {
+            "ok": False,
+            "generated_at": _utc_now_iso(),
+            "subject": "",
+            "text_body": "",
+            "html_body": "",
+            "style": config.get("report_style") or "newspaper",
+            "selected_module_ids": selected_modules,
+            "error": error,
+        }
+
+    def _legacy_broken_build_push_snapshot(
+        self,
+        selected_modules: Iterable[str],
+        *,
+        force_refresh: bool,
+    ) -> DashboardSnapshot:
+        # 鎺ㄩ€侀瑙堝彧闇€瑕佸凡閫夋ā鍧楋紝閬垮厤鏅€氶〉闈㈠姞杞借鏁村紶 dashboard 鐨勫叏閲忔瀯寤烘嫋鎱€?        module_ids = [str(module_id).strip().lower() for module_id in selected_modules if str(module_id).strip()]
+        if not module_ids:
+            module_ids = ["market"]
+        if not self._can_build_push_snapshot_from_modules(module_ids):
+            return self._dashboard_service.build_snapshot(force_refresh=force_refresh)
+
+        generated_at = _utc_now_iso()
+        summary = SummaryBlock(
+            title="财经与政策情报仪表盘",
+            subtitle="推送预览仅构建已选模块，减少与无关模块的额外开销。",
+            as_of_label=generated_at,
+            coverage_note="",
+            highlights=[],
+        )
+        sections: list[DashboardSection] = []
+        news_sections = []
+        macro_sections = []
+        market_sections = []
+        event_sections = []
+
+        for module_id in module_ids:
+            if module_id == "news":
+                _, _, news_sections, news_status = self._dashboard_service.build_news_module(
+                    force_refresh=force_refresh,
+                )
+                sections.append(DashboardSection("news", "新闻情报", news_status.status, news_status.detail))
+                continue
+            if module_id == "macro":
+                _, macro_sections = self._dashboard_service.build_macro_module(force_refresh=force_refresh)
+                sections.append(DashboardSection("macro", "宏观指标", "live", "push-preview"))
+                continue
+            if module_id == "market":
+                _, market_sections = self._dashboard_service.build_market_module(force_refresh=force_refresh)
+                sections.append(DashboardSection("market", "市场模型", "live", "push-preview"))
+                continue
+            if module_id == "events":
+                _, event_sections = self._dashboard_service.build_events_module(force_refresh=force_refresh)
+                sections.append(DashboardSection("events", "事件与政策展望", "live", "push-preview"))
+
+        return DashboardSnapshot(
+            generated_at=generated_at,
+            news_mode="hybrid",
+            title=summary.title,
+            summary=summary.subtitle,
+            sections=sections,
+            dashboard_summary=summary,
+            news_sections=news_sections,
+            macro_sections=macro_sections,
+            market_sections=market_sections,
+            event_sections=event_sections,
+            data_status=[],
+        )
+
+    def _legacy_broken_can_build_push_snapshot_from_modules(self, module_ids: list[str]) -> bool:
+        builder_names = {
+            "news": "build_news_module",
+            "macro": "build_macro_module",
+            "market": "build_market_module",
+            "events": "build_events_module",
+        }
+        return all(
+            callable(getattr(self._dashboard_service, builder_names.get(module_id, ""), None))
+            for module_id in module_ids
+        )
+
+    def _build_preview(
+        self,
+        config: Mapping[str, Any],
+        *,
+        module_ids: Iterable[str] | None = None,
+        force_refresh: bool = False,
+    ) -> dict[str, Any]:
+        selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
+        try:
+            snapshot = self._build_push_snapshot(selected_modules, force_refresh=force_refresh)
+            subject = self._build_subject(snapshot, config, selected_modules)
+            text_body = self._report_service.build_markdown(snapshot, module_ids=selected_modules)
+            html_body = self._report_service.build_email_html(
+                snapshot,
+                module_ids=selected_modules,
+                layout=str(config.get("report_style") or "newspaper"),
+            )
+            return {
+                "ok": True,
+                "generated_at": snapshot.generated_at,
+                "subject": subject,
+                "text_body": text_body,
+                "html_body": html_body,
+                "style": config.get("report_style") or "newspaper",
+                "selected_module_ids": selected_modules,
+            }
+        except Exception as error:
+            return self._empty_preview(config, module_ids=selected_modules, error=str(error))
+
+    def _empty_preview(
+        self,
+        config: Mapping[str, Any],
+        *,
+        module_ids: Iterable[str] | None = None,
+        error: str,
+    ) -> dict[str, Any]:
+        selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
+        return {
+            "ok": False,
+            "generated_at": _utc_now_iso(),
+            "subject": "",
+            "text_body": "",
+            "html_body": "",
+            "style": config.get("report_style") or "newspaper",
+            "selected_module_ids": selected_modules,
+            "error": error,
+        }
+
+    def _build_push_snapshot(
+        self,
+        selected_modules: Iterable[str],
+        *,
+        force_refresh: bool,
+    ) -> DashboardSnapshot:
+        module_ids = [str(module_id).strip().lower() for module_id in selected_modules if str(module_id).strip()]
+        if not module_ids:
+            module_ids = ["market"]
+        if not self._can_build_push_snapshot_from_modules(module_ids):
+            return self._dashboard_service.build_snapshot(force_refresh=force_refresh)
+
+        generated_at = _utc_now_iso()
+        summary = SummaryBlock(
+            title="\u8d22\u7ecf\u4e0e\u653f\u7b56\u60c5\u62a5\u4eea\u8868\u76d8",
+            subtitle="\u63a8\u9001\u9884\u89c8\u4ec5\u6784\u5efa\u5df2\u9009\u6a21\u5757\uff0c\u51cf\u5c11\u4e0e\u65e0\u5173\u6a21\u5757\u7684\u989d\u5916\u5f00\u9500\u3002",
+            as_of_label=generated_at,
+            coverage_note="",
+            highlights=[],
+        )
+        sections: list[DashboardSection] = []
+        news_sections = []
+        macro_sections = []
+        market_sections = []
+        event_sections = []
+
+        for module_id in module_ids:
+            if module_id == "news":
+                _, _, news_sections, news_status = self._dashboard_service.build_news_module(
+                    force_refresh=force_refresh,
+                )
+                sections.append(
+                    DashboardSection(
+                        "news",
+                        "\u65b0\u95fb\u60c5\u62a5",
+                        news_status.status,
+                        news_status.detail,
+                    )
+                )
+                continue
+            if module_id == "macro":
+                _, macro_sections = self._dashboard_service.build_macro_module(force_refresh=force_refresh)
+                sections.append(DashboardSection("macro", "\u5b8f\u89c2\u6307\u6807", "live", "push-preview"))
+                continue
+            if module_id == "market":
+                _, market_sections = self._dashboard_service.build_market_module(force_refresh=force_refresh)
+                sections.append(DashboardSection("market", "\u5e02\u573a\u6a21\u578b", "live", "push-preview"))
+                continue
+            if module_id == "events":
+                _, event_sections = self._dashboard_service.build_events_module(force_refresh=force_refresh)
+                sections.append(DashboardSection("events", "\u4e8b\u4ef6\u4e0e\u653f\u7b56\u5c55\u671b", "live", "push-preview"))
+
+        return DashboardSnapshot(
+            generated_at=generated_at,
+            news_mode="hybrid",
+            title=summary.title,
+            summary=summary.subtitle,
+            sections=sections,
+            dashboard_summary=summary,
+            news_sections=news_sections,
+            macro_sections=macro_sections,
+            market_sections=market_sections,
+            event_sections=event_sections,
+            data_status=[],
+        )
+
+    def _can_build_push_snapshot_from_modules(self, module_ids: list[str]) -> bool:
+        builder_names = {
+            "news": "build_news_module",
+            "macro": "build_macro_module",
+            "market": "build_market_module",
+            "events": "build_events_module",
+        }
+        return all(
+            callable(getattr(self._dashboard_service, builder_names.get(module_id, ""), None))
+            for module_id in module_ids
+        )
 
     def _build_subject(self, snapshot, config: Mapping[str, Any], module_ids: Iterable[str]) -> str:
         module_map = {item["id"]: item["label"] for item in AVAILABLE_SOURCE_MODULES}
@@ -355,13 +588,18 @@ class PushCenterService:
         channel_types: Iterable[str] | None = None,
         execution_timezone: str | None = None,
         executed_now: datetime | None = None,
+        preview_payload: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
         selected_channels = [str(item).strip().lower() for item in (channel_types or ["email"]) if str(item).strip()]
-        preview = self._build_preview(
-            config,
-            module_ids=selected_modules,
-            force_refresh=True,
+        preview = (
+            dict(preview_payload)
+            if isinstance(preview_payload, Mapping)
+            else self._build_preview(
+                config,
+                module_ids=selected_modules,
+                force_refresh=True,
+            )
         )
         resolved_timezone = self._normalize_timezone(
             execution_timezone or self._default_execution_timezone(config)
@@ -417,6 +655,37 @@ class PushCenterService:
             },
         }
 
+    def _resolve_requested_preview(
+        self,
+        payload: Mapping[str, Any] | None,
+        *,
+        config: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        """仅在前端预览与当前配置一致时复用，避免页面所见与实际发送分叉。"""
+        if not isinstance(payload, Mapping):
+            return None
+        raw_preview = payload.get("preview")
+        if not isinstance(raw_preview, Mapping):
+            return None
+
+        preview_modules = self._normalize_module_ids(raw_preview.get("selected_module_ids"))
+        preview_style = self._normalize_style(raw_preview.get("style"))
+        config_modules = self._normalize_module_ids(config.get("selected_module_ids"))
+        config_style = self._normalize_style(config.get("report_style"))
+        if not bool(raw_preview.get("ok")):
+            return None
+        if preview_modules != config_modules or preview_style != config_style:
+            return None
+
+        return {
+            "ok": True,
+            "generated_at": str(raw_preview.get("generated_at") or _utc_now_iso()),
+            "subject": str(raw_preview.get("subject") or ""),
+            "text_body": str(raw_preview.get("text_body") or ""),
+            "html_body": str(raw_preview.get("html_body") or ""),
+            "style": preview_style,
+            "selected_module_ids": preview_modules,
+        }
     def _send_email(self, config: Mapping[str, Any], *, subject: str, text_body: str, html_body: str) -> bool | str:
         email = dict(config.get("email") or {})
         notifier = self._email_notifier_factory(
@@ -571,7 +840,7 @@ class PushCenterService:
             normalized.append(
                 {
                     "id": str(schedule.get("id") or f"schedule-{index + 1}").strip(),
-                    "name": str(schedule.get("name") or f"推送任务 {index + 1}").strip(),
+                    "name": str(schedule.get("name") or f"推送任务{index + 1}").strip(),
                     "enabled": bool(schedule.get("enabled", True)),
                     "module_ids": self._normalize_module_ids(schedule.get("module_ids") or default_module_ids),
                     "channel_types": self._normalize_channel_types(schedule.get("channel_types")),
@@ -805,3 +1074,5 @@ class PushCenterService:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=UTC)
         return parsed.astimezone(UTC)
+
+

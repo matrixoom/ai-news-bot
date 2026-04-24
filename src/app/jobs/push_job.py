@@ -23,7 +23,16 @@ def _default_notifier_specs():
     ]
 
 
-def _send_notifications(report: str, subject: str, language: str, notification_methods, logger, notifier_specs=None):
+def _send_notifications(
+    report: str,
+    subject: str,
+    language: str,
+    notification_methods,
+    logger,
+    notifier_specs=None,
+    *,
+    html_report: str | None = None,
+):
     """Send the generated report to all enabled channels."""
     lang_results = {"sent": [], "failed": []}
     specs = notifier_specs or _default_notifier_specs()
@@ -37,6 +46,7 @@ def _send_notifications(report: str, subject: str, language: str, notification_m
         kwargs = {"language": language}
         if method_name == "email":
             kwargs["subject"] = subject
+            kwargs["html_content"] = html_report
         else:
             kwargs["title"] = subject
 
@@ -90,6 +100,7 @@ def run_push_job(
             try:
                 subject = report_service.build_subject(snapshot, language=language)
                 report = report_service.build_markdown(snapshot, language=language)
+                html_report = report_service.build_email_html(snapshot)
 
                 logger.info(f"Dashboard report generated for {language.upper()} ({len(report)} characters)")
                 preview = report[:500] + "..." if len(report) > 500 else report
@@ -106,6 +117,7 @@ def run_push_job(
                     notification_methods=notification_methods,
                     logger=logger,
                     notifier_specs=notifier_specs,
+                    html_report=html_report,
                 )
 
                 for method in lang_results["sent"]:

@@ -345,7 +345,12 @@ class PushReportService:
         }
 
     def _extract_recent_market_points(self, card) -> list[dict]:
-        raw_points = list(getattr(card, "chart_points", []) or [])
+        raw_points = [
+            dict(point)
+            for point in list(getattr(card, "chart_points", []) or [])
+            if isinstance(point, dict)
+        ]
+        raw_points = self._align_market_chart_points_with_table(card, raw_points)
         dated_points: list[tuple[date, dict]] = []
         for point in raw_points:
             try:
@@ -360,6 +365,67 @@ class PushReportService:
         threshold = latest_date - timedelta(days=92)
         filtered = [point for trade_date, point in dated_points if trade_date >= threshold]
         return filtered or [point for _, point in dated_points[-65:]]
+
+    def _align_market_chart_points_with_table(self, card, raw_points: list[dict]) -> list[dict]:
+        """让日报图表尾点与表格中的最新市场值保持一致，避免展示层出现数据错位。"""
+        trade_date = self._parse_market_trade_date(getattr(card, "trade_date", ""))
+        close_price = self._parse_market_numeric(getattr(card, "close_value", None))
+        if trade_date is None or close_price is None:
+            return raw_points
+
+        latest_point = {
+            "trade_date": trade_date.isoformat(),
+            "close_price": close_price,
+            "ma20_price": self._parse_market_numeric(getattr(card, "ma20_value", None)),
+            "deviation_pct": self._parse_market_numeric(
+                getattr(card, "deviation_pct", None),
+                is_percent=True,
+            ),
+        }
+        if not raw_points:
+            return [latest_point]
+
+        latest_index: int | None = None
+        latest_trade_date: date | None = None
+        for index, point in enumerate(raw_points):
+            point_trade_date = self._parse_market_trade_date(point.get("trade_date"))
+            if point_trade_date is None:
+                continue
+            if latest_trade_date is None or point_trade_date > latest_trade_date:
+                latest_trade_date = point_trade_date
+                latest_index = index
+
+        if latest_trade_date is None or latest_index is None:
+            return [latest_point]
+        if latest_trade_date > trade_date:
+            return raw_points
+
+        # 这里优先信任表格侧已经展示给用户的最终值，确保日报图表与表格不会一新一旧。
+        if latest_trade_date == trade_date:
+            raw_points[latest_index] = {**raw_points[latest_index], **latest_point}
+            return raw_points
+
+        raw_points.append(latest_point)
+        return raw_points
+
+    def _parse_market_trade_date(self, value: object) -> date | None:
+        try:
+            return datetime.strptime(str(value or "").strip(), "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            return None
+
+    def _parse_market_numeric(self, value: object, *, is_percent: bool = False) -> float | None:
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value or "").strip().replace(",", "")
+        if not text or text == "暂无数据":
+            return None
+        if is_percent and text.endswith("%"):
+            text = text[:-1]
+        try:
+            return float(text)
+        except ValueError:
+            return None
 
     def _normalize_market_chart_points(self, points: list[dict]) -> list[dict[str, object]]:
         normalized: list[dict[str, object]] = []

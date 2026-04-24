@@ -110,6 +110,19 @@ export function toPushConfigRaw(config: PushConfig): PushConfigRaw {
   };
 }
 
+export function toPushPreviewRaw(preview: PushPreview): PushPreviewRaw {
+  return {
+    ok: preview.ok,
+    generated_at: preview.generatedAt,
+    subject: preview.subject,
+    text_body: preview.textBody,
+    html_body: preview.htmlBody,
+    style: preview.style,
+    selected_module_ids: preview.selectedModuleIds,
+    error: preview.error,
+  };
+}
+
 export function adaptPushPreview(preview: PushPreviewRaw): PushPreview {
   return {
     ok: preview.ok,

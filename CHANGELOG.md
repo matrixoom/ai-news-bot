@@ -13,6 +13,15 @@
 
 ### Changed
 
+- 修复推送中心“页面预览与实际发送日报图表不一致”的分叉：页面加载预览时默认请求最新快照，手动发送会在配置匹配时直接复用当前预览 HTML，保证所见即所得。
+- 修复推送中心模块级日报预览标题与摘要的中文乱码问题，模块级 preview 的标题文案恢复为可读中文。
+- 推送中心日报预览 iframe 改为按内容高度自动拉伸，减少预览区内部竖向滚动条的出现频率。
+- 统一推送中心与旧 `push_job` 的邮件报告生成链路：邮件发送现在也复用 HTML 日报渲染结果，避免出现“预览图表已更新但实际收到的邮件仍沿用旧 markdown 内容”的分叉。
+- 推送中心改为按页面上下文裁剪预览开销：`History` 标签页请求可跳过 preview 构建，推送预览也优先按已选模块组装，避免普通加载被全量 dashboard snapshot 拖慢。
+- 推送中心布局调整为「左侧配置/计划约三分之一，右侧预览约三分之二」；同时移除预览里的 `Text fallback`，并删除 `Schedules` 标签页的冗余发送历史侧栏与 `History` 标签页的预览侧栏。
+- 修复推送中心日报中市场模块“表格值已刷新但趋势图尾点仍停留旧值”的展示错位问题；日报图表渲染现在会优先与表格侧最新 `trade_date / close / MA20 / deviation` 对齐。
+- 前端浏览器标签页标题由 `AI News Bot` 调整为 `Trend Insight`，与当前产品命名保持一致。
+- 宏观数据页升级为配对研究视图：按相关指标成对展示 `relative performance / spread / raw series` 图表，复用现有 `points / delta_points` 数据生成更贴近量化研究工作流的 ECharts 可视化。
 - 文档体系从“任务导向”补齐为“工程基线导向”，新增架构/API/测试三个长期维护文档。
 - 前端侧栏导航从 `Workspace` 分组卡片调整为「Dashboard 独立 + News/Macro/Market/Events/Push Center 一级目录」，并为各模块提供子目录入口。
 - 移除侧栏冗余文案 `Research Desk` 与 `Loading workspace...`。
