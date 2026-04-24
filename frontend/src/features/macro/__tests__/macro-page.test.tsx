@@ -158,12 +158,31 @@ describe("MacroPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Inflation vs growth" })).toBeInTheDocument();
     expect(screen.getByText("CPI: 0.3% | GDP: 2.4%")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Inflation vs growth relative performance chart" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Inflation vs growth spread chart" })).toBeInTheDocument();
+    expect(screen.getAllByText("Pair correlation").length).toBeGreaterThan(0);
     expect(screen.getAllByText("National Bureau of Statistics").length).toBeGreaterThan(0);
     const statsHrefs = screen
       .getAllByRole("link", { name: "National Bureau of Statistics" })
       .map((link) => link.getAttribute("href"));
     expect(statsHrefs).toContain("https://example.com/cpi");
     expect(statsHrefs).toContain("https://example.com/gdp");
+  });
+
+  it("renders time-series charts inside the indicators tab", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(macroPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    renderMacroPage("/macro?tab=indicators");
+
+    expect(await screen.findByRole("heading", { name: "Pair raw series" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Inflation vs growth primary series chart" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Inflation vs growth secondary series chart" })).toBeInTheDocument();
+    expect(screen.getAllByText("Primary series").length).toBeGreaterThan(0);
   });
 
   it("falls back to overview when the tab query is unknown", async () => {
@@ -176,7 +195,7 @@ describe("MacroPage", () => {
 
     renderMacroPage("/macro?tab=nope");
 
-    expect(await screen.findByRole("heading", { name: "Macro overview" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Macro pair monitor" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("aria-current", "page");
   });
 

@@ -71,7 +71,7 @@ export function PushSchedulesEditor({
               </button>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="space-y-2 text-sm text-slate-700">
                 <span className="font-medium text-slate-900">Name</span>
                 <input
@@ -132,7 +132,7 @@ export function PushSchedulesEditor({
               </label>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="mt-4 grid gap-3">
               {enabledModules.map((option) => {
                 const checked = schedule.moduleIds.includes(option.id);
                 return (

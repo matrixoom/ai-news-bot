@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.app.web import create_fastapi_app
 from src.services import DashboardService
+from src.services.dashboard_service import MarketCard
 from src.services.push_center_service import PushCenterService
 
 
@@ -66,6 +67,40 @@ class StubPushReportService:
     def build_email_html(self, snapshot, module_ids=None, layout="newspaper"):
         _ = (module_ids, layout)
         return f"<p>{snapshot.generated_at}</p>"
+
+
+class ModuleOnlyDashboardService:
+    def __init__(self):
+        self.build_snapshot_calls = []
+        self.build_market_module_calls = []
+
+    def build_snapshot(self, *, force_refresh=False):
+        self.build_snapshot_calls.append(force_refresh)
+        raise AssertionError("full dashboard snapshot should not be used for module-scoped push preview")
+
+    def build_market_module(self, *, force_refresh=False):
+        self.build_market_module_calls.append(force_refresh)
+        return (
+            "2026-03-24T08:00:00Z",
+            [
+                MarketCard(
+                    key="csi300",
+                    label="娌繁300",
+                    close_value="3900",
+                    ma20_value="3850",
+                    signal="neutral",
+                    status="live",
+                    trade_date="2026-03-24",
+                    deviation_pct="+1.3%",
+                    source_label="akshare",
+                    explanation="璇存槑",
+                    chart_points=[],
+                )
+            ],
+        )
+
+    def stop_background_refresh(self):
+        return None
 
 
 class PushCenterModuleTests(unittest.TestCase):
@@ -137,6 +172,144 @@ class PushCenterModuleTests(unittest.TestCase):
             self.assertEqual(dashboard_service.force_refresh_calls, [True])
         finally:
             client.close()
+            push_service.stop_scheduler()
+
+    def test_frontend_push_module_can_skip_preview_for_history_tab(self):
+        dashboard_service = ModuleOnlyDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "history-payload.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        client = TestClient(
+            create_fastapi_app(
+                dashboard_service=dashboard_service,
+                push_center_service=push_service,
+            )
+        )
+        try:
+            response = client.get("/api/frontend/modules/push?include_preview=0")
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertFalse(payload["module"]["details"][0]["section"]["preview"]["ok"])
+            self.assertEqual(
+                payload["module"]["details"][0]["section"]["preview"]["error"],
+                "preview_not_requested",
+            )
+            self.assertEqual(dashboard_service.build_snapshot_calls, [])
+        finally:
+            client.close()
+            push_service.stop_scheduler()
+
+    def test_preview_response_uses_selected_module_snapshot_when_available(self):
+        dashboard_service = ModuleOnlyDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "module-preview.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+
+        try:
+            result = push_service.build_preview_response(
+                {
+                    "selected_module_ids": ["market"],
+                    "report_style": "newspaper",
+                    "email": {
+                        "smtp_server": "smtp.example.com",
+                        "smtp_port": 587,
+                        "username": "bot@example.com",
+                        "password": "secret",
+                        "from_address": "bot@example.com",
+                        "to_addresses": "desk@example.com",
+                        "use_tls": True,
+                    },
+                    "schedules": [],
+                }
+            )
+
+            self.assertTrue(result["preview"]["ok"])
+            self.assertEqual(dashboard_service.build_snapshot_calls, [])
+            self.assertEqual(dashboard_service.build_market_module_calls, [True])
+        finally:
+            push_service.stop_scheduler()
+
+    def test_preview_response_keeps_module_snapshot_title_readable(self):
+        class ReadableDashboardService:
+            def __init__(self):
+                self.build_snapshot_calls = []
+                self.build_market_module_calls = []
+
+            def build_snapshot(self, *, force_refresh=False):
+                self.build_snapshot_calls.append(force_refresh)
+                raise AssertionError("full dashboard snapshot should not be used for readable-title preview")
+
+            def build_market_module(self, *, force_refresh=False):
+                self.build_market_module_calls.append(force_refresh)
+                return (
+                    "2026-03-24T08:00:00Z",
+                    [
+                        MarketCard(
+                            key="csi300",
+                            label="\u6caa\u6df1300",
+                            close_value="3900",
+                            ma20_value="3850",
+                            signal="neutral",
+                            status="live",
+                            trade_date="2026-03-24",
+                            deviation_pct="+1.3%",
+                            source_label="akshare",
+                            explanation="\u8bf4\u660e",
+                            chart_points=[],
+                        )
+                    ],
+                )
+
+            def stop_background_refresh(self):
+                return None
+
+        dashboard_service = ReadableDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            config_path=self.temp_dir / "module-preview-readable.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+
+        try:
+            result = push_service.build_preview_response(
+                {
+                    "selected_module_ids": ["market"],
+                    "report_style": "newspaper",
+                    "email": {
+                        "smtp_server": "smtp.example.com",
+                        "smtp_port": 587,
+                        "username": "bot@example.com",
+                        "password": "secret",
+                        "from_address": "bot@example.com",
+                        "to_addresses": "desk@example.com",
+                        "use_tls": True,
+                    },
+                    "schedules": [],
+                }
+            )
+
+            self.assertTrue(result["preview"]["ok"])
+            self.assertIn(
+                "\u8d22\u7ecf\u4e0e\u653f\u7b56\u60c5\u62a5\u4eea\u8868\u76d8",
+                result["preview"]["subject"],
+            )
+            self.assertIn(
+                "\u63a8\u9001\u9884\u89c8\u4ec5\u6784\u5efa\u5df2\u9009\u6a21\u5757",
+                result["preview"]["html_body"],
+            )
+            self.assertEqual(dashboard_service.build_snapshot_calls, [])
+            self.assertEqual(dashboard_service.build_market_module_calls, [True])
+        finally:
             push_service.stop_scheduler()
 
     def test_frontend_push_module_returns_loading_during_selected_module_refresh(self):
@@ -303,6 +476,97 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertIn("market-daily@2026-03-22T08:00", state_json["scheduler_history"])
         config_json = self._read_json(self.config_path)
         self.assertNotIn("scheduler_history", config_json)
+
+    def test_manual_trigger_sends_same_preview_payload_as_email_body(self):
+        push_service = PushCenterService(
+            dashboard_service=RecordingDashboardService(),
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "manual-preview-sync.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        try:
+            result = push_service.trigger_push(
+                {
+                    "selected_module_ids": ["market"],
+                    "email": {
+                        "smtp_server": "smtp.example.com",
+                        "smtp_port": 587,
+                        "username": "bot@example.com",
+                        "password": "secret",
+                        "from_address": "bot@example.com",
+                        "to_addresses": "desk@example.com",
+                        "use_tls": True,
+                    },
+                    "schedules": [],
+                }
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(len(RecordingEmailNotifier.sent_messages), 1)
+            self.assertEqual(
+                RecordingEmailNotifier.sent_messages[0]["html_content"],
+                result["preview"]["html_body"],
+            )
+            self.assertEqual(
+                RecordingEmailNotifier.sent_messages[0]["content"],
+                result["preview"]["text_body"],
+            )
+        finally:
+            push_service.stop_scheduler()
+
+    def test_manual_trigger_reuses_matching_preview_payload_from_request(self):
+        """校验手动发送在预览与当前配置一致时复用页面已展示的内容。"""
+        push_service = PushCenterService(
+            dashboard_service=RecordingDashboardService(),
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "manual-preview-request-sync.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        try:
+            preview_payload = {
+                "ok": True,
+                "generated_at": "2026-03-24T09:00:00Z",
+                "subject": "preview-subject",
+                "text_body": "preview-text",
+                "html_body": "<p>preview-html</p>",
+                "style": "newspaper",
+                "selected_module_ids": ["market"],
+            }
+            result = push_service.trigger_push(
+                {
+                    "config": {
+                        "selected_module_ids": ["market"],
+                        "report_style": "newspaper",
+                        "email": {
+                            "smtp_server": "smtp.example.com",
+                            "smtp_port": 587,
+                            "username": "bot@example.com",
+                            "password": "secret",
+                            "from_address": "bot@example.com",
+                            "to_addresses": "desk@example.com",
+                            "use_tls": True,
+                        },
+                        "schedules": [],
+                    },
+                    "preview": preview_payload,
+                }
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(len(RecordingEmailNotifier.sent_messages), 1)
+            self.assertEqual(
+                RecordingEmailNotifier.sent_messages[0]["html_content"],
+                preview_payload["html_body"],
+            )
+            self.assertEqual(
+                RecordingEmailNotifier.sent_messages[0]["content"],
+                preview_payload["text_body"],
+            )
+            self.assertEqual(result["preview"]["subject"], preview_payload["subject"])
+        finally:
+            push_service.stop_scheduler()
 
     def test_manual_trigger_forces_snapshot_refresh_before_send(self):
         dashboard_service = RecordingDashboardService()

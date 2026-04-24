@@ -5,6 +5,7 @@ import { ModuleTabBar } from "../shared/ui/module-tab-bar";
 import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
 import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
 import { MacroComparisonCard } from "../features/macro/components/macro-comparison-card";
+import { MacroPairSeriesCard } from "../features/macro/components/macro-pair-series-card";
 import { MacroSourcesPanel } from "../features/macro/components/macro-sources-panel";
 import { useMacroModuleQuery } from "../features/macro/hooks/use-macro-module-query";
 import { MACRO_MODULE_TABS, type MacroModuleTab, type MacroModuleViewModel } from "../features/macro/model/macro-module.types";
@@ -121,8 +122,10 @@ function renderTabContent(activeTab: MacroModuleTab, data: MacroModuleViewModel)
       <section className="space-y-4">
         <header className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Compare</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">Side-by-side comparisons</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{data.moduleNote}</p>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">Relative-value pair analysis</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Each card treats the macro pair like a research spread: relative performance on top, divergence underneath, and regime stats in context.
+          </p>
         </header>
         <div className="space-y-4">
           {data.comparisonSections.map((section) => (
@@ -138,18 +141,14 @@ function renderTabContent(activeTab: MacroModuleTab, data: MacroModuleViewModel)
       <section className="space-y-4">
         <header className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Indicators</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">Indicator snapshots</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">The current readings are organized around each comparison pair.</p>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">Pair raw series</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Drill into each pair's underlying raw levels instead of flattening every indicator into one generic list.
+          </p>
         </header>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-4">
           {data.comparisonSections.map((section) => (
-            <article key={section.key} className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{section.title}</p>
-              <div className="mt-4 grid gap-3">
-                <IndicatorLine indicator={section.primary} />
-                {section.secondary ? <IndicatorLine indicator={section.secondary} /> : null}
-              </div>
-            </article>
+            <MacroPairSeriesCard key={section.key} section={section} />
           ))}
         </div>
       </section>
@@ -200,8 +199,10 @@ function renderTabContent(activeTab: MacroModuleTab, data: MacroModuleViewModel)
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Overview</p>
-            <h3 className="mt-2 text-xl font-semibold text-slate-950">Macro overview</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{data.moduleNote}</p>
+            <h3 className="mt-2 text-xl font-semibold text-slate-950">Macro pair monitor</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Pair-first macro monitor for inflation, growth, credit, leverage, commodities, and key single-leg market proxies.
+            </p>
           </div>
           <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
             {data.comparisonSections.length} pairs
@@ -209,28 +210,11 @@ function renderTabContent(activeTab: MacroModuleTab, data: MacroModuleViewModel)
         </div>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {data.comparisonSections.slice(0, 2).map((section) => (
+      <div className="space-y-4">
+        {data.comparisonSections.map((section) => (
           <MacroComparisonCard key={section.key} section={section} />
         ))}
       </div>
     </section>
-  );
-}
-
-function IndicatorLine({ indicator }: { indicator: MacroModuleViewModel["indicators"][number] }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-slate-950">{indicator.label}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{indicator.frequency}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm font-semibold text-slate-950">{indicator.latestValue}</p>
-          <p className="mt-1 text-xs text-slate-500">{indicator.changeLabel}</p>
-        </div>
-      </div>
-    </div>
   );
 }

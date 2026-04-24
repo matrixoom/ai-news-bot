@@ -24,7 +24,7 @@ export function PushPage() {
   const [searchParams] = useSearchParams();
   const activeTab = resolveModuleTab(searchParams.get("tab"), PUSH_MODULE_TABS, "overview");
   const queryClient = useQueryClient();
-  const query = usePushModuleQuery();
+  const query = usePushModuleQuery(activeTab);
   const [draft, setDraft] = useState<PushConfig | null>(null);
   const [preview, setPreview] = useState<PushWorkspaceViewModel["preview"] | null>(null);
   const [recentRuns, setRecentRuns] = useState<PushWorkspaceViewModel["recentRuns"]>([]);
@@ -48,6 +48,9 @@ export function PushPage() {
       tabs={PUSH_MODULE_TABS}
     />
   );
+  const loadingSide = activeTab === "history"
+    ? null
+    : <LoadingPanelState title="Preview loading" description="Waiting for the push payload to arrive." />;
 
   const saveMutation = useMutation({
     mutationFn: async () => updatePushConfig(mustDraft(draft)),
@@ -73,7 +76,7 @@ export function PushPage() {
   });
 
   const triggerMutation = useMutation({
-    mutationFn: async () => triggerPush(mustDraft(draft)),
+    mutationFn: async () => triggerPush(mustDraft(draft), preview),
     onSuccess: (response) => {
       setPreview(adaptPushPreview(response.preview));
       setRecentRuns(response.recent_runs.map(adaptPushRecentRun));
@@ -99,7 +102,7 @@ export function PushPage() {
         description={frameDescription}
         lastUpdated={null}
         main={<LoadingPanelState title="Loading push workspace" description="Fetching the latest configuration, preview, and run history." />}
-        side={<LoadingPanelState title="Preview loading" description="Waiting for the push payload to arrive." />}
+        side={loadingSide}
         title="Push Center"
         toolbar={toolbar}
       />
@@ -128,7 +131,7 @@ export function PushPage() {
             }
           />
         }
-        side={<LoadingPanelState title="Preview loading" description="Waiting for the push payload to arrive." />}
+        side={loadingSide}
         title="Push Center"
         toolbar={toolbar}
       />
@@ -141,7 +144,7 @@ export function PushPage() {
         description={query.data.pageDescription}
         lastUpdated={<LastUpdatedBadge value={query.data.generatedAt} />}
         main={<EmptyPanelState title="Push workspace empty" description="The backend returned an empty push payload." />}
-        side={<LoadingPanelState title="Preview loading" description="Waiting for the push payload to arrive." />}
+        side={loadingSide}
         title={query.data.pageTitle}
         toolbar={toolbar}
       />
@@ -149,9 +152,15 @@ export function PushPage() {
   }
 
   const workspace = query.data;
+  const showPreview = activeTab !== "history";
+  const side = showPreview ? <PushPreviewPanel preview={preview} refreshAfterMs={workspace.refreshAfterMs} /> : null;
+  const contentLayoutClassName = showPreview
+    ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+    : "grid gap-6";
 
   return (
     <ModulePageFrame
+      contentLayoutClassName={contentLayoutClassName}
       description={workspace.pageDescription}
       lastUpdated={<LastUpdatedBadge value={workspace.generatedAt} />}
       main={renderPushTab(activeTab, {
@@ -173,12 +182,7 @@ export function PushPage() {
           void triggerMutation.mutateAsync();
         },
       })}
-      side={
-        <div className="space-y-6">
-          <PushPreviewPanel preview={preview} refreshAfterMs={workspace.refreshAfterMs} />
-          {activeTab === "history" ? null : <PushRunHistory runs={recentRuns.slice(0, 6)} />}
-        </div>
-      }
+      side={side}
       title={workspace.pageTitle}
       toolbar={toolbar}
     />
@@ -250,14 +254,6 @@ function renderPushTab(
               type="button"
             >
               {props.isSending ? "Sending..." : "Send now"}
-            </button>
-            <button
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
-              disabled={props.isPreviewing}
-              onClick={props.onPreview}
-              type="button"
-            >
-              {props.isPreviewing ? "Refreshing..." : "Refresh preview"}
             </button>
           </div>
         </section>

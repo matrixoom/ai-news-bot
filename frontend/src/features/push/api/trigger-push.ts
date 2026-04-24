@@ -1,14 +1,17 @@
-import { toPushConfigRaw } from "../model/push-module-adapter";
-import type { PushConfig, TriggerPushResponseRaw } from "../model/push-module.types";
+import { toPushConfigRaw, toPushPreviewRaw } from "../model/push-module-adapter";
+import type { PushConfig, PushPreview, TriggerPushResponseRaw } from "../model/push-module.types";
 
-export async function triggerPush(config: PushConfig): Promise<TriggerPushResponseRaw> {
+export async function triggerPush(config: PushConfig, preview?: PushPreview | null): Promise<TriggerPushResponseRaw> {
   const response = await fetch("/api/push/trigger", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ config: toPushConfigRaw(config) }),
+    body: JSON.stringify({
+      config: toPushConfigRaw(config),
+      preview: preview ? toPushPreviewRaw(preview) : undefined,
+    }),
   });
 
   const payload = await response.json();

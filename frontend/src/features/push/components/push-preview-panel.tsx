@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { PushPreview } from "../model/push-module.types";
 
 type PushPreviewPanelProps = {
@@ -6,6 +7,29 @@ type PushPreviewPanelProps = {
 };
 
 export function PushPreviewPanel({ preview, refreshAfterMs }: PushPreviewPanelProps) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [frameHeight, setFrameHeight] = useState(960);
+
+  useEffect(() => {
+    setFrameHeight(960);
+  }, [preview.htmlBody, preview.ok]);
+
+  function resizePreviewFrame() {
+    const iframe = iframeRef.current;
+    const documentNode = iframe?.contentDocument ?? iframe?.contentWindow?.document;
+    if (!documentNode) {
+      return;
+    }
+    const contentHeight = Math.max(
+      documentNode.body?.scrollHeight ?? 0,
+      documentNode.documentElement?.scrollHeight ?? 0,
+    );
+    if (contentHeight <= 0) {
+      return;
+    }
+    setFrameHeight(Math.max(960, contentHeight + 24));
+  }
+
   return (
     <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -36,20 +60,17 @@ export function PushPreviewPanel({ preview, refreshAfterMs }: PushPreviewPanelPr
       </div>
 
       {preview.ok ? (
-        <div className="mt-5 space-y-4">
+        <div className="mt-5">
           <iframe
             aria-label="Push preview HTML"
-            className="min-h-[420px] w-full rounded-2xl border border-slate-200 bg-white"
-            sandbox=""
+            className="w-full rounded-2xl border border-slate-200 bg-white"
+            onLoad={resizePreviewFrame}
+            ref={iframeRef}
+            sandbox="allow-same-origin"
             srcDoc={preview.htmlBody || "<p style='font-family: sans-serif;'>No HTML preview available.</p>"}
+            style={{ height: `${frameHeight}px` }}
             title="Push preview"
           />
-          <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <summary className="cursor-pointer text-sm font-medium text-slate-900">Text fallback</summary>
-            <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">
-              {preview.textBody || "No text preview available."}
-            </pre>
-          </details>
         </div>
       ) : (
         <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">

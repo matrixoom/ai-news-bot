@@ -6,10 +6,20 @@ type ModulePageFrameProps = {
   toolbar?: ReactNode;
   lastUpdated?: ReactNode;
   main: ReactNode;
-  side: ReactNode;
+  side?: ReactNode;
+  contentLayoutClassName?: string;
 };
 
-export function ModulePageFrame({ title, description, toolbar, lastUpdated, main, side }: ModulePageFrameProps) {
+export function ModulePageFrame({
+  title,
+  description,
+  toolbar,
+  lastUpdated,
+  main,
+  side,
+  contentLayoutClassName,
+}: ModulePageFrameProps) {
+  const hasSide = side !== undefined && side !== null;
   return (
     <section className="space-y-6">
       <header className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
@@ -28,9 +38,9 @@ export function ModulePageFrame({ title, description, toolbar, lastUpdated, main
         </div>
       </header>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className={contentLayoutClassName ?? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]"}>
         <div className="space-y-6">{main}</div>
-        <aside className="space-y-6">{side}</aside>
+        {hasSide ? <aside className="space-y-6">{side}</aside> : null}
       </div>
     </section>
   );

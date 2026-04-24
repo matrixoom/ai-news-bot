@@ -19,7 +19,10 @@ class FakeConfig:
 
 
 class SuccessNotifier:
+    sent_payloads = []
+
     def send(self, content, **kwargs):
+        type(self).sent_payloads.append({"content": content, "kwargs": kwargs})
         return True
 
 
@@ -45,6 +48,10 @@ class StubReportService:
         _ = module_ids
         return f"report-{language}-{snapshot.generated_at}"
 
+    def build_email_html(self, snapshot, module_ids=None, layout="newspaper"):
+        _ = (module_ids, layout)
+        return f"<p>html-{snapshot.generated_at}</p>"
+
 
 class Task08DocumentationTests(unittest.TestCase):
     def test_task08_main_doc_links_protocol_and_tests(self):
@@ -57,6 +64,9 @@ class Task08DocumentationTests(unittest.TestCase):
 
 
 class PushWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        SuccessNotifier.sent_payloads = []
+
     def test_report_service_builds_unified_markdown(self):
         snapshot = DashboardService().build_snapshot()
         report = PushReportService().build_markdown(snapshot)
@@ -118,6 +128,43 @@ class PushWorkflowTests(unittest.TestCase):
         self.assertIn("中性: 标准: -3.0% <= 最新乖离率 < 0.0%", html)
         self.assertIn("承压: 标准: 最新乖离率 < -3.0%", html)
 
+    def test_report_service_keeps_chart_tail_aligned_with_market_table(self):
+        service = PushReportService()
+        card = MarketCard(
+            key="csi300",
+            label="娌繁300",
+            close_value="3900",
+            ma20_value="3850",
+            signal="neutral",
+            status="live",
+            trade_date="2026-03-26",
+            deviation_pct="+1.3%",
+            source_label="akshare",
+            explanation="璇存槑",
+            chart_points=[
+                {
+                    "trade_date": "2026-03-24",
+                    "close_price": 3810.0,
+                    "ma20_price": 3790.0,
+                    "deviation_pct": 0.5,
+                },
+                {
+                    "trade_date": "2026-03-25",
+                    "close_price": 3825.0,
+                    "ma20_price": 3801.0,
+                    "deviation_pct": 0.6,
+                },
+            ],
+        )
+
+        trend = service._build_market_trend_summary(card)
+
+        self.assertEqual(trend["latest_label"], "3900.0")
+        self.assertEqual(trend["chart_points"][-1]["trade_date"], "2026-03-26")
+        self.assertEqual(trend["chart_points"][-1]["close_price"], 3900.0)
+        self.assertEqual(trend["chart_points"][-1]["ma20_price"], 3850.0)
+        self.assertEqual(trend["chart_points"][-1]["deviation_pct"], 1.3)
+
     def test_push_job_survives_partial_notifier_failure(self):
         result = run_push_job(
             config=FakeConfig(),
@@ -145,6 +192,25 @@ class PushWorkflowTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         self.assertEqual(dashboard_service.force_refresh_calls, [True])
+
+    def test_push_job_uses_html_report_for_email_delivery(self):
+        dashboard_service = RecordingDashboardService()
+
+        result = run_push_job(
+            config=FakeConfig(),
+            dashboard_service=dashboard_service,
+            report_service=StubReportService(),
+            notifier_specs=[
+                ("email", SuccessNotifier),
+            ],
+        )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(SuccessNotifier.sent_payloads), 1)
+        self.assertEqual(
+            SuccessNotifier.sent_payloads[0]["kwargs"]["html_content"],
+            "<p>html-2026-03-24T08:00:00Z</p>",
+        )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import type { MacroComparisonSection } from "../model/macro-module.types";
+import { MacroComparisonChart } from "./macro-comparison-chart";
 
 type MacroComparisonCardProps = {
   section: MacroComparisonSection;
@@ -11,7 +12,7 @@ export function MacroComparisonCard({ section }: MacroComparisonCardProps) {
     <article className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Comparison</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Pair study</p>
           <h3 className="mt-2 text-xl font-semibold text-slate-950">{section.title}</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">{section.description}</p>
         </div>
@@ -25,6 +26,10 @@ export function MacroComparisonCard({ section }: MacroComparisonCardProps) {
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         <IndicatorTile indicator={section.primary} tone="primary" />
         {section.secondary ? <IndicatorTile indicator={section.secondary} tone="secondary" /> : null}
+      </div>
+
+      <div className="mt-5">
+        <MacroComparisonChart section={section} />
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
