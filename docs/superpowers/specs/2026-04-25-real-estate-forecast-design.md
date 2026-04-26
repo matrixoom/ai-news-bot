@@ -170,19 +170,21 @@
 
 字段：
 
-- `city_code TEXT NOT NULL`
-- `city_name TEXT NOT NULL`
-- `city_group TEXT NOT NULL`
-- `property_type TEXT NOT NULL`
-- `period_end TEXT NOT NULL`
-- `period_label TEXT NOT NULL`
-- `mom_pct REAL`
-- `yoy_pct REAL`
-- `fixed_base_index REAL`
-- `source_url TEXT NOT NULL`
-- `provider_key TEXT NOT NULL`
-- `released_at TEXT NOT NULL`
-- `last_seen_at TEXT NOT NULL`
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `city_code` | `TEXT NOT NULL` | 城市编码，使用稳定英文或拼音标识，例如 `beijing`、`hangzhou`。 |
+| `city_name` | `TEXT NOT NULL` | 城市中文名称，用于前端展示和人工核对。 |
+| `city_group` | `TEXT NOT NULL` | 城市分组，取值包括 `national`、`tier1`、`new_tier1_sample`、`city`。 |
+| `property_type` | `TEXT NOT NULL` | 房屋类型，区分 `new_home` 新建商品住宅和 `resale_home` 二手住宅。 |
+| `period_end` | `TEXT NOT NULL` | 数据期末日期，使用 ISO 日期格式，月度数据取当月最后一天。 |
+| `period_label` | `TEXT NOT NULL` | 展示用周期标签，例如 `2026-03`。 |
+| `mom_pct` | `REAL` | 环比涨跌幅，单位为百分比；源数据缺失时允许为空。 |
+| `yoy_pct` | `REAL` | 同比涨跌幅，单位为百分比；源数据缺失时允许为空。 |
+| `fixed_base_index` | `REAL` | 定基价格指数，可取得时保存；不可取得时为空。 |
+| `source_url` | `TEXT NOT NULL` | 数据来源页面或文件地址，用于追踪口径。 |
+| `provider_key` | `TEXT NOT NULL` | 数据提供方标识，例如 `official-macro` 或 `sample-macro`。 |
+| `released_at` | `TEXT NOT NULL` | 数据发布日期或来源公布日期。 |
+| `last_seen_at` | `TEXT NOT NULL` | 本地最后一次同步到该记录的时间。 |
 
 主键：
 
@@ -199,16 +201,18 @@
 
 字段：
 
-- `factor_code TEXT NOT NULL`
-- `period_end TEXT NOT NULL`
-- `period_label TEXT NOT NULL`
-- `value REAL NOT NULL`
-- `unit TEXT NOT NULL`
-- `frequency TEXT NOT NULL`
-- `source_url TEXT NOT NULL`
-- `provider_key TEXT NOT NULL`
-- `released_at TEXT NOT NULL`
-- `last_seen_at TEXT NOT NULL`
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `factor_code` | `TEXT NOT NULL` | 因子编码，例如 `gdp_nominal`、`gdp_real`、`gdp_gap`、`ppi`、`household_new_loans`。 |
+| `period_end` | `TEXT NOT NULL` | 因子所属期末日期，按因子频率取月末、季末或年末。 |
+| `period_label` | `TEXT NOT NULL` | 展示用周期标签，例如 `2026-Q1` 或 `2026-03`。 |
+| `value` | `REAL NOT NULL` | 因子数值，统一存储为已标准化后的数值。 |
+| `unit` | `TEXT NOT NULL` | 因子单位，例如 `%`、`tn yuan`、`index`。 |
+| `frequency` | `TEXT NOT NULL` | 发布频率，取值包括 `monthly`、`quarterly`、`yearly`。 |
+| `source_url` | `TEXT NOT NULL` | 因子来源页面或文件地址。 |
+| `provider_key` | `TEXT NOT NULL` | 数据提供方标识。 |
+| `released_at` | `TEXT NOT NULL` | 因子发布日期或来源公布日期。 |
+| `last_seen_at` | `TEXT NOT NULL` | 本地最后一次同步到该因子的时间。 |
 
 主键：
 
@@ -220,16 +224,18 @@
 
 字段：
 
-- `run_id TEXT NOT NULL`
-- `target_scope TEXT NOT NULL`
-- `target_name TEXT NOT NULL`
-- `horizon TEXT NOT NULL`
-- `direction TEXT NOT NULL`
-- `score REAL NOT NULL`
-- `confidence TEXT NOT NULL`
-- `summary TEXT NOT NULL`
-- `model_version TEXT NOT NULL`
-- `generated_at TEXT NOT NULL`
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `run_id` | `TEXT NOT NULL` | 单次预测运行 ID，用于关联同一批预测结果、贡献项和相关分析。 |
+| `target_scope` | `TEXT NOT NULL` | 预测对象范围，例如 `national`、`tier1`、`new_tier1_sample` 或具体城市编码。 |
+| `target_name` | `TEXT NOT NULL` | 预测对象中文名称，例如 `全国整体`、`一线城市`、`杭州`。 |
+| `horizon` | `TEXT NOT NULL` | 预测周期，取值包括 `3m`、`1y`、`5y`、`10y`、`long_term`。 |
+| `direction` | `TEXT NOT NULL` | 趋势方向，取值为 `up`、`flat`、`down`。 |
+| `score` | `REAL NOT NULL` | 标准化趋势分数，建议范围为 `-100` 到 `100`。 |
+| `confidence` | `TEXT NOT NULL` | 置信度，取值为 `low`、`medium`、`high`。 |
+| `summary` | `TEXT NOT NULL` | 中文预测解释，说明主要驱动因素和风险。 |
+| `model_version` | `TEXT NOT NULL` | 模型版本号，例如 `real-estate-trend-v1`。 |
+| `generated_at` | `TEXT NOT NULL` | 本次预测生成时间，使用 UTC ISO 时间。 |
 
 主键：
 
@@ -241,14 +247,16 @@
 
 字段：
 
-- `run_id TEXT NOT NULL`
-- `target_scope TEXT NOT NULL`
-- `horizon TEXT NOT NULL`
-- `factor_code TEXT NOT NULL`
-- `factor_label TEXT NOT NULL`
-- `contribution REAL NOT NULL`
-- `direction TEXT NOT NULL`
-- `detail TEXT NOT NULL`
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `run_id` | `TEXT NOT NULL` | 单次预测运行 ID，与 `real_estate_forecast_runs.run_id` 对应。 |
+| `target_scope` | `TEXT NOT NULL` | 预测对象范围，与预测结果表保持一致。 |
+| `horizon` | `TEXT NOT NULL` | 预测周期，与预测结果表保持一致。 |
+| `factor_code` | `TEXT NOT NULL` | 因子编码，用于关联因子历史和前端图表。 |
+| `factor_label` | `TEXT NOT NULL` | 因子中文名称，例如 `居民新增贷款`、`收入预期`。 |
+| `contribution` | `REAL NOT NULL` | 因子对趋势分数的贡献值，正数支持上涨，负数支持下跌。 |
+| `direction` | `TEXT NOT NULL` | 因子贡献方向，取值为 `positive`、`neutral`、`negative`。 |
+| `detail` | `TEXT NOT NULL` | 中文解释，说明该因子为何产生当前贡献。 |
 
 主键：
 
@@ -260,15 +268,17 @@
 
 字段：
 
-- `target_scope TEXT NOT NULL`
-- `property_type TEXT NOT NULL`
-- `factor_code TEXT NOT NULL`
-- `lag_months INTEGER NOT NULL`
-- `correlation REAL`
-- `sample_size INTEGER NOT NULL`
-- `window_start TEXT NOT NULL`
-- `window_end TEXT NOT NULL`
-- `computed_at TEXT NOT NULL`
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `target_scope` | `TEXT NOT NULL` | 分析对象范围，例如全国、一线城市、新一线样本或具体城市。 |
+| `property_type` | `TEXT NOT NULL` | 房价目标类型，区分新房、二手房或综合口径。 |
+| `factor_code` | `TEXT NOT NULL` | 被分析的宏观因子编码。 |
+| `lag_months` | `INTEGER NOT NULL` | 滞后月数，用于衡量因子领先或滞后房价变化的关系。 |
+| `correlation` | `REAL` | 皮尔逊相关系数；样本不足或零方差时允许为空。 |
+| `sample_size` | `INTEGER NOT NULL` | 参与计算的有效样本数量。 |
+| `window_start` | `TEXT NOT NULL` | 相关分析窗口开始日期。 |
+| `window_end` | `TEXT NOT NULL` | 相关分析窗口结束日期。 |
+| `computed_at` | `TEXT NOT NULL` | 相关分析计算时间。 |
 
 主键：
 
@@ -414,4 +424,3 @@
 - 全国整体等权聚合不等同于官方全国房价指数，页面应标注为模型聚合口径。
 - 5 年、10 年和长期趋势应持续表达为结构判断，避免输出精确涨跌幅。
 - 后续可引入库存、土地成交、人口流入、租金收益率和房价收入比，增强长期模型解释力。
-
