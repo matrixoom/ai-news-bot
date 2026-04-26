@@ -2,10 +2,11 @@
 
 ## 1. 需求理解
 
-本次变更围绕 `Macro` 模块新增一个独立标签页：
+本次变更围绕 `Macro` 模块做两步调整：
 
-- 新增 Macro 一级标签页 **房价研判**，内部 key 使用 `housing_outlook`。
-- `Compare` 视图属于历史功能，本设计不再包含删除或精简现有 Macro 标签页的工作；后续如需精简 Macro 旧视图，单独设计和实施。
+- 先删除现有 Macro 中 `Compare` 之外的旧标签页和对应前后端逻辑。旧标签页包括 `Overview`、`Indicators`、`Sources`。
+- 保留 `Compare` 作为唯一历史视图，确保现有宏观 pair 对比卡片、相关分析和来源链接继续可用。
+- 在清理后的 Macro 模块下新增一级标签页 **房价研判**，内部 key 使用 `housing_outlook`。
 - 房价研判以可靠历史数据、指标图表和数据变化为中心，预测结论只是对数据变化的批注层，优先级低于数据呈现本身。
 - 模块目标是观察房价涨跌趋势和影响因子变化，而不是预测成交、投资或库存本身。
 
@@ -34,6 +35,7 @@
 
 ### 2.1 设计目标
 
+- 清理旧 Macro 标签页，只保留 `Compare` 历史视图和新增的 `房价研判` 视图。
 - 将房价研判作为 `Macro` 下的独立一级 tab 接入，复用现有数据持久化、服务聚合、前端图表和接口契约模式。
 - 所有房价目标、宏观因子、趋势批注、关联分析结果持久化到本地 SQLite。
 - 优先展示来源可靠的历史数据、指标更新状态、趋势图表、数据表和因子关联。
@@ -47,7 +49,7 @@
 - 第一版不做机器学习黑箱模型训练。
 - 第一版不引入远程数据库或外部任务队列。
 - 第一版不修改 `.third_part_newsnow/`。
-- 第一版不删除、归档或重构 Macro 既有 `Overview`、`Compare`、`Indicators`、`Sources` 标签页。
+- 第一版不删除 `Compare` 视图中仍在使用的宏观 pair 对比、相关分析和来源链接能力。
 
 ## 3. 影响分析
 
@@ -56,14 +58,14 @@
 - `src/domain/`：新增房价研判领域模型。
 - `src/services/`：新增 SQLite store 与研判 service。
 - `src/providers/`：扩展宏观 provider 对房价和收入预期代理指标的抓取或样例 fallback。
-- `src/app/web/frontend_payload.py`：在 Macro payload 中追加房价研判区块。
+- `src/app/web/frontend_payload.py`：在 Macro payload 中追加房价研判区块，并移除只服务旧 `Overview`、`Indicators`、`Sources` 视图的派生逻辑。
 - `src/services/dashboard_service.py`：Macro module 聚合时接入房价研判 service。
 
 ### 3.2 前端影响范围
 
-- `frontend/src/pages/macro-page.tsx`：新增 `housing_outlook` 一级 tab，不改变现有 tab 的历史行为。
-- `frontend/src/features/macro/model/*`：扩展类型与 adapter，适配房价研判 payload。
-- `frontend/src/features/macro/components/*`：新增房价研判组件，保留现有 Macro 组件。
+- `frontend/src/pages/macro-page.tsx`：删除 `Overview`、`Indicators`、`Sources` 分支，保留 `Compare`，新增 `housing_outlook` 一级 tab。
+- `frontend/src/features/macro/model/*`：扩展类型与 adapter，适配房价研判 payload，并移除仅服务旧标签页的派生模型。
+- `frontend/src/features/macro/components/*`：新增房价研判组件；不再使用的旧标签页专用组件按项目规则归档到 `to_delete/`。
 - `frontend/src/features/macro/__tests__/macro-page.test.tsx`：更新页面行为测试。
 
 ### 3.3 文档与测试影响
@@ -368,7 +370,8 @@
 
 兼容策略：
 
-- 不删除既有 `module.details[*].section` 结构。
+- 保留 `Compare` 依赖的 `module.details[*].section` 结构。
+- 删除只服务旧 `Overview`、`Indicators`、`Sources` 标签页的前端 adapter 派生字段；后端 payload 不再额外构造这些旧视图专用结构。
 - 前端 adapter 对 `housing_outlook` 缺失时返回空状态。
 - 错误时 Macro 模块整体仍可返回现有对比图；房价研判 tab 单独显示 `unavailable`。
 - `housing_outlook.history_groups` 是房价研判的核心数据结构，必须包含可绘图序列、表格行、来源状态和更新频率。
@@ -385,14 +388,31 @@
 
 ### 8.1 页面结构
 
-`/macro` 页面保留现有历史标签页，并新增一级 tab：
+`/macro` 页面先清理旧标签页，再新增房价研判：
 
 - `房价研判`：新增 tab，内部 key 为 `housing_outlook`。
-- `Overview`、`Compare`、`Indicators`、`Sources` 等既有 tab 不在本设计中删除或重构。
+- `Compare`：保留的历史视图，继续展示现有宏观 pair 对比卡片。
+- `Overview`、`Indicators`、`Sources`：删除入口、路由状态、渲染分支、测试断言和仅服务这些标签页的派生逻辑。
+- 最终 Macro 一级 tab 只包含 `Compare` 和 `房价研判`。
 - 页面标题仍为 `Macro`，进入 `房价研判` tab 后展示数据中心化的房价研判工作台。
 - `房价研判` tab 内默认展示子 tab `历史数据`。
 
-### 8.2 房价研判子 Tab
+### 8.2 旧标签页删除规则
+
+删除范围：
+
+- 删除 `Overview`、`Indicators`、`Sources` 的 tab 配置、URL tab 解析分支和页面渲染分支。
+- 删除仅服务 `Indicators` 原始序列页和 `Sources` 独立来源页的组件、类型、adapter 派生字段和测试。
+- 后端删除仅为旧标签页准备的派生聚合逻辑；保留 `Compare` 仍使用的 pair payload、source links 和 correlation 数据。
+- 若需要移除文件，按项目规则先移动到 `to_delete/`，不直接物理删除。
+
+保留范围：
+
+- 保留 `Compare` 视图所需的 `MacroComparisonCard`、pair analytics、relative performance、spread monitor、source links。
+- 保留 `/api/frontend/modules/macro` 作为唯一 Macro 模块接口。
+- 保留旧接口中 `Compare` 仍消费的稳定字段，避免破坏现有对比图。
+
+### 8.3 房价研判子 Tab
 
 组件建议：
 
@@ -421,7 +441,7 @@
 - 趋势批注页周期选择使用分段控制：3 个月、1 年、5 年、10 年、长期。
 - 图表必须支持同一数据随时间持续追加后的自然增长，横轴使用真实周期，不使用固定模拟标签。
 
-### 8.3 历史数据子 Tab 细节
+### 8.4 历史数据子 Tab 细节
 
 `历史数据` 是房价研判的默认入口，必须优先满足数据阅读和图表分析：
 
@@ -432,7 +452,7 @@
 - 图表上的趋势批注只作为标记或说明出现，例如某周期旁的方向标签、信号强弱或风险提示。
 - 若某指标数据缺失，图表保留该指标卡位并展示缺失原因，不用预测结果替代原始数据。
 
-### 8.4 趋势批注呈现原则
+### 8.5 趋势批注呈现原则
 
 趋势批注是辅助层：
 
@@ -467,6 +487,8 @@
 
 ### 10.2 前端测试
 
+- Macro 页面不再显示 `Overview`、`Indicators`、`Sources` 标签。
+- 访问未知或已删除 tab 参数时回退到 `Compare`，不进入空白页面。
 - Macro 页面显示 `房价研判` 一级 tab。
 - 现有 `Compare` 内容仍显示现有 pair 卡片。
 - 房价研判默认进入 `历史数据` 子 tab。
@@ -477,11 +499,12 @@
 
 ### 10.3 回归检查清单
 
-1. 原功能验证点：现有宏观 pair 对比卡片、相关分析图、source links 和既有 Macro tabs 仍可用。
+1. 原功能验证点：现有 `Compare` 宏观 pair 对比卡片、相关分析图、source links 仍可用。
 2. 新功能验证点：`房价研判` tab、历史数据图表、历史数据表、趋势批注、因子贡献图、关联分析图可渲染。
-3. 边界情况：样本不足、单城市缺数据、某因子缺失、长期批注冲突信号。
-4. 异常处理：provider 失败、SQLite 写入失败、API 返回 unavailable。
-5. 配置兼容性：未开启实时数据时使用 sample fallback；旧 Macro payload 字段保持兼容。
+3. 删除验证点：`Overview`、`Indicators`、`Sources` 不再出现在 tab bar、URL 状态、测试 mock 和页面渲染分支中。
+4. 边界情况：样本不足、单城市缺数据、某因子缺失、长期批注冲突信号。
+5. 异常处理：provider 失败、SQLite 写入失败、API 返回 unavailable。
+6. 配置兼容性：未开启实时数据时使用 sample fallback；旧 Macro payload 中 `Compare` 消费字段保持兼容。
 
 ## 11. 风险与后续建议
 
