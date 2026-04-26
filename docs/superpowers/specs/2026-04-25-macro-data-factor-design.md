@@ -8,8 +8,9 @@
 
 - 先删除现有 Macro 中全部旧标签页和对应前后端逻辑。旧标签页包括 `Overview`、`Compare`、`Indicators`、`Sources`。
 - `Compare` 旧实现也一起移除；后续若需要宏观对比能力，单独重新设计和实现。
-- 清理后的 Macro 页面保留两个顶层子模块：**数据因子** 与 **数据模型**。
+- 清理后的 Macro 页面保留三个顶层子模块：**数据因子**、**数据源矩阵** 与 **数据模型**。
 - 本次第一阶段只重点设计和实现 **数据因子**；**数据模型** 只预留一个标签页入口，不实现房价研判、经济周期等模型逻辑。
+- **数据源矩阵** 作为 Macro 下的一级子标签，用于集中展示每个指标的数据来源可用性、接入优先级、可靠性、覆盖范围和验证状态。
 - 房价研判不再作为 Macro 下的直接子标签；它是未来构建在数据因子之上的业务模型，应放入 `数据模型` 模块内。
 - 第一版专注于可靠数据获取、SQLite 持久化、数据校验、来源追踪、图表呈现和数据表展示。
 
@@ -32,8 +33,9 @@
 
 ### 2.1 设计目标
 
-- 清理旧 Macro 标签页，建立 `数据因子` 与 `数据模型` 两个新的顶层子模块。
+- 清理旧 Macro 标签页，建立 `数据因子`、`数据源矩阵` 与 `数据模型` 三个新的顶层子模块。
 - 将 `数据因子` 作为第一阶段核心交付，承载房价、GDP、PPI、居民信贷、居民活期存款等历史数据。
+- 将 `数据源矩阵` 作为数据接入的管理视图，明确每个指标的官方源、开源备选源、候选源、不可用原因和最近验证时间。
 - 每个指标作为 `数据因子` 下的独立子标签或详情页，支持独立查看趋势图、数据表、来源、口径和质量状态。
 - 所有因子定义、历史观测值、来源状态、同步状态持久化到本地 SQLite。
 - 数据结构要支持后续持续追加历史数据，也支持新增数据因子时低成本扩展。
@@ -56,16 +58,16 @@
 
 ### 3.1 后端影响范围
 
-- `src/domain/`：新增或调整 Macro 数据因子领域模型，包括因子定义、观测值、来源、质量状态。
+- `src/domain/`：新增或调整 Macro 数据因子领域模型，包括因子定义、观测值、来源矩阵、来源质量状态。
 - `src/services/`：新增 SQLite store 与数据因子 service。
 - `src/providers/`：扩展宏观 provider 对房价、居民贷款增速、居民活期存款增速等指标的抓取或 sample fallback。
-- `src/app/web/frontend_payload.py`：以 `data_factors` 与 `data_models` payload 作为 Macro 模块核心响应，并移除只服务旧 `Overview`、`Compare`、`Indicators`、`Sources` 视图的派生逻辑。
+- `src/app/web/frontend_payload.py`：以 `data_factors`、`source_matrix` 与 `data_models` payload 作为 Macro 模块核心响应，并移除只服务旧 `Overview`、`Compare`、`Indicators`、`Sources` 视图的派生逻辑。
 - `src/services/dashboard_service.py`：Macro module 聚合时接入数据因子 service。
 
 ### 3.2 前端影响范围
 
-- `frontend/src/pages/macro-page.tsx`：删除 `Overview`、`Compare`、`Indicators`、`Sources` 分支，新增 `数据因子` 与 `数据模型` 子模块。
-- `frontend/src/features/macro/model/*`：扩展类型与 adapter，适配 `data_factors` 与 `data_models` payload，并移除仅服务旧标签页的派生模型。
+- `frontend/src/pages/macro-page.tsx`：删除 `Overview`、`Compare`、`Indicators`、`Sources` 分支，新增 `数据因子`、`数据源矩阵` 与 `数据模型` 子模块。
+- `frontend/src/features/macro/model/*`：扩展类型与 adapter，适配 `data_factors`、`source_matrix` 与 `data_models` payload，并移除仅服务旧标签页的派生模型。
 - `frontend/src/features/macro/components/*`：新增数据因子组件；不再使用的旧标签页专用组件按项目规则归档到 `to_delete/`。
 - `frontend/src/features/macro/__tests__/macro-page.test.tsx`：更新页面行为测试。
 
@@ -80,9 +82,10 @@
 
 ### 4.1 Macro 顶层结构
 
-`/macro` 页面第一版只保留两个新子模块：
+`/macro` 页面第一版只保留三个新子模块：
 
 - **数据因子**：默认入口，负责展示所有可持续更新的宏观与房价历史数据。
+- **数据源矩阵**：一级子标签，负责展示每个指标的数据来源可用性、可靠性、覆盖范围、接入优先级和最近验证状态。
 - **数据模型**：预留入口，暂不实现具体模型，只展示空状态或建设中状态。
 
 旧标签页删除范围：
@@ -114,7 +117,39 @@
 - `居民贷款增速`：住户贷款余额同比增速。
 - `居民活期存款增速`：住户或个人活期存款同比增速；若稳定来源不足，状态标为 `degraded` 或 `unavailable`。
 
-### 4.3 数据模型预留结构
+### 4.3 数据源矩阵结构
+
+`数据源矩阵` 是 Macro 下独立于 `数据因子` 的一级子标签。它回答的问题不是“这个指标走势如何”，而是“这个指标应该从哪里取、当前能否稳定取、是否可信、缺什么”。
+
+页面结构建议：
+
+- 顶部汇总卡片：指标总数、官方主源数量、可稳定接入数量、降级来源数量、不可用来源数量、最近验证时间。
+- 主表格：一行表示一个“指标 + 数据来源”组合。
+- 筛选器：按指标分类、来源类型、可靠性、可用状态、接入优先级、最近验证时间过滤。
+- 行详情：展示来源 URL、字段映射、覆盖范围、频率、口径说明、限制说明、fallback 策略和验证记录。
+- 操作入口：第一版只展示状态，不做在线编辑；后续可增加“重新验证”“标记为主源”“补充字段映射”等运维动作。
+
+矩阵状态建议：
+
+- `live`：已接入且最近验证通过。
+- `degraded`：可接入但存在口径、频率、字段或稳定性问题。
+- `candidate`：可作为候选源，尚未完成稳定验证。
+- `unavailable`：当前无法稳定获取或缺少可靠公开来源。
+
+第一批矩阵项建议：
+
+| 指标 | 主源 | 备选源 | 初始状态 | 说明 |
+| --- | --- | --- | --- | --- |
+| 房价数据 | 国家统计局 70 城商品住宅销售价格指数 | AKShare / 东方财富房价接口作为抓取参考 | `candidate` | 官方源最可信，但需要解析月度发布页面；开源源可用于样例和字段对齐。 |
+| 名义 GDP | 国家统计局 GDP 数据 | AKShare、DBnomics、世界银行作为参考 | `candidate` | 优先官方季度数据，国际源只用于交叉校验。 |
+| 实际 GDP | 国家统计局 GDP 实际增速 | AKShare、DBnomics、世界银行作为参考 | `candidate` | 需明确使用实际增速还是不变价金额。 |
+| GDP 差值 | 本地派生计算 | 无 | `candidate` | 由名义 GDP 增速减实际 GDP 增速得到，依赖上游两个指标质量。 |
+| 企业 PPI | 国家统计局 PPI 数据 | AKShare PPI 接口 | `candidate` | 官方源优先，AKShare 适合快速验证历史序列。 |
+| 居民新增贷款 | 人民银行金融统计数据报告 | 手工样例或后续 Provider | `candidate` | 需解析月度报告中的住户部门贷款新增额。 |
+| 居民贷款增速 | 人民银行金融机构贷款投向统计报告 | 手工样例或后续 Provider | `candidate` | 若只有季度口径，数据因子页必须标注频率。 |
+| 居民活期存款增速 | 人民银行相关统计口径待确认 | 无稳定备选 | `degraded` | 该指标公开连续序列不稳定，保留矩阵项和表结构，先不硬造数据。 |
+
+### 4.4 数据模型预留结构
 
 `数据模型` 本次只预留标签页，不实现业务模型。预留说明：
 
@@ -425,7 +460,53 @@
 
 - `(source_key)`
 
-### 7.9 `macro_factor_sync_runs`
+### 7.9 `macro_source_availability_matrix`
+
+用途：存储“指标 + 数据来源”的可用性矩阵，支撑 Macro 下的 `数据源矩阵` 一级子标签。
+
+字段：
+
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `matrix_id` | `TEXT NOT NULL` | 矩阵记录唯一标识，建议由 `factor_code`、`source_key` 和 `source_role` 拼接生成。 |
+| `factor_code` | `TEXT NOT NULL` | 因子编码，关联 `macro_factor_definitions.factor_code`。 |
+| `factor_label` | `TEXT NOT NULL` | 因子中文名称，用于矩阵表格直接展示。 |
+| `source_key` | `TEXT NOT NULL` | 数据来源标识，关联 `macro_data_sources.source_key`。 |
+| `source_label` | `TEXT NOT NULL` | 数据来源中文名称，例如 `国家统计局 70 城房价`。 |
+| `source_role` | `TEXT NOT NULL` | 来源角色，取值为 `primary` 主源、`fallback` 备选源、`reference` 交叉校验源、`manual_sample` 手工样例源。 |
+| `source_type` | `TEXT NOT NULL` | 来源类型，取值为 `official`、`open_source`、`commercial`、`manual`、`derived`。 |
+| `availability_status` | `TEXT NOT NULL` | 可用状态，取值为 `live`、`degraded`、`candidate`、`unavailable`。 |
+| `reliability_level` | `TEXT NOT NULL` | 可靠性等级，取值为 `official`、`derived`、`community`、`sample`。 |
+| `coverage_scope` | `TEXT NOT NULL` | 覆盖范围说明，例如全国、70 城、一线城市、季度 GDP、月度 PPI。 |
+| `coverage_start` | `TEXT NOT NULL` | 可用数据起始周期；未知时为空字符串。 |
+| `coverage_end` | `TEXT NOT NULL` | 可用数据结束周期；持续更新时为空字符串。 |
+| `frequency` | `TEXT NOT NULL` | 数据频率，例如 `monthly`、`quarterly`、`yearly`。 |
+| `access_method` | `TEXT NOT NULL` | 获取方式，例如 `official_page_parse`、`akshare_api`、`manual_seed`、`derived_calculation`。 |
+| `field_mapping_status` | `TEXT NOT NULL` | 字段映射状态，取值为 `ready`、`partial`、`pending`、`blocked`。 |
+| `parser_status` | `TEXT NOT NULL` | 解析器状态，取值为 `ready`、`partial`、`pending`、`failed`、`not_needed`。 |
+| `license_note` | `TEXT NOT NULL` | 数据许可、引用或使用限制说明；未知时写明待确认。 |
+| `priority_order` | `INTEGER NOT NULL` | 同一指标下的来源优先级，数值越小越优先。 |
+| `warning_message` | `TEXT NOT NULL` | 降级、不可用或口径限制说明；正常时为空字符串。 |
+| `last_verified_at` | `TEXT NOT NULL` | 最近一次人工或自动验证时间。 |
+| `created_at` | `TEXT NOT NULL` | 本地创建时间。 |
+| `updated_at` | `TEXT NOT NULL` | 本地更新时间。 |
+
+主键：
+
+- `(matrix_id)`
+
+唯一约束：
+
+- `(factor_code, source_key, source_role)`
+
+索引：
+
+- `(factor_code, priority_order)`
+- `(availability_status, reliability_level)`
+- `(source_role, priority_order)`
+- `(last_verified_at)`
+
+### 7.10 `macro_factor_sync_runs`
 
 用途：记录每次数据同步结果，便于定位数据是否正确、是否更新、是否失败。
 
@@ -485,6 +566,19 @@
     "table_rows": [],
     "sources": []
   },
+  "source_matrix": {
+    "status": "candidate",
+    "label": "数据源矩阵",
+    "summary": {
+      "factor_count": 0,
+      "source_count": 0,
+      "official_primary_count": 0,
+      "degraded_count": 0,
+      "unavailable_count": 0,
+      "last_verified_at": ""
+    },
+    "rows": []
+  },
   "data_models": {
     "status": "reserved",
     "label": "数据模型",
@@ -495,11 +589,13 @@
 
 兼容策略：
 
-- 删除旧 `module.details[*].section` 对比图结构；第一版 Macro payload 以 `data_factors` 与 `data_models` 为核心。
+- 删除旧 `module.details[*].section` 对比图结构；第一版 Macro payload 以 `data_factors`、`source_matrix` 与 `data_models` 为核心。
 - 删除只服务旧 `Overview`、`Compare`、`Indicators`、`Sources` 标签页的前端 adapter 派生字段；后端 payload 不再额外构造这些旧视图专用结构。
 - 前端 adapter 对 `data_factors` 缺失时返回空状态。
+- 前端 adapter 对 `source_matrix` 缺失时返回数据源矩阵 empty 状态，不影响数据因子页面加载。
 - 错误时 Macro 模块返回数据因子的 `unavailable` 状态和友好错误说明。
 - `data_factors.factors` 描述指标定义与展示配置；`series` 与 `table_rows` 由 Service 从各类事实表聚合生成，必须包含可绘图序列、表格行、来源状态和更新频率。
+- `source_matrix.rows` 用于数据源矩阵表格，不直接承载历史时间序列。
 - `data_models` 第一版只作为预留入口，默认 `status` 为 `reserved`，不返回模型计算结果。
 - 第一版不返回 `annotations`、`direction`、`score`、`confidence` 等预测判断字段。
 
@@ -517,9 +613,11 @@
 `/macro` 页面先清理旧标签页，再建立新结构：
 
 - `数据因子`：默认子模块，内部 key 为 `data_factors`。
+- `数据源矩阵`：一级子模块，内部 key 为 `source_matrix`。
 - `数据模型`：预留子模块，内部 key 为 `data_models`。
 - `Overview`、`Compare`、`Indicators`、`Sources`：删除入口、路由状态、渲染分支、测试断言和仅服务这些标签页的派生逻辑。
 - 页面标题仍为 `Macro`，默认进入 `数据因子`。
+- `数据源矩阵` 展示指标数据来源的可用性，不展示历史走势图。
 - `数据模型` 只展示预留态，不展示房价研判或经济周期模型的实际计算结果。
 
 ### 9.2 旧标签页删除规则
@@ -542,7 +640,7 @@
 组件建议：
 
 - `MacroWorkspace`
-  顶层区块，处理 `数据因子` 与 `数据模型` 的子模块切换。
+  顶层区块，处理 `数据因子`、`数据源矩阵` 与 `数据模型` 的子模块切换。
 - `MacroDataFactorsPanel`
   数据因子主面板，处理指标子标签、empty/loading/error。
 - `MacroFactorTabs`
@@ -555,6 +653,10 @@
   展示历史观测值明细，支持按周期、区域、度量、来源状态过滤。
 - `MacroFactorSourcePanel`
   展示来源、口径、同步状态、fallback 状态和最近更新时间。
+- `MacroSourceMatrixPanel`
+  数据源矩阵页，展示来源可用性汇总、筛选器、矩阵表格和行详情。
+- `MacroSourceMatrixTable`
+  展示指标、主源、备选源、可靠性、覆盖范围、接入状态、字段映射状态、解析器状态和最近验证时间。
 - `MacroDataModelsReservedPanel`
   数据模型预留页，展示建设中状态和未来模型入口占位。
 
@@ -563,6 +665,8 @@
 - Macro 默认进入 `数据因子`。
 - 数据因子默认进入 `房价数据` 指标子标签。
 - 房价数据指标内默认范围为全国整体，默认展示新房和二手房同比。
+- 选择 `数据源矩阵` 后，默认展示全部指标来源；用户可按指标分类、来源角色、可用状态和可靠性筛选。
+- 点击矩阵行后展示来源详情，包括字段映射、覆盖范围、解析方式、口径限制、fallback 策略和最近验证记录。
 - 城市范围选择使用分段控制或下拉：全国、一线、新一线、单城市。
 - 指标子标签使用横向 tabs 或左侧列表，便于后续新增因子。
 - 单个指标内的度量选择使用分段控制或复选列表，例如环比、同比、定基指数。
@@ -579,7 +683,17 @@
 - 图表可展示数据质量标记，例如缺失、sample、degraded、口径变化，不展示涨跌方向判断。
 - 若某指标数据缺失，图表保留该指标卡位并展示缺失原因，不用预测结果替代原始数据。
 
-### 9.5 数据模型预留页
+### 9.5 数据源矩阵页细节
+
+`数据源矩阵` 是数据接入前的验收与管理入口：
+
+- 顶部显示矩阵摘要：指标数、来源数、官方主源数、可稳定接入数、降级数、不可用数、最近验证时间。
+- 表格列至少包含指标、指标分类、来源名称、来源角色、来源类型、可用状态、可靠性、覆盖范围、频率、获取方式、字段映射状态、解析器状态、优先级、最近验证时间。
+- 表格支持按指标分类、来源角色、来源类型、可用状态、可靠性和最近验证时间过滤。
+- `degraded` 和 `unavailable` 行必须展示明确原因，不能只显示状态标签。
+- 第一版不提供在线编辑能力；矩阵数据通过后端 seed、迁移或配置维护。
+
+### 9.6 数据模型预留页
 
 `数据模型` 页第一版只做预留：
 
@@ -588,7 +702,7 @@
 - 不展示任何模型结果、趋势批注、预测周期、评分或置信度。
 - 不放置会让用户误以为已有模型可用的操作按钮。
 
-### 9.6 第一版排除范围
+### 9.7 第一版排除范围
 
 第一版明确不做以下内容：
 
@@ -614,24 +728,28 @@
   - 因子定义 upsert 幂等。
   - 房价历史、GDP、PPI、居民信贷、居民存款各事实表 upsert 幂等。
   - 数据来源状态 upsert 幂等。
+  - 数据源矩阵 upsert 幂等，且同一指标下来源优先级可稳定排序。
   - 同步记录写入成功、部分失败和失败状态。
 - Service 测试：
   - 官方数据解析后数值、单位、周期和来源字段正确。
   - 样本不足时返回明确缺失说明。
-  - 房价多维度数据能映射为统一观测表。
+  - 房价多维度数据能写入 `macro_housing_price_history`，并由 Service 聚合为前端统一序列和表格行。
   - 居民活期存款增速不可用时返回 `degraded` 或 `unavailable`，不生成模拟结论。
 - API 测试：
-  - `/api/frontend/modules/macro` 包含 `data_factors` 与 `data_models`。
+  - `/api/frontend/modules/macro` 包含 `data_factors`、`source_matrix` 与 `data_models`。
   - `data_factors` 缺失或 unavailable 时返回数据因子 empty/error 状态，不依赖旧 `module.details`。
+  - `source_matrix` 缺失时返回数据源矩阵 empty 状态，不影响数据因子页。
   - `data_models` 返回 reserved 状态，不包含模型预测字段。
 
 ### 11.2 前端测试
 
 - Macro 页面不再显示 `Overview`、`Compare`、`Indicators`、`Sources` 标签。
 - 访问未知或已删除标签参数时回退到 `数据因子`，不进入空白页面。
-- Macro 页面显示 `数据因子` 与 `数据模型` 子标签。
+- Macro 页面显示 `数据因子`、`数据源矩阵` 与 `数据模型` 子标签。
 - 数据因子默认进入 `房价数据` 指标子标签。
 - 每个指标详情页显示可靠历史数据表和趋势图。
+- 数据源矩阵页显示来源可用性汇总、筛选器和矩阵表格。
+- 数据源矩阵中降级或不可用来源显示原因。
 - 数据模型页显示预留态，不显示预测判断类结果。
 - 页面不显示方向、分数、置信度等预测字段。
 - 空数据时显示数据因子 empty 状态。
@@ -640,7 +758,7 @@
 ### 11.3 回归检查清单
 
 1. 原功能验证点：Macro 页面入口、加载态、错误态仍可用。
-2. 新功能验证点：`数据因子` 子模块、指标子标签、趋势图、历史数据表、数据来源说明可渲染。
+2. 新功能验证点：`数据因子` 子模块、指标子标签、趋势图、历史数据表、数据来源说明、`数据源矩阵` 表格可渲染。
 3. 删除验证点：`Overview`、`Compare`、`Indicators`、`Sources` 不再出现在标签栏、URL 状态、测试 mock 和页面渲染分支中。
 4. 边界情况：样本不足、单城市缺数据、某因子缺失、来源降级、口径变化。
 5. 异常处理：provider 失败、SQLite 写入失败、API 返回 unavailable。
