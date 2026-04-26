@@ -216,6 +216,7 @@
 | `default_unit` | `TEXT NOT NULL` | 默认展示单位，例如 `%`、`亿元`、`index`。 |
 | `frequency` | `TEXT NOT NULL` | 默认发布频率，取值包括 `monthly`、`quarterly`、`yearly`、`mixed`。 |
 | `source_key` | `TEXT NOT NULL` | 默认数据来源标识，关联 `macro_data_sources.source_key`。 |
+| `storage_table` | `TEXT NOT NULL` | 因子历史数据所在事实表，例如 `macro_housing_price_history`、`macro_gdp_history`。 |
 | `calculation_method` | `TEXT NOT NULL` | 派生算法说明；原始指标填 `official_raw`。 |
 | `display_order` | `INTEGER NOT NULL` | 前端子标签排序值，数值越小越靠前。 |
 | `status` | `TEXT NOT NULL` | 因子当前状态，取值为 `live`、`degraded`、`sample`、`unavailable`。 |
@@ -231,45 +232,177 @@
 - `(category, display_order)`
 - `(status, display_order)`
 
-### 7.2 `macro_factor_observations`
+### 7.2 分表原则
 
-用途：存储全部数据因子的历史观测值。房价、GDP、PPI、居民贷款等都写入同一张宽口径观测表。
+数据因子的定义、展示顺序和来源状态统一放在 `macro_factor_definitions` 与 `macro_data_sources` 中；历史事实数据按数据类型分表存储。
+
+分表原因：
+
+- 不同数据的天然维度不同。房价有城市、城市组、新房/二手房、环比/同比；GDP 有名义/实际/差值和季度频率；PPI 与居民贷款又是另一套口径。
+- 分表能让字段含义更清晰，避免大量对某类指标无意义的空字段。
+- 分表便于后续独立扩展，例如房价增加面积段、GDP 增加现价/不变价金额、居民贷款增加短贷/中长贷。
+- Service 层负责把不同事实表聚合为前端统一的 `data_factors` payload，前端不直接感知数据库分表。
+
+### 7.3 `macro_housing_price_history`
+
+用途：存储城市级房价历史数据。
 
 字段：
 
 | 字段 | 类型 | 中文说明 |
 | --- | --- | --- |
-| `factor_code` | `TEXT NOT NULL` | 因子编码，关联 `macro_factor_definitions.factor_code`。 |
-| `dimension_key` | `TEXT NOT NULL` | 维度唯一键，例如 `national:new_home:yoy`、`beijing:resale_home:mom`、`china:all:value`。 |
-| `region_scope` | `TEXT NOT NULL` | 区域范围，例如 `national`、`tier1`、`new_tier1_sample`、`city`、`china`。 |
-| `region_code` | `TEXT NOT NULL` | 区域编码，例如 `national`、`beijing`、`hangzhou`、`china`。 |
-| `region_label` | `TEXT NOT NULL` | 区域中文名称，例如 `全国`、`北京`。 |
-| `sub_type` | `TEXT NOT NULL` | 子类型，例如 `new_home`、`resale_home`、`all`；无子类型时填 `all`。 |
-| `measure` | `TEXT NOT NULL` | 度量口径，例如 `value`、`mom_pct`、`yoy_pct`、`fixed_base_index`。 |
-| `period_end` | `TEXT NOT NULL` | 数据期末日期，使用 ISO 日期格式。 |
-| `period_label` | `TEXT NOT NULL` | 展示用周期标签，例如 `2026-03`、`2026-Q1`。 |
-| `value` | `REAL NOT NULL` | 因子数值，统一存储为已标准化后的数值。 |
-| `unit` | `TEXT NOT NULL` | 数值单位，例如 `%`、`亿元`、`index`。 |
-| `frequency` | `TEXT NOT NULL` | 当前记录频率，取值包括 `monthly`、`quarterly`、`yearly`。 |
+| `city_code` | `TEXT NOT NULL` | 城市编码，使用稳定英文或拼音标识，例如 `beijing`、`hangzhou`。 |
+| `city_name` | `TEXT NOT NULL` | 城市中文名称，用于前端展示和人工核对。 |
+| `city_group` | `TEXT NOT NULL` | 城市分组，取值包括 `national`、`tier1`、`new_tier1_sample`、`city`。 |
+| `property_type` | `TEXT NOT NULL` | 房屋类型，区分 `new_home` 新建商品住宅和 `resale_home` 二手住宅。 |
+| `measure` | `TEXT NOT NULL` | 度量口径，取值包括 `mom_pct`、`yoy_pct`、`fixed_base_index`。 |
+| `period_end` | `TEXT NOT NULL` | 数据期末日期，使用 ISO 日期格式，月度数据取当月最后一天。 |
+| `period_label` | `TEXT NOT NULL` | 展示用周期标签，例如 `2026-03`。 |
+| `value` | `REAL NOT NULL` | 房价指标数值，按 `measure` 解释含义。 |
+| `unit` | `TEXT NOT NULL` | 数值单位，例如 `%`、`index`。 |
 | `source_key` | `TEXT NOT NULL` | 数据来源标识，关联 `macro_data_sources.source_key`。 |
 | `source_url` | `TEXT NOT NULL` | 来源页面或文件地址。 |
 | `provider_key` | `TEXT NOT NULL` | 数据提供方标识，例如 `official-macro` 或 `sample-macro`。 |
 | `quality_status` | `TEXT NOT NULL` | 当前记录质量状态，取值为 `live`、`degraded`、`sample`、`unavailable`。 |
-| `quality_message` | `TEXT NOT NULL` | 数据缺失、降级、口径限制说明；正常时为空字符串。 |
+| `quality_message` | `TEXT NOT NULL` | 数据缺失、降级或口径限制说明；正常时为空字符串。 |
 | `released_at` | `TEXT NOT NULL` | 数据发布日期或来源公布日期。 |
 | `last_seen_at` | `TEXT NOT NULL` | 本地最后一次同步到该记录的时间。 |
 
 主键：
 
-- `(factor_code, dimension_key, period_end)`
+- `(city_code, property_type, measure, period_end)`
 
 索引：
 
-- `(factor_code, period_end)`
-- `(factor_code, region_scope, region_code, period_end)`
+- `(city_group, property_type, measure, period_end)`
+- `(period_end, city_code)`
 - `(quality_status, period_end)`
 
-### 7.3 `macro_data_sources`
+### 7.4 `macro_gdp_history`
+
+用途：存储名义 GDP、实际 GDP 和 GDP 差值历史数据。
+
+字段：
+
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `gdp_metric` | `TEXT NOT NULL` | GDP 指标类型，取值包括 `nominal_growth`、`real_growth`、`growth_gap`。 |
+| `period_end` | `TEXT NOT NULL` | 数据期末日期，季度数据取季末日期。 |
+| `period_label` | `TEXT NOT NULL` | 展示用周期标签，例如 `2026-Q1`。 |
+| `value` | `REAL NOT NULL` | GDP 指标数值。 |
+| `unit` | `TEXT NOT NULL` | 数值单位，例如 `%`。 |
+| `frequency` | `TEXT NOT NULL` | 发布频率，通常为 `quarterly` 或 `yearly`。 |
+| `source_key` | `TEXT NOT NULL` | 数据来源标识，关联 `macro_data_sources.source_key`。 |
+| `source_url` | `TEXT NOT NULL` | 来源页面或文件地址。 |
+| `provider_key` | `TEXT NOT NULL` | 数据提供方标识。 |
+| `quality_status` | `TEXT NOT NULL` | 当前记录质量状态，取值为 `live`、`degraded`、`sample`、`unavailable`。 |
+| `quality_message` | `TEXT NOT NULL` | 数据缺失、降级或口径限制说明；正常时为空字符串。 |
+| `released_at` | `TEXT NOT NULL` | 数据发布日期或来源公布日期。 |
+| `last_seen_at` | `TEXT NOT NULL` | 本地最后一次同步到该记录的时间。 |
+
+主键：
+
+- `(gdp_metric, period_end)`
+
+索引：
+
+- `(period_end)`
+- `(quality_status, period_end)`
+
+### 7.5 `macro_ppi_history`
+
+用途：存储企业 PPI 历史数据。
+
+字段：
+
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `ppi_metric` | `TEXT NOT NULL` | PPI 指标类型，例如 `producer_price_yoy`、`producer_price_mom`。 |
+| `period_end` | `TEXT NOT NULL` | 数据期末日期，月度数据取当月最后一天。 |
+| `period_label` | `TEXT NOT NULL` | 展示用周期标签，例如 `2026-03`。 |
+| `value` | `REAL NOT NULL` | PPI 指标数值。 |
+| `unit` | `TEXT NOT NULL` | 数值单位，例如 `%` 或 `index`。 |
+| `frequency` | `TEXT NOT NULL` | 发布频率，通常为 `monthly`。 |
+| `source_key` | `TEXT NOT NULL` | 数据来源标识，关联 `macro_data_sources.source_key`。 |
+| `source_url` | `TEXT NOT NULL` | 来源页面或文件地址。 |
+| `provider_key` | `TEXT NOT NULL` | 数据提供方标识。 |
+| `quality_status` | `TEXT NOT NULL` | 当前记录质量状态，取值为 `live`、`degraded`、`sample`、`unavailable`。 |
+| `quality_message` | `TEXT NOT NULL` | 数据缺失、降级或口径限制说明；正常时为空字符串。 |
+| `released_at` | `TEXT NOT NULL` | 数据发布日期或来源公布日期。 |
+| `last_seen_at` | `TEXT NOT NULL` | 本地最后一次同步到该记录的时间。 |
+
+主键：
+
+- `(ppi_metric, period_end)`
+
+索引：
+
+- `(period_end)`
+- `(quality_status, period_end)`
+
+### 7.6 `macro_household_credit_history`
+
+用途：存储居民新增贷款和居民贷款增速历史数据。
+
+字段：
+
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `credit_metric` | `TEXT NOT NULL` | 居民信贷指标类型，取值包括 `new_loans`、`loan_balance_growth`。 |
+| `period_end` | `TEXT NOT NULL` | 数据期末日期，按来源频率取月末或季末。 |
+| `period_label` | `TEXT NOT NULL` | 展示用周期标签，例如 `2026-03`、`2026-Q1`。 |
+| `value` | `REAL NOT NULL` | 居民信贷指标数值。 |
+| `unit` | `TEXT NOT NULL` | 数值单位，例如 `亿元`、`%`。 |
+| `frequency` | `TEXT NOT NULL` | 发布频率，取值包括 `monthly`、`quarterly`。 |
+| `source_key` | `TEXT NOT NULL` | 数据来源标识，关联 `macro_data_sources.source_key`。 |
+| `source_url` | `TEXT NOT NULL` | 来源页面或文件地址。 |
+| `provider_key` | `TEXT NOT NULL` | 数据提供方标识。 |
+| `quality_status` | `TEXT NOT NULL` | 当前记录质量状态，取值为 `live`、`degraded`、`sample`、`unavailable`。 |
+| `quality_message` | `TEXT NOT NULL` | 数据缺失、降级或口径限制说明；正常时为空字符串。 |
+| `released_at` | `TEXT NOT NULL` | 数据发布日期或来源公布日期。 |
+| `last_seen_at` | `TEXT NOT NULL` | 本地最后一次同步到该记录的时间。 |
+
+主键：
+
+- `(credit_metric, period_end)`
+
+索引：
+
+- `(credit_metric, frequency, period_end)`
+- `(quality_status, period_end)`
+
+### 7.7 `macro_household_deposit_history`
+
+用途：存储居民活期存款增速历史数据。
+
+字段：
+
+| 字段 | 类型 | 中文说明 |
+| --- | --- | --- |
+| `deposit_metric` | `TEXT NOT NULL` | 居民存款指标类型，第一版为 `demand_deposit_growth`。 |
+| `period_end` | `TEXT NOT NULL` | 数据期末日期，按来源频率取月末或季末。 |
+| `period_label` | `TEXT NOT NULL` | 展示用周期标签，例如 `2026-03`、`2026-Q1`。 |
+| `value` | `REAL NOT NULL` | 居民存款指标数值。 |
+| `unit` | `TEXT NOT NULL` | 数值单位，例如 `%`。 |
+| `frequency` | `TEXT NOT NULL` | 发布频率，取值包括 `monthly`、`quarterly`。 |
+| `source_key` | `TEXT NOT NULL` | 数据来源标识，关联 `macro_data_sources.source_key`。 |
+| `source_url` | `TEXT NOT NULL` | 来源页面或文件地址。 |
+| `provider_key` | `TEXT NOT NULL` | 数据提供方标识。 |
+| `quality_status` | `TEXT NOT NULL` | 当前记录质量状态，取值为 `live`、`degraded`、`sample`、`unavailable`。 |
+| `quality_message` | `TEXT NOT NULL` | 数据缺失、降级或口径限制说明；正常时为空字符串。 |
+| `released_at` | `TEXT NOT NULL` | 数据发布日期或来源公布日期。 |
+| `last_seen_at` | `TEXT NOT NULL` | 本地最后一次同步到该记录的时间。 |
+
+主键：
+
+- `(deposit_metric, period_end)`
+
+索引：
+
+- `(deposit_metric, frequency, period_end)`
+- `(quality_status, period_end)`
+
+### 7.8 `macro_data_sources`
 
 用途：存储数据来源、口径和同步状态，支撑每个指标详情页的来源说明。
 
@@ -292,7 +425,7 @@
 
 - `(source_key)`
 
-### 7.4 `macro_factor_sync_runs`
+### 7.9 `macro_factor_sync_runs`
 
 用途：记录每次数据同步结果，便于定位数据是否正确、是否更新、是否失败。
 
@@ -348,7 +481,8 @@
       {"value": "deposit", "label": "居民存款"}
     ],
     "factors": [],
-    "observations": [],
+    "series": [],
+    "table_rows": [],
     "sources": []
   },
   "data_models": {
@@ -365,7 +499,7 @@
 - 删除只服务旧 `Overview`、`Compare`、`Indicators`、`Sources` 标签页的前端 adapter 派生字段；后端 payload 不再额外构造这些旧视图专用结构。
 - 前端 adapter 对 `data_factors` 缺失时返回空状态。
 - 错误时 Macro 模块返回数据因子的 `unavailable` 状态和友好错误说明。
-- `data_factors.factors` 是数据因子的核心结构，必须包含可绘图序列、表格行、来源状态和更新频率。
+- `data_factors.factors` 描述指标定义与展示配置；`series` 与 `table_rows` 由 Service 从各类事实表聚合生成，必须包含可绘图序列、表格行、来源状态和更新频率。
 - `data_models` 第一版只作为预留入口，默认 `status` 为 `reserved`，不返回模型计算结果。
 - 第一版不返回 `annotations`、`direction`、`score`、`confidence` 等预测判断字段。
 
@@ -478,7 +612,7 @@
 
 - Store 测试：
   - 因子定义 upsert 幂等。
-  - 因子观测值 upsert 幂等。
+  - 房价历史、GDP、PPI、居民信贷、居民存款各事实表 upsert 幂等。
   - 数据来源状态 upsert 幂等。
   - 同步记录写入成功、部分失败和失败状态。
 - Service 测试：
