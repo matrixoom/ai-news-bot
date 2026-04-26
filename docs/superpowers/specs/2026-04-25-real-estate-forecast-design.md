@@ -4,9 +4,9 @@
 
 本次变更围绕 `Macro` 模块做两步调整：
 
-- 先删除现有 Macro 中 `Compare` 之外的旧标签页和对应前后端逻辑。旧标签页包括 `Overview`、`Indicators`、`Sources`。
-- 保留 `Compare` 作为唯一历史视图，确保现有宏观 pair 对比卡片、相关分析和来源链接继续可用。
-- 在清理后的 Macro 页面内新增子标签 **房价研判**，内部 key 使用 `housing_outlook`。
+- 先删除现有 Macro 中全部旧标签页和对应前后端逻辑。旧标签页包括 `Overview`、`Compare`、`Indicators`、`Sources`。
+- `Compare` 旧实现也一起移除；后续若需要宏观对比能力，单独重新设计和实现。
+- 在清理后的 Macro 页面内只保留子标签 **房价研判**，内部 key 使用 `housing_outlook`。
 - 房价研判第一版只做可靠数据获取、持久化、校验和图表呈现，不做方向判断或评分。
 - 模块目标是观察房价及相关宏观因子的历史变化，确保数据正确、来源可靠、更新可追踪。
 
@@ -28,7 +28,7 @@
 
 ### 2.1 设计目标
 
-- 清理旧 Macro 标签页，只保留 `Compare` 历史子标签和新增的 `房价研判` 子标签。
+- 清理旧 Macro 标签页，只保留新增的 `房价研判` 子标签。
 - 将房价研判作为 `/macro` 页面内部子标签接入，复用现有数据持久化、服务聚合、前端图表和接口契约模式。
 - 所有房价目标、宏观因子、数据来源状态、关联分析结果持久化到本地 SQLite。
 - 优先展示来源可靠的历史数据、指标更新状态、趋势图表、数据表、因子关联和来源说明。
@@ -42,7 +42,7 @@
 - 第一版不做机器学习黑箱模型训练。
 - 第一版不引入远程数据库或外部任务队列。
 - 第一版不修改 `.third_part_newsnow/`。
-- 第一版不删除 `Compare` 视图中仍在使用的宏观 pair 对比、相关分析和来源链接能力。
+- 第一版不重建旧 `Compare` 能力；宏观对比能力后续单独设计。
 
 ## 3. 影响分析
 
@@ -51,12 +51,12 @@
 - `src/domain/`：新增房价研判领域模型。
 - `src/services/`：新增 SQLite store 与研判 service。
 - `src/providers/`：扩展宏观 provider 对房价、居民贷款增速、居民活期存款增速等指标的抓取或样例 fallback。
-- `src/app/web/frontend_payload.py`：在 Macro payload 中追加房价研判区块，并移除只服务旧 `Overview`、`Indicators`、`Sources` 视图的派生逻辑。
+- `src/app/web/frontend_payload.py`：以房价研判 payload 作为 Macro 模块核心响应，并移除只服务旧 `Overview`、`Compare`、`Indicators`、`Sources` 视图的派生逻辑。
 - `src/services/dashboard_service.py`：Macro module 聚合时接入房价研判 service。
 
 ### 3.2 前端影响范围
 
-- `frontend/src/pages/macro-page.tsx`：删除 `Overview`、`Indicators`、`Sources` 分支，保留 `Compare`，新增 `housing_outlook` 子标签。
+- `frontend/src/pages/macro-page.tsx`：删除 `Overview`、`Compare`、`Indicators`、`Sources` 分支，只保留 `housing_outlook` 子标签。
 - `frontend/src/features/macro/model/*`：扩展类型与 adapter，适配房价研判 payload，并移除仅服务旧标签页的派生模型。
 - `frontend/src/features/macro/components/*`：新增房价研判组件；不再使用的旧标签页专用组件按项目规则归档到 `to_delete/`。
 - `frontend/src/features/macro/__tests__/macro-page.test.tsx`：更新页面行为测试。
@@ -278,10 +278,10 @@
 
 兼容策略：
 
-- 保留 `Compare` 依赖的 `module.details[*].section` 结构。
-- 删除只服务旧 `Overview`、`Indicators`、`Sources` 标签页的前端 adapter 派生字段；后端 payload 不再额外构造这些旧视图专用结构。
+- 删除旧 `module.details[*].section` 对比图结构；第一版 Macro payload 以 `housing_outlook` 为核心。
+- 删除只服务旧 `Overview`、`Compare`、`Indicators`、`Sources` 标签页的前端 adapter 派生字段；后端 payload 不再额外构造这些旧视图专用结构。
 - 前端 adapter 对 `housing_outlook` 缺失时返回空状态。
-- 错误时 Macro 模块整体仍可返回现有对比图；房价研判子标签单独显示 `unavailable`。
+- 错误时 Macro 模块返回房价研判的 `unavailable` 状态和友好错误说明。
 - `housing_outlook.history_groups` 是房价研判的核心数据结构，必须包含可绘图序列、表格行、来源状态和更新频率。
 - 第一版不返回 `annotations`、`direction`、`score`、`confidence` 等预测判断字段。
 
@@ -296,12 +296,11 @@
 
 ### 8.1 页面结构
 
-`/macro` 页面先清理旧标签页，再新增房价研判：
+`/macro` 页面先清理旧标签页，再保留房价研判：
 
 - `房价研判`：新增 Macro 子标签，内部 key 为 `housing_outlook`。
-- `Compare`：保留的历史视图，继续展示现有宏观 pair 对比卡片。
-- `Overview`、`Indicators`、`Sources`：删除入口、路由状态、渲染分支、测试断言和仅服务这些标签页的派生逻辑。
-- 最终 Macro 页面内的子标签只包含 `Compare` 和 `房价研判`。
+- `Overview`、`Compare`、`Indicators`、`Sources`：删除入口、路由状态、渲染分支、测试断言和仅服务这些标签页的派生逻辑。
+- 最终 Macro 页面内的子标签只包含 `房价研判`。
 - 页面标题仍为 `Macro`，进入 `房价研判` 子标签后展示数据中心化的房价研判工作台。
 - `房价研判` 子标签内默认展示 `历史数据` 分区。
 
@@ -309,16 +308,16 @@
 
 删除范围：
 
-- 删除 `Overview`、`Indicators`、`Sources` 的标签配置、URL 标签解析分支和页面渲染分支。
+- 删除 `Overview`、`Compare`、`Indicators`、`Sources` 的标签配置、URL 标签解析分支和页面渲染分支。
+- 删除旧 `Compare` 对比页组件、pair analytics、relative performance、spread monitor、旧 source links 展示和相关测试；如后续需要对比能力，重新设计。
 - 删除仅服务 `Indicators` 原始序列页和 `Sources` 独立来源页的组件、类型、adapter 派生字段和测试。
-- 后端删除仅为旧标签页准备的派生聚合逻辑；保留 `Compare` 仍使用的 pair payload、source links 和 correlation 数据。
+- 后端删除仅为旧标签页准备的派生聚合逻辑，包括旧 pair payload、source links 和 correlation 数据。
 - 若需要移除文件，按项目规则先移动到 `to_delete/`，不直接物理删除。
 
 保留范围：
 
-- 保留 `Compare` 视图所需的 `MacroComparisonCard`、pair analytics、relative performance、spread monitor、source links。
 - 保留 `/api/frontend/modules/macro` 作为唯一 Macro 模块接口。
-- 保留旧接口中 `Compare` 仍消费的稳定字段，避免破坏现有对比图。
+- 保留现有 Macro 数据源和历史库中可复用于房价研判的数据，不保留旧页面展示结构。
 
 ### 8.3 房价研判内部分区
 
@@ -370,7 +369,7 @@
 ## 9. 错误处理与降级
 
 - Provider 抓取失败时记录 warning 日志，包含 `indicator_code`、`source_url`、错误类型。
-- Service 不吞异常；房价研判数据获取、解析或持久化失败时返回独立 `unavailable` 状态，不影响现有 Macro pair 对比。
+- Service 不吞异常；房价研判数据获取、解析或持久化失败时返回独立 `unavailable` 状态，不影响 Macro 页面基础加载和全局模块状态。
 - Store upsert 使用事务，确保同一次刷新不会写入半截模型输出。
 - 数据样本不足时展示缺失说明、样本数量和来源状态，不生成趋势判断。
 - 所有对外错误信息保持友好，不泄露敏感路径或原始堆栈。
@@ -389,14 +388,13 @@
   - 相关系数计算处理样本不足和零方差。
 - API 测试：
   - `/api/frontend/modules/macro` 包含 `housing_outlook`。
-  - `housing_outlook` 缺失或 unavailable 时现有 `module.details` 仍可渲染。
+  - `housing_outlook` 缺失或 unavailable 时返回房价研判 empty/error 状态，不依赖旧 `module.details`。
 
 ### 10.2 前端测试
 
-- Macro 页面不再显示 `Overview`、`Indicators`、`Sources` 标签。
-- 访问未知或已删除标签参数时回退到 `Compare`，不进入空白页面。
+- Macro 页面不再显示 `Overview`、`Compare`、`Indicators`、`Sources` 标签。
+- 访问未知或已删除标签参数时回退到 `房价研判`，不进入空白页面。
 - Macro 页面显示 `房价研判` 子标签。
-- 现有 `Compare` 内容仍显示现有 pair 卡片。
 - 房价研判默认进入 `历史数据` 分区。
 - 历史数据分区显示可靠历史数据表和图表。
 - 房价研判不显示预测判断类分区。
@@ -406,12 +404,12 @@
 
 ### 10.3 回归检查清单
 
-1. 原功能验证点：现有 `Compare` 宏观 pair 对比卡片、相关分析图、source links 仍可用。
+1. 原功能验证点：Macro 页面入口、加载态、错误态仍可用。
 2. 新功能验证点：`房价研判` 子标签、历史数据图表、历史数据表、数据来源表、关联分析图可渲染。
-3. 删除验证点：`Overview`、`Indicators`、`Sources` 不再出现在标签栏、URL 状态、测试 mock 和页面渲染分支中。
+3. 删除验证点：`Overview`、`Compare`、`Indicators`、`Sources` 不再出现在标签栏、URL 状态、测试 mock 和页面渲染分支中。
 4. 边界情况：样本不足、单城市缺数据、某因子缺失、来源降级、口径变化。
 5. 异常处理：provider 失败、SQLite 写入失败、API 返回 unavailable。
-6. 配置兼容性：未开启实时数据时使用 sample fallback；旧 Macro payload 中 `Compare` 消费字段保持兼容。
+6. 配置兼容性：未开启实时数据时使用 sample fallback；旧 Macro payload 中仅服务旧标签页的字段不再作为兼容承诺。
 
 ## 11. 风险与后续建议
 
