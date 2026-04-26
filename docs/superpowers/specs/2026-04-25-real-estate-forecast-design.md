@@ -6,7 +6,7 @@
 
 - 先删除现有 Macro 中 `Compare` 之外的旧标签页和对应前后端逻辑。旧标签页包括 `Overview`、`Indicators`、`Sources`。
 - 保留 `Compare` 作为唯一历史视图，确保现有宏观 pair 对比卡片、相关分析和来源链接继续可用。
-- 在清理后的 Macro 模块下新增一级标签页 **房价研判**，内部 key 使用 `housing_outlook`。
+- 在清理后的 Macro 页面内新增子标签 **房价研判**，内部 key 使用 `housing_outlook`。
 - 房价研判第一版只做可靠数据获取、持久化、校验和图表呈现，不做方向判断或评分。
 - 模块目标是观察房价及相关宏观因子的历史变化，确保数据正确、来源可靠、更新可追踪。
 
@@ -28,8 +28,8 @@
 
 ### 2.1 设计目标
 
-- 清理旧 Macro 标签页，只保留 `Compare` 历史视图和新增的 `房价研判` 视图。
-- 将房价研判作为 `Macro` 下的独立一级 tab 接入，复用现有数据持久化、服务聚合、前端图表和接口契约模式。
+- 清理旧 Macro 标签页，只保留 `Compare` 历史子标签和新增的 `房价研判` 子标签。
+- 将房价研判作为 `/macro` 页面内部子标签接入，复用现有数据持久化、服务聚合、前端图表和接口契约模式。
 - 所有房价目标、宏观因子、数据来源状态、关联分析结果持久化到本地 SQLite。
 - 优先展示来源可靠的历史数据、指标更新状态、趋势图表、数据表、因子关联和来源说明。
 - 第一版把数据正确性和可复核性作为交付核心，后续再基于稳定数据设计分析判断层。
@@ -56,7 +56,7 @@
 
 ### 3.2 前端影响范围
 
-- `frontend/src/pages/macro-page.tsx`：删除 `Overview`、`Indicators`、`Sources` 分支，保留 `Compare`，新增 `housing_outlook` 一级 tab。
+- `frontend/src/pages/macro-page.tsx`：删除 `Overview`、`Indicators`、`Sources` 分支，保留 `Compare`，新增 `housing_outlook` 子标签。
 - `frontend/src/features/macro/model/*`：扩展类型与 adapter，适配房价研判 payload，并移除仅服务旧标签页的派生模型。
 - `frontend/src/features/macro/components/*`：新增房价研判组件；不再使用的旧标签页专用组件按项目规则归档到 `to_delete/`。
 - `frontend/src/features/macro/__tests__/macro-page.test.tsx`：更新页面行为测试。
@@ -115,15 +115,15 @@
 
 房价研判页第一版只关注数据本身：
 
-- 默认子 tab 为 **历史数据**，展示全部来源可靠的房价、宏观因子、居民贷款和居民活期存款数据。
+- 默认分区为 **历史数据**，展示全部来源可靠的房价、宏观因子、居民贷款和居民活期存款数据。
 - 每个指标必须展示最新值、历史走势、更新频率、来源、最近同步时间和数据状态。
 - 同一数据会随时间持续追加，图表必须支持时间序列自然增长，不依赖固定样本长度。
 - 后续新增因子时，应通过指标注册表和 payload 配置扩展，不要求重写页面结构。
 - 所有图表必须能追溯到来源、口径和原始数值；若数据缺失或降级，必须显式展示原因。
 
-### 5.2 子 Tab 设计
+### 5.2 内部分区设计
 
-房价研判 `housing_outlook` 下设子 tab：
+房价研判 `housing_outlook` 下设内部分区：
 
 - **历史数据**：默认页，展示所有来源可靠的历史数据、数据表和趋势图。
 - **因子关联**：展示房价与 GDP、PPI、居民新增贷款、居民贷款增速、居民活期存款增速等因子的相关系数、最佳滞后期和样本量。
@@ -221,7 +221,7 @@
 
 ### 6.4 `housing_data_sources`
 
-用途：存储房价研判页使用的数据来源、口径和同步状态，支撑“数据来源”子 tab。
+用途：存储房价研判页使用的数据来源、口径和同步状态，支撑“数据来源”分区。
 
 字段：
 
@@ -261,8 +261,8 @@
   "housing_outlook": {
     "status": "live",
     "label": "房价研判",
-    "default_sub_tab": "history",
-    "sub_tabs": [
+    "default_section": "history",
+    "sections": [
       {"value": "history", "label": "历史数据"},
       {"value": "correlations", "label": "因子关联"},
       {"value": "sources", "label": "数据来源"}
@@ -281,7 +281,7 @@
 - 保留 `Compare` 依赖的 `module.details[*].section` 结构。
 - 删除只服务旧 `Overview`、`Indicators`、`Sources` 标签页的前端 adapter 派生字段；后端 payload 不再额外构造这些旧视图专用结构。
 - 前端 adapter 对 `housing_outlook` 缺失时返回空状态。
-- 错误时 Macro 模块整体仍可返回现有对比图；房价研判 tab 单独显示 `unavailable`。
+- 错误时 Macro 模块整体仍可返回现有对比图；房价研判子标签单独显示 `unavailable`。
 - `housing_outlook.history_groups` 是房价研判的核心数据结构，必须包含可绘图序列、表格行、来源状态和更新频率。
 - 第一版不返回 `annotations`、`direction`、`score`、`confidence` 等预测判断字段。
 
@@ -298,18 +298,18 @@
 
 `/macro` 页面先清理旧标签页，再新增房价研判：
 
-- `房价研判`：新增 tab，内部 key 为 `housing_outlook`。
+- `房价研判`：新增 Macro 子标签，内部 key 为 `housing_outlook`。
 - `Compare`：保留的历史视图，继续展示现有宏观 pair 对比卡片。
 - `Overview`、`Indicators`、`Sources`：删除入口、路由状态、渲染分支、测试断言和仅服务这些标签页的派生逻辑。
-- 最终 Macro 一级 tab 只包含 `Compare` 和 `房价研判`。
-- 页面标题仍为 `Macro`，进入 `房价研判` tab 后展示数据中心化的房价研判工作台。
-- `房价研判` tab 内默认展示子 tab `历史数据`。
+- 最终 Macro 页面内的子标签只包含 `Compare` 和 `房价研判`。
+- 页面标题仍为 `Macro`，进入 `房价研判` 子标签后展示数据中心化的房价研判工作台。
+- `房价研判` 子标签内默认展示 `历史数据` 分区。
 
 ### 8.2 旧标签页删除规则
 
 删除范围：
 
-- 删除 `Overview`、`Indicators`、`Sources` 的 tab 配置、URL tab 解析分支和页面渲染分支。
+- 删除 `Overview`、`Indicators`、`Sources` 的标签配置、URL 标签解析分支和页面渲染分支。
 - 删除仅服务 `Indicators` 原始序列页和 `Sources` 独立来源页的组件、类型、adapter 派生字段和测试。
 - 后端删除仅为旧标签页准备的派生聚合逻辑；保留 `Compare` 仍使用的 pair payload、source links 和 correlation 数据。
 - 若需要移除文件，按项目规则先移动到 `to_delete/`，不直接物理删除。
@@ -320,14 +320,14 @@
 - 保留 `/api/frontend/modules/macro` 作为唯一 Macro 模块接口。
 - 保留旧接口中 `Compare` 仍消费的稳定字段，避免破坏现有对比图。
 
-### 8.3 房价研判子 Tab
+### 8.3 房价研判内部分区
 
 组件建议：
 
 - `HousingOutlookPanel`
-  顶层区块，处理子 tab、empty/loading/error。
+  顶层区块，处理内部分区、empty/loading/error。
 - `HousingHistoryDataTab`
-  默认子 tab，展示所有可靠历史数据、指标表格和图表，是本模块的核心页面。
+  默认分区，展示所有可靠历史数据、指标表格和图表，是本模块的核心页面。
 - `HousingDataSeriesChart`
   展示房价、新房、二手房、宏观因子和派生指标的时间序列。
 - `HousingDataTable`
@@ -339,8 +339,8 @@
 
 交互：
 
-- 一级 Macro tab 选择 `房价研判` 后，进入 `housing_outlook`。
-- 房价研判内部子 tab：`历史数据`、`因子关联`、`数据来源`。
+- Macro 子标签选择 `房价研判` 后，进入 `housing_outlook`。
+- 房价研判内部分区：`历史数据`、`因子关联`、`数据来源`。
 - 历史数据页默认范围为全国整体，默认指标为新房、二手房综合对比。
 - 城市范围选择使用分段控制或下拉：全国、一线、新一线、单城市。
 - 指标选择使用复选列表或多选菜单，允许同时展示多个因子。
@@ -394,12 +394,12 @@
 ### 10.2 前端测试
 
 - Macro 页面不再显示 `Overview`、`Indicators`、`Sources` 标签。
-- 访问未知或已删除 tab 参数时回退到 `Compare`，不进入空白页面。
-- Macro 页面显示 `房价研判` 一级 tab。
+- 访问未知或已删除标签参数时回退到 `Compare`，不进入空白页面。
+- Macro 页面显示 `房价研判` 子标签。
 - 现有 `Compare` 内容仍显示现有 pair 卡片。
-- 房价研判默认进入 `历史数据` 子 tab。
-- 历史数据子 tab 显示可靠历史数据表和图表。
-- 房价研判不显示预测判断类子 tab。
+- 房价研判默认进入 `历史数据` 分区。
+- 历史数据分区显示可靠历史数据表和图表。
+- 房价研判不显示预测判断类分区。
 - 房价研判不显示方向、分数、置信度等预测字段。
 - 空数据时显示房价研判 empty 状态。
 - API 缺少 `housing_outlook` 时页面不崩溃。
@@ -407,8 +407,8 @@
 ### 10.3 回归检查清单
 
 1. 原功能验证点：现有 `Compare` 宏观 pair 对比卡片、相关分析图、source links 仍可用。
-2. 新功能验证点：`房价研判` tab、历史数据图表、历史数据表、数据来源表、关联分析图可渲染。
-3. 删除验证点：`Overview`、`Indicators`、`Sources` 不再出现在 tab bar、URL 状态、测试 mock 和页面渲染分支中。
+2. 新功能验证点：`房价研判` 子标签、历史数据图表、历史数据表、数据来源表、关联分析图可渲染。
+3. 删除验证点：`Overview`、`Indicators`、`Sources` 不再出现在标签栏、URL 状态、测试 mock 和页面渲染分支中。
 4. 边界情况：样本不足、单城市缺数据、某因子缺失、来源降级、口径变化。
 5. 异常处理：provider 失败、SQLite 写入失败、API 返回 unavailable。
 6. 配置兼容性：未开启实时数据时使用 sample fallback；旧 Macro payload 中 `Compare` 消费字段保持兼容。
