@@ -10,6 +10,7 @@ from src.domain import MacroFrequency, TrendDirection, build_default_macro_regis
 from src.domain.external_data import MacroHistoryPoint, MacroIndicatorSeries
 from src.providers import ProviderAvailability, ProviderStatus
 from src.services.dashboard_service import DashboardService
+from src.services.macro_data_factor_store import MacroDataFactorStore
 from src.services.macro_history_store import MacroHistoryStore
 from src.services.macro_monitoring_service import MacroMonitoringService
 
@@ -82,6 +83,23 @@ class MacroRegistryTests(unittest.TestCase):
 
 
 class MacroHistoryStoreTests(unittest.TestCase):
+    def test_data_factor_store_seeds_source_matrix(self):
+        with TemporaryDirectory() as tmpdir:
+            store = MacroDataFactorStore(Path(tmpdir) / "macro_data_factors.db")
+            rows = store.list_source_matrix_rows()
+            comments = store.get_table_field_comments("macro_housing_price_history")
+
+        self.assertTrue(any(row.factor_code == "housing_price" for row in rows))
+        self.assertTrue(
+            any(
+                row.factor_code == "household_demand_deposit_growth"
+                and row.availability_status == "degraded"
+                for row in rows
+            )
+        )
+        self.assertEqual(comments["value"], "观测值，无法确认时保持空值")
+        self.assertEqual(comments["source_key"], "数据来源编码")
+
     def test_store_persists_points_and_sync_state(self):
         with TemporaryDirectory() as tmpdir:
             store = MacroHistoryStore(Path(tmpdir) / "macro_history.db")
@@ -192,23 +210,26 @@ class DashboardMacroIntegrationTests(unittest.TestCase):
         self.assertTrue(snapshot.macro_sections[0].source_label)
         self.assertTrue(snapshot.macro_sections[0].updated_at)
 
-    def test_frontend_macro_module_exposes_grouped_pair_payload(self):
+    def test_frontend_macro_module_exposes_data_factor_payload(self):
+        client = TestClient(create_fastapi_app())
+
+        response = client.get("/api/frontend/modules/macro")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["data_factors"]["label"], "数据因子")
+        self.assertEqual(payload["source_matrix"]["label"], "数据源矩阵")
+        self.assertEqual(payload["data_models"]["status"], "reserved")
+        self.assertEqual(payload["module"]["details"], [])
+
+    def test_legacy_pair_payload_is_not_exposed_in_macro_module(self):
         client = TestClient(create_fastapi_app())
 
         response = client.get("/api/frontend/modules/macro")
 
         self.assertEqual(response.status_code, 200)
         sections = [detail["section"] for detail in response.json()["module"]["details"]]
-        first_section = sections[0]
-        self.assertIn("primary", first_section)
-        self.assertIn("delta_points", first_section)
-        self.assertIn("sources", first_section)
-        self.assertTrue(first_section["sources"][0]["label"])
-        self.assertTrue(first_section["sources"][0]["url"].startswith("http"))
-        gold_oil = next(section for section in sections if section["key"] == "gold_oil")
-        self.assertIsNotNone(gold_oil["secondary"])
-        nvidia = next(section for section in sections if section["key"] == "nvidia_stock_price")
-        self.assertIsNone(nvidia["secondary"])
+        self.assertEqual(sections, [])
 
 
 if __name__ == "__main__":

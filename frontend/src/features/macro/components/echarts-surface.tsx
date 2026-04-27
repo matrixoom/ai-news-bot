@@ -104,7 +104,7 @@ export function EChartsSurface({ ariaLabel, title, description, option, height =
         />
       ) : (
         <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500">
-          No chart-ready history was returned for this section.
+          暂无可绘制的历史数据。
         </div>
       )}
 

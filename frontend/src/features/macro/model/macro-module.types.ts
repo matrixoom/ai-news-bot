@@ -1,52 +1,85 @@
 import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
 
-export type MacroModuleTab = "overview" | "compare" | "indicators" | "sources";
+export type MacroModuleTab = "data_factors" | "source_matrix" | "data_models";
 
 export const MACRO_MODULE_TABS: readonly ModuleTabDefinition<MacroModuleTab>[] = [
-  { value: "overview", label: "Overview" },
-  { value: "compare", label: "Compare" },
-  { value: "indicators", label: "Indicators" },
-  { value: "sources", label: "Sources" },
+  { value: "data_factors", label: "数据因子" },
+  { value: "source_matrix", label: "数据源矩阵" },
+  { value: "data_models", label: "数据模型" },
 ];
 
-export type MacroIndicatorPoint = {
+export type MacroFactorDefinition = {
+  factorCode: string;
+  factorLabel: string;
+  category: string;
+  description: string;
+  defaultUnit: string;
+  frequency: string;
+  sourceKey: string;
+  storageTable: string;
+  calculationMethod: string;
+  displayOrder: number;
+  status: string;
+};
+
+export type MacroFactorSeriesPoint = {
   periodEnd: string;
   periodLabel: string;
   value: number;
 };
 
-export type MacroIndicatorView = {
-  key: string;
+export type MacroFactorSeries = {
+  factorCode: string;
   label: string;
-  status: string;
-  latestValue: string;
-  previousValue: string;
-  changeLabel: string;
-  trend: string;
-  frequency: string;
-  sourceLabel: string;
-  sourceUrl: string;
-  updatedAt: string;
-  periodLabel: string;
-  context: string;
   unit: string;
-  points: MacroIndicatorPoint[];
+  frequency: string;
+  status: string;
+  sourceLabel: string;
+  points: MacroFactorSeriesPoint[];
 };
 
-export type MacroComparisonSection = {
-  key: string;
-  title: string;
+export type MacroFactorTableRow = {
+  factorCode: string;
+  factorLabel: string;
+  periodLabel: string;
+  dimension: string;
+  value: string;
+  unit: string;
+  sourceLabel: string;
   status: string;
-  description: string;
-  summary: string;
-  primary: MacroIndicatorView;
-  secondary: MacroIndicatorView | null;
-  deltaLabel: string;
-  deltaPoints: MacroIndicatorPoint[];
-  sources: Array<{
-    label: string;
-    url: string;
-  }>;
+  updatedAt: string;
+};
+
+export type MacroSourceMatrixSummary = {
+  factorCount: number;
+  sourceCount: number;
+  officialPrimaryCount: number;
+  degradedCount: number;
+  unavailableCount: number;
+  lastVerifiedAt: string;
+};
+
+export type MacroSourceMatrixRow = {
+  matrixId: string;
+  factorCode: string;
+  factorLabel: string;
+  sourceKey: string;
+  sourceLabel: string;
+  sourceRole: string;
+  sourceType: string;
+  availabilityStatus: string;
+  reliabilityLevel: string;
+  coverageScope: string;
+  coverageStart: string;
+  coverageEnd: string;
+  frequency: string;
+  accessMethod: string;
+  fieldMappingStatus: string;
+  parserStatus: string;
+  licenseNote: string;
+  priorityOrder: number;
+  warningMessage: string;
+  lastVerifiedAt: string;
 };
 
 export type MacroModuleRawPayload = {
@@ -58,78 +91,91 @@ export type MacroModuleRawPayload = {
     description: string;
     status: string;
     loading: boolean;
-    details: Array<{
-      id: string;
+    details: unknown[];
+  };
+  data_factors?: {
+    status: string;
+    label: string;
+    default_factor_code: string;
+    groups: Array<{ value: string; label: string }>;
+    factors: Array<{
+      factor_code: string;
+      factor_label: string;
+      category: string;
+      description: string;
+      default_unit: string;
+      frequency: string;
+      source_key: string;
+      storage_table: string;
+      calculation_method: string;
+      display_order: number;
+      status: string;
+    }>;
+    series: Array<{
+      factor_code: string;
       label: string;
-      kind: "macro";
-      note: string;
-      section: {
-        key: string;
-        title: string;
-        status: string;
-        description: string;
-        summary: string;
-        primary: {
-          key: string;
-          label: string;
-          status: string;
-          latest_value: string;
-          previous_value: string;
-          change_label: string;
-          trend: string;
-          frequency: string;
-          source_label: string;
-          source_url: string;
-          updated_at: string;
-          period_label: string;
-          context: string;
-          unit: string;
-          points: Array<{
-            period_end: string;
-            period_label: string;
-            value: number;
-          }>;
-        };
-        secondary: null | {
-          key: string;
-          label: string;
-          status: string;
-          latest_value: string;
-          previous_value: string;
-          change_label: string;
-          trend: string;
-          frequency: string;
-          source_label: string;
-          source_url: string;
-          updated_at: string;
-          period_label: string;
-          context: string;
-          unit: string;
-          points: Array<{
-            period_end: string;
-            period_label: string;
-            value: number;
-          }>;
-        };
-        delta_label: string;
-        delta_points: Array<{
-          period_end: string;
-          period_label: string;
-          value: number;
-        }>;
-        sources: Array<{
-          label: string;
-          url: string;
-        }>;
-      };
+      unit: string;
+      frequency: string;
+      status: string;
+      source_label: string;
+      points: Array<{
+        period_end: string;
+        period_label: string;
+        value: number;
+      }>;
+    }>;
+    table_rows: Array<{
+      factor_code: string;
+      factor_label: string;
+      period_label: string;
+      dimension: string;
+      value: string;
+      unit: string;
+      source_label: string;
+      status: string;
+      updated_at: string;
+    }>;
+    sources: unknown[];
+  };
+  source_matrix?: {
+    status: string;
+    label: string;
+    summary: {
+      factor_count: number;
+      source_count: number;
+      official_primary_count: number;
+      degraded_count: number;
+      unavailable_count: number;
+      last_verified_at: string;
+    };
+    rows: Array<{
+      matrix_id: string;
+      factor_code: string;
+      factor_label: string;
+      source_key: string;
+      source_label: string;
+      source_role: string;
+      source_type: string;
+      availability_status: string;
+      reliability_level: string;
+      coverage_scope: string;
+      coverage_start: string;
+      coverage_end: string;
+      frequency: string;
+      access_method: string;
+      field_mapping_status: string;
+      parser_status: string;
+      license_note: string;
+      priority_order: number;
+      warning_message: string;
+      last_verified_at: string;
     }>;
   };
-};
-
-export type MacroSourceReference = {
-  label: string;
-  url: string;
-  sectionTitles: string[];
+  data_models?: {
+    status: string;
+    label: string;
+    models: unknown[];
+  };
 };
 
 export type MacroModuleViewModel = {
@@ -140,7 +186,24 @@ export type MacroModuleViewModel = {
   moduleNote: string;
   moduleStatus: string;
   moduleLoading: boolean;
-  comparisonSections: MacroComparisonSection[];
-  indicators: MacroIndicatorView[];
-  sources: MacroSourceReference[];
+  dataFactors: {
+    status: string;
+    label: string;
+    defaultFactorCode: string;
+    groups: Array<{ value: string; label: string }>;
+    factors: MacroFactorDefinition[];
+    series: MacroFactorSeries[];
+    tableRows: MacroFactorTableRow[];
+  };
+  sourceMatrix: {
+    status: string;
+    label: string;
+    summary: MacroSourceMatrixSummary;
+    rows: MacroSourceMatrixRow[];
+  };
+  dataModels: {
+    status: string;
+    label: string;
+    models: unknown[];
+  };
 };
