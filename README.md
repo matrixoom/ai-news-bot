@@ -12,20 +12,19 @@ This repository provides two runtime capabilities:
 - SPA source lives in `frontend/`
 - Compiled bundle is served from `frontend/dist/`
 - Archived legacy static shell is quarantined in `to_delete/src/app/web/static/` for manual review
-- Main modules:
-  - Hot News
-  - Macro Trend
-  - Market Models
-  - Events Outlook
+- Active frontend modules:
+  - Push Center
   - Data Status
-- Entry: `/` -> `/dashboard` when the compiled SPA is available
+  - Settings
+- Removed frontend pages: Dashboard, News, Macro, Market, Events
+- Entry: `/` -> `/push` when the compiled SPA is available
 
 ### Backend
 
 - FastAPI app: `src/app/web/fastapi_app.py`
-- Frontend payload API: `/api/frontend/dashboard`
-- Legacy structured API: `/api/dashboard`
-- Legacy SSR page: `/legacy`
+- Push module API: `/api/frontend/modules/push`
+- Status module API: `/api/frontend/modules/status`
+- Removed APIs: `/api/frontend/dashboard`, `/api/dashboard`, `/legacy`
 - Health check: `/healthz`
 
 ## Frontend Workspace
@@ -50,7 +49,7 @@ Build the frontend bundle for FastAPI to serve:
 cmd /c npm --prefix frontend run build
 ```
 
-When `frontend/dist/index.html` exists, `http://127.0.0.1:8000/` redirects to `/dashboard` and FastAPI serves the compiled SPA for the workbench routes. The legacy server-rendered page remains available at `/legacy` during migration.
+When `frontend/dist/index.html` exists, `http://127.0.0.1:8000/` redirects to `/push` and FastAPI serves the compiled SPA for the remaining workbench routes.
 
 ## Runtime Modes
 
@@ -212,32 +211,13 @@ http://127.0.0.1:8000/
 
 Frontend loading contract:
 
-- The homepage shell must not block on slow modules.
-- `news`, `macro`, `market`, and `events` read from the shared `/api/frontend/dashboard` payload; `status` keeps dedicated module hydration.
-- `push` is intentionally lazy-loaded only when the user opens the push center, because preview generation is much heavier than the other modules.
-- Future frontend changes should preserve this behavior.
-
-### 5. Switch news mode when needed
-
-- `hybrid`: `http://127.0.0.1:8000/?news_mode=hybrid`
-- `api`: `http://127.0.0.1:8000/?news_mode=api`
-- `upstream`: `http://127.0.0.1:8000/?news_mode=upstream`
+- Dashboard, News, Macro, Market, and Events pages no longer render frontend elements or request data.
+- `push` remains lazy-loaded when the user opens Push Center, because preview generation is heavier than the other modules.
+- `status` keeps dedicated module hydration through `/api/frontend/modules/status`.
 
 ## News Modes
 
-The dashboard supports three news data modes:
-
-- `hybrid`: use NewsNow aggregated API first, then fall back to upstream source fetching
-- `api`: use NewsNow aggregated API only
-- `upstream`: fetch from the local NewsNow upstream project
-
-Frontend requests accept `?news_mode=hybrid|api|upstream`.
-
-Example:
-
-```text
-http://127.0.0.1:8000/?news_mode=upstream
-```
+Dashboard/News frontend entrypoints have been removed, so `news_mode` is no longer a user-facing page switch. Some backend services may still use the underlying news providers for Push Center or diagnostics.
 
 ## Upstream Service Startup
 
@@ -352,9 +332,8 @@ If the NewsNow dev server is still running, generated files such as `src/routeTr
 | Path                      | Method | Description |
 | ------------------------- | ------ | ----------- |
 | `/`                       | GET    | Frontend app entry |
-| `/api/frontend/dashboard` | GET    | Frontend-oriented aggregated payload |
-| `/api/dashboard`          | GET    | Legacy dashboard payload |
-| `/legacy`                 | GET    | Legacy server-rendered page |
+| `/api/frontend/modules/push`   | GET    | Push Center payload |
+| `/api/frontend/modules/status` | GET    | Status payload |
 | `/healthz`                | GET    | Health check |
 
 ## Data Mode Notes

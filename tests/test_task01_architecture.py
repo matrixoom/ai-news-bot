@@ -33,21 +33,19 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("application/json", headers["Content-Type"])
         self.assertEqual(json.loads(body.decode("utf-8")), {"status": "ok"})
 
-    def test_dashboard_api_returns_structured_payload(self):
+    def test_dashboard_api_is_removed_from_legacy_wsgi_app(self):
         status, headers, body = self._call_app("/api/dashboard")
 
-        self.assertEqual(status, "200 OK")
-        self.assertIn("application/json", headers["Content-Type"])
-        payload = json.loads(body.decode("utf-8"))
-        self.assertIn("sections", payload)
-        self.assertGreaterEqual(len(payload["sections"]), 5)
+        self.assertEqual(status, "404 Not Found")
+        self.assertIn("text/html", headers["Content-Type"])
+        self.assertIn("legacy dashboard route has been removed", body.decode("utf-8"))
 
-    def test_root_page_renders_dashboard_title(self):
+    def test_root_page_no_longer_renders_dashboard_title(self):
         status, headers, body = self._call_app("/")
 
-        self.assertEqual(status, "200 OK")
+        self.assertEqual(status, "404 Not Found")
         self.assertIn("text/html", headers["Content-Type"])
-        self.assertIn("财经与政策情报仪表盘", body.decode("utf-8"))
+        self.assertNotIn("财经与政策情报仪表盘", body.decode("utf-8"))
 
 
 if __name__ == "__main__":

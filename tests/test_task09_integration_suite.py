@@ -17,16 +17,11 @@ class Task09DocumentationTests(unittest.TestCase):
 
 
 class IntegrationSuiteTests(unittest.TestCase):
-    def test_dashboard_api_exposes_all_major_modules(self):
+    def test_dashboard_api_is_removed_from_public_backend(self):
         client = TestClient(create_fastapi_app())
         response = client.get("/api/dashboard")
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(len(payload["news_sections"]), 3)
-        self.assertGreaterEqual(len(payload["macro_sections"]), 7)
-        self.assertGreaterEqual(len(payload["market_sections"]), 6)
-        self.assertEqual(len(payload["event_sections"]), 4)
+        self.assertEqual(response.status_code, 404)
 
     def test_push_report_reuses_dashboard_snapshot(self):
         snapshot = DashboardService().build_snapshot()

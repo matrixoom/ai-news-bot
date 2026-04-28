@@ -429,13 +429,6 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     const url = new URL(rawUrl, window.location.origin);
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
 
-    if (url.pathname === "/api/frontend/dashboard") {
-      return jsonResponse({
-        ...buildDashboardPayload(payloads),
-        news_mode: url.searchParams.get("news_mode") ?? "hybrid",
-      });
-    }
-
     if (url.pathname === "/api/frontend/modules/status") {
       return jsonResponse(payloads.status);
     }

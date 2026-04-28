@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Dashboard / News / Macro / Market / Events 前端页面已清空并从导航与默认入口移除；`/api/dashboard`、`/api/frontend/dashboard`、`/legacy` 与对应页面 SPA 入口移除，Push Center 与 Status 后端接口保留。
 - News / Market / Events 顶层模块移除页内子 tab 与侧栏子目录，页面统一展示单页总览；`/api/frontend/modules/news|market|events` 独立后端接口移除，前端改从 `/api/frontend/dashboard` 聚合 payload 读取对应模块数据。
 - Macro 顶层模块移除页内子 tab、侧栏子目录和 `/api/frontend/modules/macro` 独立后端接口；`/macro` 改为从 `/api/frontend/dashboard` 的 `macro_sections` 渲染单页总览。
 - 修复推送中心“页面预览与实际发送日报图表不一致”的分叉：页面加载预览时默认请求最新快照，手动发送会在配置匹配时直接复用当前预览 HTML，保证所见即所得。

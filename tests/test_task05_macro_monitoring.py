@@ -192,16 +192,12 @@ class DashboardMacroIntegrationTests(unittest.TestCase):
         self.assertTrue(snapshot.macro_sections[0].source_label)
         self.assertTrue(snapshot.macro_sections[0].updated_at)
 
-    def test_frontend_dashboard_exposes_macro_sections_for_macro_page(self):
+    def test_frontend_dashboard_api_is_removed_for_macro_page(self):
         client = TestClient(create_fastapi_app())
 
         response = client.get("/api/frontend/dashboard")
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertIn("macro_sections", payload)
-        self.assertGreaterEqual(len(payload["macro_sections"]), 1)
-        self.assertIn("primary", payload["macro_sections"][0])
+        self.assertEqual(response.status_code, 404)
 
     def test_frontend_macro_module_endpoint_is_removed(self):
         client = TestClient(create_fastapi_app())

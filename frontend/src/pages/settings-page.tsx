@@ -2,24 +2,13 @@ import { useMemo, useState } from "react";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
 import { SettingsSectionCard } from "../features/settings/components/settings-section-card";
 import { buildSettingsViewModel } from "../features/settings/model/settings-view-model";
-import {
-  DEFAULT_NEWS_MODE_STORAGE_KEY,
-  DEFAULT_ROUTE_STORAGE_KEY,
-  SHOW_MARKET_TICKER_STORAGE_KEY,
-} from "../shared/lib/workbench-preferences";
-import {
-  useBooleanWorkbenchPreference,
-  useStringWorkbenchPreference,
-} from "../shared/hooks/use-workbench-preference";
+import { DEFAULT_ROUTE_STORAGE_KEY } from "../shared/lib/workbench-preferences";
+import { useStringWorkbenchPreference } from "../shared/hooks/use-workbench-preference";
 
 export function SettingsPage() {
-  const defaultRoute = useStringWorkbenchPreference(DEFAULT_ROUTE_STORAGE_KEY, "/dashboard");
-  const defaultNewsMode = useStringWorkbenchPreference(DEFAULT_NEWS_MODE_STORAGE_KEY, "hybrid");
-  const showMarketTicker = useBooleanWorkbenchPreference(SHOW_MARKET_TICKER_STORAGE_KEY, true);
+  const defaultRoute = useStringWorkbenchPreference(DEFAULT_ROUTE_STORAGE_KEY, "/push");
   const [draft, setDraft] = useState({
     defaultRoute: defaultRoute.value,
-    defaultNewsMode: defaultNewsMode.value,
-    showMarketTicker: showMarketTicker.value,
   });
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -36,8 +25,6 @@ export function SettingsPage() {
               onSubmit={(event) => {
                 event.preventDefault();
                 defaultRoute.setValue(draft.defaultRoute);
-                defaultNewsMode.setValue(draft.defaultNewsMode);
-                showMarketTicker.setValue(draft.showMarketTicker);
                 setFlash("Preferences saved.");
               }}
             >
@@ -59,41 +46,7 @@ export function SettingsPage() {
                     ))}
                   </select>
                 </label>
-
-                <label className="space-y-2 text-sm text-slate-700">
-                  <span className="font-medium text-slate-900">Default news mode</span>
-                  <select
-                    aria-label="Default news mode"
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                    onChange={(event) => {
-                      setDraft((current) => ({ ...current, defaultNewsMode: event.target.value }));
-                    }}
-                    value={draft.defaultNewsMode}
-                  >
-                    {model.newsModeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
               </div>
-
-              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-                <input
-                  aria-label="Show market ticker"
-                  checked={draft.showMarketTicker}
-                  className="mt-1"
-                  onChange={(event) => {
-                    setDraft((current) => ({ ...current, showMarketTicker: event.target.checked }));
-                  }}
-                  type="checkbox"
-                />
-                <span>
-                  <span className="block font-medium text-slate-900">Show market ticker</span>
-                  <span className="mt-1 block text-slate-600">Hide or restore the compact market strip in the shell header.</span>
-                </span>
-              </label>
 
               <div className="flex items-center gap-4">
                 <button className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white" type="submit">

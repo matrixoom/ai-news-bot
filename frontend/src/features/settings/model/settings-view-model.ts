@@ -1,16 +1,13 @@
 import { primaryNavItems, secondaryNavItems } from "../../../shared/config/nav-items";
-import { NEWS_MODE_OPTIONS } from "../../../shared/hooks/use-news-mode";
 
 export type SettingsDraft = {
   defaultRoute: string;
-  defaultNewsMode: string;
-  showMarketTicker: boolean;
 };
 
 export function buildSettingsViewModel(draft: SettingsDraft) {
   return {
     pageTitle: "Settings",
-    pageDescription: "Workspace defaults that shape the shell, route entrypoint, and news fetch mode.",
+    pageDescription: "Workspace defaults that shape the shell route entrypoint.",
     sections: [
       {
         id: "workspace",
@@ -28,11 +25,8 @@ export function buildSettingsViewModel(draft: SettingsDraft) {
       label: item.title,
       description: item.description,
     })),
-    newsModeOptions: NEWS_MODE_OPTIONS,
     summaryRows: [
       { label: "Default landing page", value: draft.defaultRoute },
-      { label: "Default news mode", value: draft.defaultNewsMode },
-      { label: "Market ticker", value: draft.showMarketTicker ? "Visible" : "Hidden" },
     ],
   };
 }
