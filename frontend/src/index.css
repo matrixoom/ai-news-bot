@@ -19,24 +19,6 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.market-ticker-scroll {
-  scroll-behavior: smooth;
-  scrollbar-width: thin;
-}
-
-.market-ticker-scroll::-webkit-scrollbar {
-  height: 6px;
-}
-
-.market-ticker-scroll::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background: rgba(100, 116, 139, 0.45);
-}
-
-[data-theme="dark"] .market-ticker-scroll::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.55);
-}
-
 [data-theme="dark"] body {
   background: #020617;
   color: #e2e8f0;

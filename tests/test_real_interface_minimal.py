@@ -100,27 +100,12 @@ class RealInterfaceUnitTests(unittest.TestCase):
     f"FastAPI deps missing: {FASTAPI_IMPORT_ERROR}",
 )
 class LiveInterfaceSmokeTests(unittest.TestCase):
-    def test_frontend_dashboard_api_live_mode_smoke(self):
+    def test_removed_frontend_dashboard_api_live_mode_smoke(self):
         app = create_fastapi_app(DashboardService(prefer_live_data=True))
         client = TestClient(app)
 
         response = client.get("/api/frontend/dashboard")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-
-        self.assertIn("news_sections", payload)
-        self.assertIn("macro_sections", payload)
-        self.assertIn("market_sections", payload)
-        self.assertIn("event_sections", payload)
-        self.assertIn("data_status", payload)
-
-        self.assertEqual(len(payload["news_sections"]), 3)
-        for section in payload["news_sections"]:
-            self.assertEqual(len(section["items"]), 10)
-
-        valid_status = {"live", "degraded", "sample", "unavailable", "unknown"}
-        for item in payload["data_status"]:
-            self.assertIn(item["status"], valid_status)
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

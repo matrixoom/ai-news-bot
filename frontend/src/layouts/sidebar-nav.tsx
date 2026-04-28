@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { dashboardNavItem, moduleDirectories, primaryNavItems, secondaryNavItems } from "../shared/config/nav-items";
+import { moduleDirectories, primaryNavItems, secondaryNavItems } from "../shared/config/nav-items";
 import { cn } from "../shared/lib/cn";
 import type { ModuleDirectory, NavItem } from "../shared/config/nav-items";
 
@@ -329,7 +329,6 @@ export function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
           <CompactNavSection items={primaryNavItems} pathname={pathname} searchParams={searchParams} />
         ) : (
           <div className="space-y-2">
-            <ExpandedSingleNavItem item={dashboardNavItem} pathname={pathname} searchParams={searchParams} />
             <ExpandedModuleDirectories
               directories={moduleDirectories}
               expandedByDirectory={expandedByDirectory}

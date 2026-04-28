@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -11,14 +10,31 @@ from fastapi.staticfiles import StaticFiles
 
 from ...services.dashboard_service import DashboardService
 from ...services.push_center_service import PushCenterService
-from .app import build_dashboard_payload, render_dashboard_html, render_error_html
 from .frontend_payload import (
-    build_frontend_payload,
     build_frontend_status_module_payload,
 )
 from .spa_assets import WORKBENCH_ROUTES, build_spa_unavailable_response, load_spa_assets
 
 logger = logging.getLogger(__name__)
+
+
+def render_error_html(title: str, message: str) -> bytes:
+    """渲染通用错误页。
+
+    Args:
+        title: 错误标题。
+        message: 面向用户展示的错误说明。
+
+    Returns:
+        可直接写入 HTMLResponse 的 UTF-8 HTML 字节串。
+    """
+    return (
+        "<!doctype html>"
+        "<html lang='en'>"
+        "<head><meta charset='utf-8'><title>{title}</title></head>"
+        "<body><main><h1>{title}</h1><p>{message}</p></main></body>"
+        "</html>"
+    ).format(title=title, message=message).encode("utf-8")
 
 
 def create_fastapi_app(
@@ -62,28 +78,6 @@ def create_fastapi_app(
     def shutdown_background_refresh() -> None:
         service.stop_background_refresh()
         push_service.stop_scheduler()
-
-    @app.get("/api/dashboard")
-    def dashboard_payload(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
-        try:
-            snapshot = service.build_snapshot(news_mode=news_mode, force_refresh=refresh)
-            return JSONResponse(build_dashboard_payload(snapshot))
-        except Exception:
-            return JSONResponse(
-                {"error": "dashboard_unavailable"},
-                status_code=503,
-            )
-
-    @app.get("/api/frontend/dashboard")
-    def frontend_dashboard_payload(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
-        try:
-            snapshot = service.build_snapshot(news_mode=news_mode, force_refresh=refresh)
-            return JSONResponse(build_frontend_payload(snapshot))
-        except Exception:
-            return JSONResponse(
-                {"error": "frontend_dashboard_unavailable"},
-                status_code=503,
-            )
 
     @app.get("/api/frontend/modules/status")
     def frontend_status_module(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
@@ -175,26 +169,8 @@ def create_fastapi_app(
     @app.get("/")
     def homepage() -> Response:
         if spa_assets.is_available:
-            return RedirectResponse(url="/dashboard")
-        try:
-            snapshot = service.build_snapshot()
-            return HTMLResponse(render_dashboard_html(snapshot))
-        except Exception:
-            return HTMLResponse(
-                render_error_html("Dashboard unavailable", "The dashboard view model could not be built."),
-                status_code=503,
-            )
-
-    @app.get("/legacy", response_class=HTMLResponse)
-    def legacy_homepage(news_mode: str | None = None) -> HTMLResponse:
-        try:
-            snapshot = service.build_snapshot(news_mode=news_mode)
-            return HTMLResponse(render_dashboard_html(snapshot))
-        except Exception:
-            return HTMLResponse(
-                render_error_html("Dashboard unavailable", "The dashboard view model could not be built."),
-                status_code=503,
-            )
+            return RedirectResponse(url="/push")
+        return build_spa_unavailable_response(spa_assets)
 
     def workbench_spa_entry() -> Response:
         if spa_assets.is_available:

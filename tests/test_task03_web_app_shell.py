@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 import pandas as pd
 
 from src.app.web import create_fastapi_app
-from src.app.web.frontend_payload import build_frontend_payload
 from src.domain.external_data import NewsCategory
 from src.providers.live_data import AkshareMacroDataProvider, AkshareMarketDataProvider
 from src.providers.newsnow_provider import NewsNowAggregatedNewsProvider, _NewsNowUpstreamServerManager
@@ -52,44 +51,20 @@ class FastAPIWebShellTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
 
-    def test_dashboard_api_returns_viewmodel_sections(self):
+    def test_dashboard_api_is_removed(self):
         response = self.client.get("/api/dashboard")
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertIn("dashboard_summary", payload)
-        self.assertIn("news_sections", payload)
-        self.assertIn("macro_sections", payload)
-        self.assertIn("market_sections", payload)
-        self.assertIn("event_sections", payload)
-        self.assertIn("data_status", payload)
-        self.assertIn("news_mode", payload)
-        self.assertGreaterEqual(len(payload["news_sections"]), 3)
-        self.assertGreaterEqual(len(payload["macro_sections"]), 3)
+        self.assertEqual(response.status_code, 404)
 
-    def test_frontend_dashboard_news_items_include_clickable_url_field(self):
+    def test_frontend_dashboard_api_is_removed(self):
         response = self.client.get("/api/frontend/dashboard")
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertIn("news_sections", payload)
-        self.assertIn("news_mode", payload)
-        self.assertIn("news_mode_options", payload)
-        self.assertIn("upstream_service_status", payload)
-        self.assertGreaterEqual(len(payload["news_sections"]), 1)
-        first_section = payload["news_sections"][0]
-        self.assertIn("items", first_section)
-        self.assertIn("item_count", first_section)
-        self.assertEqual(first_section["item_count"], len(first_section["items"]))
-        if first_section["items"]:
-            self.assertIn("url", first_section["items"][0])
+        self.assertEqual(response.status_code, 404)
 
-    def test_frontend_dashboard_accepts_news_mode_query(self):
+    def test_frontend_dashboard_news_mode_query_is_removed(self):
         response = self.client.get("/api/frontend/dashboard?news_mode=upstream")
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["news_mode"], "upstream")
+        self.assertEqual(response.status_code, 404)
 
     def test_removed_frontend_child_module_endpoints_return_not_found(self):
         for path in (
@@ -112,78 +87,16 @@ class FastAPIWebShellTests(unittest.TestCase):
         self.assertEqual(payload["coverage_note"], "")
         self.assertIn("details", payload["module"])
 
-    def test_legacy_route_renders_named_dashboard_panels(self):
+    def test_legacy_dashboard_route_is_removed(self):
         response = self.client.get("/legacy")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("财经与政策情报仪表盘", response.text)
-        self.assertIn("数据状态", response.text)
-        self.assertIn("结构化 API", response.text)
-        self.assertNotIn("Workbench unavailable", response.text)
+        self.assertEqual(response.status_code, 404)
 
     def test_unknown_route_returns_custom_not_found_page(self):
         response = self.client.get("/missing")
 
         self.assertEqual(response.status_code, 404)
         self.assertIn("Page not found", response.text)
-
-
-class FrontendPayloadTests(unittest.TestCase):
-    def test_frontend_payload_keeps_all_news_items_without_top10_truncation(self):
-        news_items = [
-            NewsItemView(
-                title=f"Headline {index}",
-                source="source",
-                url=f"https://example.com/{index}",
-                published_at="2026-03-21T08:00:00Z",
-                tag="rss",
-                summary=f"Summary {index}",
-            )
-            for index in range(12)
-        ]
-        snapshot = DashboardSnapshot(
-            generated_at="2026-03-21T08:00:00Z",
-            news_mode="hybrid",
-            title="Dashboard",
-            summary="Summary",
-            sections=[DashboardSection("news", "News", "live", "desc")],
-            dashboard_summary=SummaryBlock(
-                title="Dashboard",
-                subtitle="Summary",
-                as_of_label="2026-03-21T08:00:00Z",
-                coverage_note="note",
-                highlights=[],
-            ),
-            news_sections=[NewsSectionView(key="technology", title="Tech", status="live", description="desc", items=news_items)],
-            macro_sections=[
-                MetricCard(
-                    key="macro",
-                    label="Macro",
-                    value="1.0%",
-                    context="ctx",
-                    status="live",
-                )
-            ],
-            market_sections=[
-                MarketCard(
-                    key="market",
-                    label="Market",
-                    close_value="1",
-                    ma20_value="1",
-                    signal="neutral",
-                    status="live",
-                )
-            ],
-            event_sections=[EventSectionView(key="events", title="Events", status="live", items=[])],
-            data_status=[DataStatusItem(key="news", label="News", status="live", detail="ok")],
-        )
-
-        payload = build_frontend_payload(snapshot)
-
-        self.assertEqual(payload["news_mode"], "hybrid")
-        self.assertEqual(payload["news_sections"][0]["item_count"], 12)
-        self.assertEqual(len(payload["news_sections"][0]["items"]), 12)
-        self.assertEqual(payload["news_sections"][0]["items"][0]["summary"], "Summary 0")
 
 
 class DashboardServiceCacheTests(unittest.TestCase):

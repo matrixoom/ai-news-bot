@@ -8,12 +8,8 @@ from fastapi.responses import HTMLResponse
 
 
 WORKBENCH_ROUTES = (
-    "/dashboard",
-    "/news",
-    "/macro",
-    "/market",
-    "/events",
     "/push",
+    "/status",
     "/settings",
 )
 
