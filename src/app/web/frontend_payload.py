@@ -15,7 +15,6 @@ from ...services.dashboard_service import (
     MetricCard,
     NewsSectionView,
 )
-from ...services.macro_data_factor_service import MacroDataFactorService
 
 
 def build_frontend_payload(snapshot: DashboardSnapshot) -> dict[str, Any]:
@@ -47,36 +46,6 @@ def build_frontend_payload(snapshot: DashboardSnapshot) -> dict[str, Any]:
             }
             for item in snapshot.data_status
         ],
-    }
-
-
-def build_frontend_macro_module_payload(
-    *,
-    generated_at: str,
-    macro_sections: list[MetricCard],
-    module_loading: bool = False,
-    loading_note: str | None = None,
-) -> dict[str, Any]:
-    _ = macro_sections
-    data_factor_snapshot = MacroDataFactorService().build_snapshot(generated_at=generated_at)
-    return {
-        "generated_at": generated_at,
-        "module": {
-            "id": "macro",
-            "label": "Macro",
-            "note": loading_note or "数据因子、数据源矩阵与数据模型",
-            "description": "以数据因子为核心的宏观数据工作台。",
-            "status": "loading" if module_loading else "candidate",
-            "loading": module_loading,
-            "details": [],
-        },
-        "data_factors": _build_data_factors_payload(data_factor_snapshot),
-        "source_matrix": _build_source_matrix_payload(data_factor_snapshot),
-        "data_models": {
-            "status": "reserved",
-            "label": "数据模型",
-            "models": [],
-        },
     }
 
 
@@ -118,116 +87,6 @@ def build_frontend_status_module_payload(
                 for section in sections
             ],
         },
-    }
-
-
-def _build_data_factors_payload(snapshot) -> dict[str, Any]:
-    """构建 Macro 前端模块的数据因子 payload。"""
-
-    return {
-        "status": "candidate",
-        "label": "数据因子",
-        "default_factor_code": "housing_price",
-        "groups": [
-            {"value": "housing", "label": "房价数据"},
-            {"value": "growth", "label": "经济增长"},
-            {"value": "price", "label": "价格指标"},
-            {"value": "credit", "label": "居民信用"},
-            {"value": "deposit", "label": "居民存款"},
-        ],
-        "factors": [
-            {
-                "factor_code": factor.factor_code,
-                "factor_label": factor.factor_label,
-                "category": factor.category,
-                "description": factor.description,
-                "default_unit": factor.default_unit,
-                "frequency": factor.frequency,
-                "source_key": factor.source_key,
-                "storage_table": factor.storage_table,
-                "calculation_method": factor.calculation_method,
-                "display_order": factor.display_order,
-                "status": factor.status,
-            }
-            for factor in snapshot.factors
-        ],
-        "series": [
-            {
-                "factor_code": series.factor_code,
-                "label": series.label,
-                "unit": series.unit,
-                "frequency": series.frequency,
-                "status": series.status,
-                "source_label": series.source_label,
-                "points": [
-                    {
-                        "period_end": point.period_end,
-                        "period_label": point.period_label,
-                        "value": point.value,
-                    }
-                    for point in series.points
-                ],
-            }
-            for series in snapshot.series
-        ],
-        "table_rows": [
-            {
-                "factor_code": row.factor_code,
-                "factor_label": row.factor_label,
-                "period_label": row.period_label,
-                "dimension": row.dimension,
-                "value": row.value,
-                "unit": row.unit,
-                "source_label": row.source_label,
-                "status": row.status,
-                "updated_at": row.updated_at,
-            }
-            for row in snapshot.table_rows
-        ],
-        "sources": [],
-    }
-
-
-def _build_source_matrix_payload(snapshot) -> dict[str, Any]:
-    """构建 Macro 前端模块的数据源矩阵 payload。"""
-
-    summary = snapshot.source_matrix_summary
-    return {
-        "status": "candidate",
-        "label": "数据源矩阵",
-        "summary": {
-            "factor_count": summary.factor_count,
-            "source_count": summary.source_count,
-            "official_primary_count": summary.official_primary_count,
-            "degraded_count": summary.degraded_count,
-            "unavailable_count": summary.unavailable_count,
-            "last_verified_at": summary.last_verified_at,
-        },
-        "rows": [
-            {
-                "matrix_id": row.matrix_id,
-                "factor_code": row.factor_code,
-                "factor_label": row.factor_label,
-                "source_key": row.source_key,
-                "source_label": row.source_label,
-                "source_role": row.source_role,
-                "source_type": row.source_type,
-                "availability_status": row.availability_status,
-                "reliability_level": row.reliability_level,
-                "coverage_scope": row.coverage_scope,
-                "coverage_start": row.coverage_start,
-                "coverage_end": row.coverage_end,
-                "frequency": row.frequency,
-                "access_method": row.access_method,
-                "field_mapping_status": row.field_mapping_status,
-                "parser_status": row.parser_status,
-                "license_note": row.license_note,
-                "priority_order": row.priority_order,
-                "warning_message": row.warning_message,
-                "last_verified_at": row.last_verified_at,
-            }
-            for row in snapshot.source_matrix_rows
-        ],
     }
 
 

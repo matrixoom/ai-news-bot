@@ -71,7 +71,7 @@
 
 - 支持 `refresh` 查询参数（部分模块）
 - status 支持 `news_mode`
-- News / Market / Events 的独立模块接口已移除；对应顶层页面统一从 `/api/frontend/dashboard` 的 `news_sections`、`market_sections`、`event_sections` 取数。
+- News / Macro / Market / Events 的独立模块接口已移除；对应顶层页面统一从 `/api/frontend/dashboard` 的 `news_sections`、`macro_sections`、`market_sections`、`event_sections` 取数。
 - 典型结构：
 
 ```json
@@ -87,65 +87,7 @@
 }
 ```
 
-### 4.2 `GET /api/frontend/modules/macro`
-
-查询参数：`refresh`（可选）
-
-成功：`200` 或 `202`
-
-当前 Macro 模块为数据驱动工作台结构：
-
-- `module.details`：保留为空数组，旧版 `Overview / Compare / Indicators / Sources` 配对视图不再对前端暴露。
-- `data_factors`：数据因子入口，包含 `groups`、`factors`、`series`、`table_rows`。第一阶段只返回已登记的因子、来源和明确的空观测状态，不写入未经核验的样例历史值。
-- `source_matrix`：数据源可用性矩阵，包含 `summary` 与 `rows`，用于展示官方源、备选源、字段映射和解析器状态。
-- `data_models`：模型入口预留，`status=reserved`，第一阶段不返回房价研判或趋势判断。
-
-关键响应示例：
-
-```json
-{
-  "generated_at": "2026-04-26T00:00:00Z",
-  "module": {
-    "id": "macro",
-    "label": "Macro",
-    "status": "candidate",
-    "loading": false,
-    "details": []
-  },
-  "data_factors": {
-    "label": "数据因子",
-    "default_factor_code": "housing_price",
-    "factors": [
-      {
-        "factor_code": "housing_price",
-        "factor_label": "房价数据",
-        "storage_table": "macro_housing_price_history",
-        "status": "candidate"
-      }
-    ],
-    "series": [],
-    "table_rows": []
-  },
-  "source_matrix": {
-    "label": "数据源矩阵",
-    "summary": {
-      "factor_count": 8,
-      "source_count": 9,
-      "degraded_count": 1
-    },
-    "rows": []
-  },
-  "data_models": {
-    "label": "数据模型",
-    "status": "reserved",
-    "models": []
-  }
-}
-```
-
-失败：`503`，`frontend_macro_module_unavailable`
-
-### 4.3 `GET /api/frontend/modules/status`
+### 4.2 `GET /api/frontend/modules/status`
 
 查询参数：
 
@@ -156,7 +98,7 @@
 
 失败：`503`，`frontend_status_module_unavailable`
 
-### 4.4 `GET /api/frontend/modules/push`
+### 4.3 `GET /api/frontend/modules/push`
 
 查询参数：`refresh`（可选）
 

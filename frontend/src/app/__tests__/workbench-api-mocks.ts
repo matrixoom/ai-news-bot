@@ -176,57 +176,7 @@ export const newsPayload: WorkbenchPayloads["news"] = {
 
 export const macroPayload: WorkbenchPayloads["macro"] = {
   generated_at: "2026-03-30T09:00:00Z",
-  module: {
-    id: "macro",
-    label: "Macro",
-    note: "数据因子、数据源矩阵与数据模型",
-    description: "以数据因子为核心的宏观数据工作台。",
-    status: "candidate",
-    loading: false,
-    details: [],
-  },
-  data_factors: {
-    status: "candidate",
-    label: "数据因子",
-    default_factor_code: "housing_price",
-    groups: [{ value: "housing", label: "房价数据" }],
-    factors: [
-      {
-        factor_code: "housing_price",
-        factor_label: "房价数据",
-        category: "housing",
-        description: "住宅价格变化跟踪。",
-        default_unit: "%",
-        frequency: "monthly",
-        source_key: "official-housing",
-        storage_table: "macro_housing_price_history",
-        calculation_method: "官方发布值",
-        display_order: 1,
-        status: "candidate",
-      },
-    ],
-    series: [],
-    table_rows: [],
-    sources: [],
-  },
-  source_matrix: {
-    status: "candidate",
-    label: "数据源矩阵",
-    summary: {
-      factor_count: 1,
-      source_count: 1,
-      official_primary_count: 1,
-      degraded_count: 0,
-      unavailable_count: 0,
-      last_verified_at: "2026-03-30T09:00:00Z",
-    },
-    rows: [],
-  },
-  data_models: {
-    status: "reserved",
-    label: "数据模型",
-    models: [],
-  },
+  macro_sections: clone(dashboardPayload.macro_sections),
 };
 
 export const marketPayload: WorkbenchPayloads["market"] = {
@@ -486,10 +436,6 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
       });
     }
 
-    if (url.pathname === "/api/frontend/modules/macro") {
-      return jsonResponse(payloads.macro);
-    }
-
     if (url.pathname === "/api/frontend/modules/status") {
       return jsonResponse(payloads.status);
     }
@@ -620,9 +566,14 @@ function buildDashboardPayload(payloads: WorkbenchPayloads): Record<string, unkn
   return {
     ...dashboard,
     news_sections: extractModuleSections(payloads.news, "news", dashboard.news_sections),
+    macro_sections: extractMacroSections(payloads.macro, dashboard.macro_sections),
     market_sections: extractModuleSections(payloads.market, "market", dashboard.market_sections),
     event_sections: extractModuleSections(payloads.events, "events", dashboard.event_sections),
   };
+}
+
+function extractMacroSections(payload: Record<string, unknown>, fallback: unknown) {
+  return Array.isArray(payload.macro_sections) ? payload.macro_sections : fallback;
 }
 
 function extractModuleSections(payload: Record<string, unknown>, moduleId: string, fallback: unknown) {

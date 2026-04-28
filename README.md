@@ -213,7 +213,7 @@ http://127.0.0.1:8000/
 Frontend loading contract:
 
 - The homepage shell must not block on slow modules.
-- `news`, `market`, and `events` read from the shared `/api/frontend/dashboard` payload; `macro` and `status` keep dedicated module hydration.
+- `news`, `macro`, `market`, and `events` read from the shared `/api/frontend/dashboard` payload; `status` keeps dedicated module hydration.
 - `push` is intentionally lazy-loaded only when the user opens the push center, because preview generation is much heavier than the other modules.
 - Future frontend changes should preserve this behavior.
 

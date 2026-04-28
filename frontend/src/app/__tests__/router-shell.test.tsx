@@ -66,8 +66,8 @@ describe("Workbench shell", () => {
 
     renderApp("/macro");
 
-    expect(await screen.findByRole("heading", { name: "数据因子" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "数据因子" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: "Macro overview" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "数据因子" })).not.toBeInTheDocument();
   });
 
   it("renders the Market route as a real page", async () => {
@@ -206,25 +206,26 @@ describe("Workbench shell", () => {
     expect(screen.getByRole("link", { name: "News" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /expand market directory/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /expand news directory/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand macro directory/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Market > Signals" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "News > Topics" })).not.toBeInTheDocument();
   });
 
-  it("keeps macro directory expansion state after a refresh", async () => {
+  it("keeps push directory expansion state after a refresh", async () => {
     installWorkbenchFetchMock({ market: marketPayload, status: statusPayload });
     const user = userEvent.setup();
 
-    const firstRender = renderApp("/macro");
+    const firstRender = renderApp("/push");
 
-    await user.click(await screen.findByRole("button", { name: /expand macro directory/i }));
-    expect(await screen.findByRole("link", { name: "Macro > Overview" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /expand push center directory/i }));
+    expect(await screen.findByRole("link", { name: "Push Center > Overview" })).toBeInTheDocument();
 
     firstRender.unmount();
 
-    renderApp("/macro");
+    renderApp("/push");
 
-    expect(await screen.findByRole("button", { name: /collapse macro directory/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Macro > Overview" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /collapse push center directory/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Push Center > Overview" })).toBeInTheDocument();
   });
 
   it("collapses and expands the sidebar while persisting preference", async () => {
@@ -262,18 +263,18 @@ describe("Workbench shell", () => {
     installWorkbenchFetchMock({ news: newsPayload, status: statusPayload, market: marketPayload });
     const user = userEvent.setup();
 
-    renderApp("/macro");
+    renderApp("/push");
 
     expect(await screen.findByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /collapse workspace section/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Research Desk")).not.toBeInTheDocument();
     expect(screen.queryByText("Loading workspace...")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /expand macro directory/i }));
-    expect(await screen.findByRole("link", { name: "Macro > Overview" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /expand push center directory/i }));
+    expect(await screen.findByRole("link", { name: "Push Center > Overview" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /collapse macro directory/i }));
-    expect(screen.queryByRole("link", { name: "Macro > Overview" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /collapse push center directory/i }));
+    expect(screen.queryByRole("link", { name: "Push Center > Overview" })).not.toBeInTheDocument();
   });
 });
 

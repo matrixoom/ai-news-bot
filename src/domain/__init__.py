@@ -26,15 +26,6 @@ from .macro_monitoring import (
     build_default_macro_pair_registry,
     build_default_macro_registry,
 )
-from .macro_data_factors import (
-    MacroDataFactorSnapshot,
-    MacroFactorDefinition,
-    MacroFactorSeries,
-    MacroFactorSeriesPoint,
-    MacroFactorTableRow,
-    MacroSourceMatrixRow,
-    MacroSourceMatrixSummary,
-)
 from .market_monitoring import (
     FishbowlState,
     MarketChartPoint,
@@ -59,11 +50,6 @@ __all__ = [
     "EventsOutlookSnapshot",
     "FishbowlState",
     "MacroFrequency",
-    "MacroDataFactorSnapshot",
-    "MacroFactorDefinition",
-    "MacroFactorSeries",
-    "MacroFactorSeriesPoint",
-    "MacroFactorTableRow",
     "MacroHistoryPoint",
     "MacroIndicatorDefinition",
     "MacroIndicatorReading",
@@ -72,8 +58,6 @@ __all__ = [
     "MacroMonitoringSnapshot",
     "MacroPairDefinition",
     "MacroSeriesPointView",
-    "MacroSourceMatrixRow",
-    "MacroSourceMatrixSummary",
     "MarketChartPoint",
     "MarketIndexHistoryPoint",
     "MarketIndexSnapshot",

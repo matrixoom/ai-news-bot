@@ -43,26 +43,7 @@ export const moduleDirectories: ModuleDirectory[] = [
   {
     id: "macro",
     item: moduleRootNavItems[1],
-    children: [
-      {
-        to: "/macro?tab=overview",
-        title: "Overview",
-        ariaLabel: "Macro > Overview",
-        description: "Pair-level summary",
-      },
-      {
-        to: "/macro?tab=compare",
-        title: "Compare",
-        ariaLabel: "Macro > Compare",
-        description: "Side-by-side pairs",
-      },
-      {
-        to: "/macro?tab=sources",
-        title: "Sources",
-        ariaLabel: "Macro > Sources",
-        description: "Official source register",
-      },
-    ],
+    children: [],
     defaultExpanded: false,
   },
   {
