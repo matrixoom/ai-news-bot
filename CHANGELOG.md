@@ -6,8 +6,6 @@
 
 ### Added
 
-- Macro 模块新增“数据因子 / 数据源矩阵 / 数据模型”三段式工作台：数据因子登记房价、名义 GDP、实际 GDP、GDP 差值、PPI、居民新增贷款、居民贷款增速、居民活期存款增速；数据源矩阵展示官方源、备选源、可用性、字段映射和解析器状态；数据模型入口仅预留。
-- 新增本地 SQLite `macro_data_factors.db` 第一阶段存储：`macro_factor_definitions`、`macro_source_availability_matrix`、`macro_table_field_comments`，并为每类 Macro 数据因子初始化独立历史表骨架与字段中文注释。
 - 新增 `AGENTS.md`，统一 Codex/代理协作与变更规则。
 - 新增 `docs/architecture.md`，明确架构分层与模块边界。
 - 新增 `docs/api-contract.md`，固化前后端接口契约与错误语义。
@@ -16,7 +14,7 @@
 ### Changed
 
 - News / Market / Events 顶层模块移除页内子 tab 与侧栏子目录，页面统一展示单页总览；`/api/frontend/modules/news|market|events` 独立后端接口移除，前端改从 `/api/frontend/dashboard` 聚合 payload 读取对应模块数据。
-- Macro 前端模块移除旧 `Overview / Compare / Indicators / Sources` 标签与配对研究视图，`/macro` 默认进入“数据因子”；`/api/frontend/modules/macro` 的 `module.details` 兼容保留为空数组，前端改用 `data_factors`、`source_matrix`、`data_models`。
+- Macro 顶层模块移除页内子 tab、侧栏子目录和 `/api/frontend/modules/macro` 独立后端接口；`/macro` 改为从 `/api/frontend/dashboard` 的 `macro_sections` 渲染单页总览。
 - 修复推送中心“页面预览与实际发送日报图表不一致”的分叉：页面加载预览时默认请求最新快照，手动发送会在配置匹配时直接复用当前预览 HTML，保证所见即所得。
 - 修复推送中心模块级日报预览标题与摘要的中文乱码问题，模块级 preview 的标题文案恢复为可读中文。
 - 推送中心日报预览 iframe 改为按内容高度自动拉伸，减少预览区内部竖向滚动条的出现频率。

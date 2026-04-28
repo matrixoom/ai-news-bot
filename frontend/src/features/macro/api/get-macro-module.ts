@@ -1,7 +1,7 @@
 import type { MacroModuleRawPayload } from "../model/macro-module.types";
 
 export async function getMacroModule(signal?: AbortSignal): Promise<MacroModuleRawPayload> {
-  const response = await fetch("/api/frontend/modules/macro", {
+  const response = await fetch("/api/frontend/dashboard", {
     headers: { Accept: "application/json" },
     signal,
   });

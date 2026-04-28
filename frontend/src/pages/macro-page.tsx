@@ -1,45 +1,21 @@
-import { useLocation, useSearchParams } from "react-router-dom";
 import { LoadingPanelState, ErrorPanelState, EmptyPanelState } from "../shared/ui/panel-state";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
-import { ModuleTabBar } from "../shared/ui/module-tab-bar";
 import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
-import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
-import { MacroDataFactorsPanel } from "../features/macro/components/macro-data-factors-panel";
-import { MacroDataModelsPanel } from "../features/macro/components/macro-data-models-panel";
-import { MacroSourceMatrixPanel } from "../features/macro/components/macro-source-matrix-panel";
 import { useMacroModuleQuery } from "../features/macro/hooks/use-macro-module-query";
-import { MACRO_MODULE_TABS, type MacroModuleTab, type MacroModuleViewModel } from "../features/macro/model/macro-module.types";
+import type { MacroCardView, MacroModuleViewModel } from "../features/macro/model/macro-module.types";
 
 export function MacroPage() {
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
   const query = useMacroModuleQuery();
-  const activeTab = resolveModuleTab(searchParams.get("tab"), MACRO_MODULE_TABS, "data_factors");
-  const toolbar = (
-    <ModuleTabBar
-      activeTab={activeTab}
-      ariaLabel="Macro module tabs"
-      pathname={location.pathname}
-      searchParams={buildModuleTabSearchParams(searchParams, activeTab)}
-      tabs={MACRO_MODULE_TABS}
-    />
-  );
-  const frameDescription = query.data?.pageDescription ?? "以数据因子为核心的宏观数据工作台。";
+  const frameDescription = query.data?.pageDescription ?? "Tracking macro indicators and paired comparisons.";
 
   if (query.isPending) {
     return (
       <ModulePageFrame
         description={frameDescription}
         lastUpdated={null}
-        main={
-          <LoadingPanelState
-            title="Loading Macro data"
-            description="正在读取数据因子、数据源矩阵和模型预留信息。"
-          />
-        }
-        side={<LoadingPanelState title="Macro side panel loading" description="等待 Macro payload 返回。" />}
+        main={<LoadingPanelState title="Loading Macro data" description="Fetching the latest macro indicators." />}
+        side={<LoadingPanelState title="Macro side panel loading" description="Waiting for the dashboard payload." />}
         title="Macro"
-        toolbar={toolbar}
       />
     );
   }
@@ -52,7 +28,7 @@ export function MacroPage() {
         main={
           <ErrorPanelState
             title="Macro module unavailable"
-            description="Macro 数据因子 payload 暂时无法从后端加载。"
+            description="Macro data could not be loaded from the dashboard payload."
             action={
               <button
                 className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white"
@@ -66,24 +42,23 @@ export function MacroPage() {
             }
           />
         }
-        side={<LoadingPanelState title="Macro side panel loading" description="等待 Macro payload 返回。" />}
+        side={<LoadingPanelState title="Macro side panel loading" description="Waiting for the dashboard payload." />}
         title="Macro"
-        toolbar={toolbar}
       />
     );
   }
 
   const data = query.data;
 
-  if (!data.dataFactors.factors.length) {
+  if (!data.macroCards.length) {
     return (
       <ModulePageFrame
         description={data.pageDescription}
         lastUpdated={<LastUpdatedBadge value={data.generatedAt} />}
         main={
           <EmptyPanelState
-            title="No macro data factors yet"
-            description="后端暂未返回可展示的数据因子。"
+            title="No macro indicators yet"
+            description="The dashboard payload returned an empty macro section."
             action={
               <button
                 className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white"
@@ -97,9 +72,8 @@ export function MacroPage() {
             }
           />
         }
-        side={renderSidePanel(data)}
+        side={<MacroStatusPanel model={data} />}
         title={data.pageTitle}
-        toolbar={toolbar}
       />
     );
   }
@@ -108,54 +82,115 @@ export function MacroPage() {
     <ModulePageFrame
       description={data.pageDescription}
       lastUpdated={<LastUpdatedBadge value={data.generatedAt} />}
-      main={renderTabContent(activeTab, data)}
-      side={renderSidePanel(data)}
+      main={<MacroOverviewContent model={data} />}
+      side={<MacroStatusPanel model={data} />}
       title={data.pageTitle}
-      toolbar={toolbar}
     />
   );
 }
 
 /**
- * 根据当前 Macro 子标签渲染对应主内容。
- * @param activeTab URL 查询参数解析后的当前标签。
- * @param data 已适配的 Macro 模块视图模型。
- * @returns 当前标签对应的 React 内容。
+ * 渲染 Macro 单页总览主体。
+ * @param model 已适配的 Macro 聚合视图模型。
+ * @returns 宏观指标卡片列表。
  */
-function renderTabContent(activeTab: MacroModuleTab, data: MacroModuleViewModel) {
-  if (activeTab === "source_matrix") {
-    return <MacroSourceMatrixPanel model={data} />;
-  }
+function MacroOverviewContent({ model }: { model: MacroModuleViewModel }) {
+  return (
+    <section className="space-y-6">
+      <header className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Overview</p>
+            <h3 className="mt-2 text-xl font-semibold text-slate-950">Macro overview</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Macro now uses one consolidated page backed by the shared dashboard payload.
+            </p>
+          </div>
+          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+            {model.macroCards.length} cards
+          </span>
+        </div>
+      </header>
 
-  if (activeTab === "data_models") {
-    return <MacroDataModelsPanel model={data} />;
-  }
-
-  return <MacroDataFactorsPanel model={data} />;
+      <div className="grid gap-4 xl:grid-cols-2">
+        {model.macroCards.map((card) => (
+          <MacroCard key={card.key} card={card} />
+        ))}
+      </div>
+    </section>
+  );
 }
 
 /**
- * 渲染 Macro 页面右侧摘要，帮助快速核对数据覆盖状态。
- * @param data 已适配的 Macro 模块视图模型。
- * @returns 数据工作台状态摘要。
+ * 渲染单张宏观指标卡片。
+ * @param card 单张 Macro 卡片视图模型。
+ * @returns 指标摘要、主副指标与来源信息。
  */
-function renderSidePanel(data: MacroModuleViewModel) {
-  const summaryItems = [
-    ["数据因子", data.dataFactors.factors.length],
-    ["数据源矩阵", data.sourceMatrix.rows.length],
-    ["降级来源", data.sourceMatrix.summary.degradedCount],
-    ["预留模型", data.dataModels.models.length],
-  ];
-
+function MacroCard({ card }: { card: MacroCardView }) {
   return (
-    <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Macro snapshot</p>
-      <h3 className="mt-2 text-lg font-semibold text-slate-950">数据工作台状态</h3>
-      <div className="mt-4 space-y-3">
-        {summaryItems.map(([label, value]) => (
-          <div key={String(label)} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
-            <span className="text-sm text-slate-500">{label}</span>
-            <span className="text-sm font-semibold text-slate-950">{value}</span>
+    <article className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{card.status}</p>
+          <h4 className="mt-2 text-lg font-semibold text-slate-950">{card.title}</h4>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{card.description}</p>
+        </div>
+      </div>
+
+      <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+        {card.summary}
+      </p>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <IndicatorBlock label="Primary" indicator={card.primary} />
+        {card.secondary ? <IndicatorBlock label="Secondary" indicator={card.secondary} /> : null}
+      </div>
+
+      {card.sourceLabels.length ? (
+        <p className="mt-4 text-xs text-slate-500">Sources: {card.sourceLabels.join(", ")}</p>
+      ) : null}
+    </article>
+  );
+}
+
+/**
+ * 渲染单个指标读数块。
+ * @param label 指标角色标签。
+ * @param indicator 单个指标视图模型。
+ * @returns 指标读数与上下文。
+ */
+function IndicatorBlock({ label, indicator }: { label: string; indicator: MacroCardView["primary"] }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <h5 className="mt-2 text-base font-semibold text-slate-950">{indicator.label}</h5>
+      <p className="mt-2 text-2xl font-semibold text-slate-950">{indicator.latestValue}</p>
+      <p className="mt-1 text-sm text-slate-600">{indicator.changeLabel || indicator.periodLabel}</p>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{indicator.context}</p>
+      <p className="mt-3 text-xs text-slate-500">{indicator.sourceLabel}</p>
+    </div>
+  );
+}
+
+/**
+ * 渲染 Macro 单页右侧状态面板。
+ * @param model 已适配的 Macro 聚合视图模型。
+ * @returns 宏观模块状态摘要。
+ */
+function MacroStatusPanel({ model }: { model: MacroModuleViewModel }) {
+  return (
+    <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Macro snapshot</p>
+      <h3 className="mt-3 text-lg font-semibold text-slate-950">Operational status</h3>
+      <p className="mt-3 text-sm leading-6 text-slate-600">
+        Macro 子页已移除，当前仅保留聚合指标总览。
+      </p>
+      <div className="mt-5 space-y-3">
+        {model.statusSummaries.map((summary) => (
+          <div key={summary.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{summary.label}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-950">{summary.value}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{summary.detail}</p>
           </div>
         ))}
       </div>

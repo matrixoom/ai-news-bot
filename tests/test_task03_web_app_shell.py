@@ -94,6 +94,7 @@ class FastAPIWebShellTests(unittest.TestCase):
     def test_removed_frontend_child_module_endpoints_return_not_found(self):
         for path in (
             "/api/frontend/modules/news?news_mode=upstream",
+            "/api/frontend/modules/macro",
             "/api/frontend/modules/market",
             "/api/frontend/modules/events",
         ):

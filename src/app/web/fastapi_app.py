@@ -13,7 +13,6 @@ from ...services.dashboard_service import DashboardService
 from ...services.push_center_service import PushCenterService
 from .app import build_dashboard_payload, render_dashboard_html, render_error_html
 from .frontend_payload import (
-    build_frontend_macro_module_payload,
     build_frontend_payload,
     build_frontend_status_module_payload,
 )
@@ -83,32 +82,6 @@ def create_fastapi_app(
         except Exception:
             return JSONResponse(
                 {"error": "frontend_dashboard_unavailable"},
-                status_code=503,
-            )
-
-    @app.get("/api/frontend/modules/macro")
-    def frontend_macro_module(refresh: bool = False) -> JSONResponse:
-        try:
-            if not refresh and service.should_serve_loading_module("macro"):
-                _, detail = service.get_module_bootstrap_state("macro")
-                return _loading_response(
-                    build_frontend_macro_module_payload(
-                        generated_at=_generated_at_now(),
-                        macro_sections=[],
-                        module_loading=True,
-                    ),
-                    detail,
-                )
-            generated_at, macro_sections = service.build_macro_module(force_refresh=refresh)
-            return JSONResponse(
-                build_frontend_macro_module_payload(
-                    generated_at=generated_at,
-                    macro_sections=macro_sections,
-                )
-            )
-        except Exception:
-            return JSONResponse(
-                {"error": "frontend_macro_module_unavailable"},
                 status_code=503,
             )
 
