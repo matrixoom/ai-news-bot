@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../../app/app";
@@ -87,12 +86,12 @@ describe("EventsPage", () => {
     vi.restoreAllMocks();
   });
 
-  function renderEventsApp(initialEntry = "/events?tab=week") {
+  function renderEventsApp(initialEntry = "/events") {
     window.history.pushState({}, "", initialEntry);
     render(<App />);
   }
 
-  function renderEventsPage(initialEntry = "/events?tab=week") {
+  function renderEventsPage(initialEntry = "/events") {
     const router = createMemoryRouter(
       [
         {
@@ -120,12 +119,10 @@ describe("EventsPage", () => {
     );
   }
 
-  it("renders time windows, official links, and keeps tab state in the URL", async () => {
+  it("renders time windows and official links without child tabs", async () => {
     installWorkbenchFetchMock({ events: eventsPayload });
 
-    const user = userEvent.setup();
-
-    renderEventsApp("/events?tab=week");
+    renderEventsApp("/events");
 
     expect(await screen.findByRole("heading", { name: "Next 7 Days" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "National Bureau of Statistics release window" })).toBeInTheDocument();
@@ -134,13 +131,10 @@ describe("EventsPage", () => {
       "https://www.federalreserve.gov/newsevents/calendar.htm",
     );
 
-    await user.click(screen.getByRole("link", { name: "近1个月" }));
-
-    expect(window.location.search).toBe("?tab=month");
-    expect(screen.getByRole("link", { name: "近1个月" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "近1个月" })).not.toBeInTheDocument();
   });
 
-  it("falls back to timeline when the tab query is unknown", async () => {
+  it("ignores removed tab queries and renders the consolidated timeline", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify(eventsPayload), {
         status: 200,
@@ -151,13 +145,13 @@ describe("EventsPage", () => {
     renderEventsApp("/events?tab=unknown");
 
     expect(await screen.findByRole("heading", { name: "Next 7 Days" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "近一周" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "近一周" })).not.toBeInTheDocument();
   });
 
   it("renders the loading state inside the shared module frame", () => {
     vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => new Promise(() => {}));
 
-    renderEventsPage("/events?tab=week");
+    renderEventsPage("/events");
 
     expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);
     expect(screen.getByText("Loading event windows")).toBeInTheDocument();
@@ -167,7 +161,7 @@ describe("EventsPage", () => {
   it("renders the error state inside the shared module frame", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("network down"));
 
-    renderEventsPage("/events?tab=week");
+    renderEventsPage("/events");
 
     expect(await screen.findByText("Events module unavailable")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);
@@ -192,7 +186,7 @@ describe("EventsPage", () => {
       ),
     );
 
-    renderEventsPage("/events?tab=week");
+    renderEventsPage("/events");
 
     expect(await screen.findByText("No event windows yet")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: "Events" }).length).toBeGreaterThan(0);

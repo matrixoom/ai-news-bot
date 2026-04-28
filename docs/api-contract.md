@@ -70,7 +70,8 @@
 ### 4.1 通用约定
 
 - 支持 `refresh` 查询参数（部分模块）
-- news/status 支持 `news_mode`
+- status 支持 `news_mode`
+- News / Market / Events 的独立模块接口已移除；对应顶层页面统一从 `/api/frontend/dashboard` 的 `news_sections`、`market_sections`、`event_sections` 取数。
 - 典型结构：
 
 ```json
@@ -86,25 +87,7 @@
 }
 ```
 
-### 4.2 `GET /api/frontend/modules/news`
-
-查询参数：
-
-- `news_mode`（可选）
-- `refresh`（可选）
-
-成功：
-
-- `200`：返回 news 模块
-- `202`：模块尚在冷启动，含 `refresh_after_ms`
-
-失败：`503`
-
-```json
-{"error":"frontend_news_module_unavailable"}
-```
-
-### 4.3 `GET /api/frontend/modules/macro`
+### 4.2 `GET /api/frontend/modules/macro`
 
 查询参数：`refresh`（可选）
 
@@ -162,23 +145,7 @@
 
 失败：`503`，`frontend_macro_module_unavailable`
 
-### 4.4 `GET /api/frontend/modules/market`
-
-查询参数：`refresh`（可选）
-
-成功：`200` 或 `202`
-
-失败：`503`，`frontend_market_module_unavailable`
-
-### 4.5 `GET /api/frontend/modules/events`
-
-查询参数：`refresh`（可选）
-
-成功：`200` 或 `202`
-
-失败：`503`，`frontend_events_module_unavailable`
-
-### 4.6 `GET /api/frontend/modules/status`
+### 4.3 `GET /api/frontend/modules/status`
 
 查询参数：
 
@@ -189,7 +156,7 @@
 
 失败：`503`，`frontend_status_module_unavailable`
 
-### 4.7 `GET /api/frontend/modules/push`
+### 4.4 `GET /api/frontend/modules/push`
 
 查询参数：`refresh`（可选）
 

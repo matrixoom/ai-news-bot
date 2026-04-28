@@ -1,32 +1,13 @@
-import { useLocation, useSearchParams } from "react-router-dom";
 import { ErrorPanelState, LoadingPanelState, EmptyPanelState } from "../shared/ui/panel-state";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
-import { ModuleTabBar } from "../shared/ui/module-tab-bar";
 import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
-import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
 import { MarketSignalCard } from "../features/market/components/market-signal-card";
 import { MarketWatchPanel } from "../features/market/components/market-watch-panel";
 import { useMarketModuleQuery } from "../features/market/hooks/use-market-module-query";
-import {
-  MARKET_MODULE_TABS,
-  type MarketModuleTab,
-  type MarketModuleViewModel,
-} from "../features/market/model/market-module.types";
+import type { MarketModuleViewModel } from "../features/market/model/market-module.types";
 
 export function MarketPage() {
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
   const query = useMarketModuleQuery();
-  const activeTab = resolveModuleTab(searchParams.get("tab"), MARKET_MODULE_TABS, "overview");
-  const toolbar = (
-    <ModuleTabBar
-      activeTab={activeTab}
-      ariaLabel="Market module tabs"
-      pathname={location.pathname}
-      searchParams={buildModuleTabSearchParams(searchParams, activeTab)}
-      tabs={MARKET_MODULE_TABS}
-    />
-  );
   const frameDescription = query.data?.pageDescription ?? "Tracking the latest index models and watch summaries.";
 
   if (query.isPending) {
@@ -42,7 +23,6 @@ export function MarketPage() {
         }
         side={<LoadingPanelState title="Watch panel loading" description="Waiting for the market payload to arrive." />}
         title="Market"
-        toolbar={toolbar}
       />
     );
   }
@@ -71,7 +51,6 @@ export function MarketPage() {
         }
         side={<LoadingPanelState title="Watch panel loading" description="Waiting for the market payload to arrive." />}
         title="Market"
-        toolbar={toolbar}
       />
     );
   }
@@ -100,9 +79,8 @@ export function MarketPage() {
             }
           />
         }
-        side={<MarketWatchPanel activeTab={activeTab} model={data} />}
+        side={<MarketWatchPanel model={data} />}
         title={data.pageTitle}
-        toolbar={toolbar}
       />
     );
   }
@@ -111,77 +89,19 @@ export function MarketPage() {
     <ModulePageFrame
       description={data.pageDescription}
       lastUpdated={<LastUpdatedBadge value={data.generatedAt} />}
-      main={renderTabContent(activeTab, data)}
-      side={<MarketWatchPanel activeTab={activeTab} model={data} />}
+      main={<MarketOverviewContent data={data} />}
+      side={<MarketWatchPanel model={data} />}
       title={data.pageTitle}
-      toolbar={toolbar}
     />
   );
 }
 
-function renderTabContent(activeTab: MarketModuleTab, data: MarketModuleViewModel) {
-  if (activeTab === "signals") {
-    return (
-      <section className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Signals</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">Signal matrix</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{data.moduleNote}</p>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          {data.signalCards.map((card) => (
-            <MarketSignalCard key={card.key} card={card} />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (activeTab === "models") {
-    return (
-      <section className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Models</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">Model table</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Each card keeps the latest close, moving average, and source in view.</p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          {data.signalCards.map((card) => (
-            <MarketSignalCard key={card.key} card={card} compact />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (activeTab === "watchlist") {
-    return (
-      <section className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Watchlist</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">Focus list</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">The strongest signal names are grouped here for quick follow-up.</p>
-        </div>
-        <div className="grid gap-4">
-          {data.signalCards.slice(0, 4).map((card) => (
-            <article key={card.key} className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h4 className="text-lg font-semibold text-slate-950">{card.label}</h4>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{card.explanation}</p>
-                </div>
-                <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-600">
-                  {card.signal}
-                </span>
-              </div>
-              <p className="mt-4 text-sm text-slate-500">{card.sourceLabel}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
+/**
+ * 渲染 Market 模块的单页总览内容。
+ * 参数 data 表示已经适配后的市场模块视图模型。
+ * 返回市场信号卡片与当前姿态摘要。
+ */
+function MarketOverviewContent({ data }: { data: MarketModuleViewModel }) {
   return (
     <section className="space-y-6">
       <header className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">

@@ -83,7 +83,7 @@ cmd /c npm run build
 3. 健康检查通过：`GET /healthz`
 4. 核心接口抽查：
    - `/api/frontend/dashboard`
-   - `/api/frontend/modules/news?news_mode=api`
+   - `/api/frontend/modules/status?news_mode=api`
    - `/api/frontend/modules/push`
 5. 推送链路抽查（本地或测试环境）：
    - 更新配置

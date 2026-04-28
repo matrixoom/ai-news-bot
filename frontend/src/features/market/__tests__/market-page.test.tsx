@@ -98,7 +98,7 @@ describe("MarketPage", () => {
     vi.restoreAllMocks();
   });
 
-  function renderMarketPage(initialEntry = "/market?tab=signals") {
+  function renderMarketPage(initialEntry = "/market") {
     const router = createMemoryRouter(
       [
         {
@@ -134,7 +134,7 @@ describe("MarketPage", () => {
       }),
     );
 
-    renderMarketPage("/market?tab=signals");
+    renderMarketPage("/market");
 
     expect(await screen.findByRole("heading", { name: "CSI 300" })).toBeInTheDocument();
     expect(screen.getAllByText("neutral").length).toBeGreaterThan(0);
@@ -142,7 +142,7 @@ describe("MarketPage", () => {
     expect(screen.getByText("3 tracked signals")).toBeInTheDocument();
   });
 
-  it("falls back to overview when the tab query is unknown", async () => {
+  it("ignores removed tab queries and renders the single overview", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify(marketPayload), {
         status: 200,
@@ -153,7 +153,7 @@ describe("MarketPage", () => {
     renderMarketPage("/market?tab=nope");
 
     expect(await screen.findByRole("heading", { name: "Market overview" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
   });
 
   it("accepts string deviation labels from the backend contract", async () => {
@@ -189,7 +189,7 @@ describe("MarketPage", () => {
       ),
     );
 
-    renderMarketPage("/market?tab=signals");
+    renderMarketPage("/market");
 
     expect(await screen.findByText("+1.2%")).toBeInTheDocument();
     expect(screen.getByText("暂无数据")).toBeInTheDocument();

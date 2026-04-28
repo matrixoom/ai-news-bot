@@ -1,13 +1,3 @@
-import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
-
-export type EventsModuleTab = "week" | "month" | "halfyear";
-
-export const EVENTS_MODULE_TABS: readonly ModuleTabDefinition<EventsModuleTab>[] = [
-  { value: "week", label: "近一周" },
-  { value: "month", label: "近1个月" },
-  { value: "halfyear", label: "近6个月" },
-];
-
 export type EventWindowItemView = {
   title: string;
   region: string;

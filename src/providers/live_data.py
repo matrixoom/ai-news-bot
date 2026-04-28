@@ -1166,6 +1166,7 @@ class OfficialMacroDataProvider:
 
     def _fetch_treasury_10y_daily_points(self, *, start_date: date) -> list[MacroHistoryPoint]:
         points: list[MacroHistoryPoint] = []
+        seen_period_ends: set[date] = set()
         today = date.today()
         for year, month in _iter_month_starts(start_date, today):
             period_key = f"{year:04d}{month:02d}"
@@ -1185,9 +1186,13 @@ class OfficialMacroDataProvider:
                 period_end = datetime.strptime(raw_date, "%m/%d/%Y").date()
                 if period_end < start_date:
                     continue
+                # Treasury 按月接口在测试或上游异常时可能返回重复日期，入库前按日期去重。
+                if period_end in seen_period_ends:
+                    continue
                 value = self._coerce_numeric_field(raw_value)
                 if value is None:
                     continue
+                seen_period_ends.add(period_end)
                 points.append(
                     MacroHistoryPoint(
                         period_end=period_end,

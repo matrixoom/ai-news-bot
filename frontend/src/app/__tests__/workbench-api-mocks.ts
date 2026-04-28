@@ -178,47 +178,54 @@ export const macroPayload: WorkbenchPayloads["macro"] = {
   generated_at: "2026-03-30T09:00:00Z",
   module: {
     id: "macro",
-    label: "Macro Intelligence",
-    note: "1 comparison card",
-    description: "Official macro comparisons with source links.",
-    status: "live",
+    label: "Macro",
+    note: "数据因子、数据源矩阵与数据模型",
+    description: "以数据因子为核心的宏观数据工作台。",
+    status: "candidate",
     loading: false,
-    details: [
+    details: [],
+  },
+  data_factors: {
+    status: "candidate",
+    label: "数据因子",
+    default_factor_code: "housing_price",
+    groups: [{ value: "housing", label: "房价数据" }],
+    factors: [
       {
-        id: "inflation-growth",
-        label: "Inflation vs growth",
-        kind: "macro",
-        note: "Consumer prices remain sticky while growth stays resilient.",
-        section: {
-          key: "inflation-growth",
-          title: "Inflation vs growth",
-          status: "live",
-          description: "A calm comparison of price pressure and activity.",
-          summary: "CPI: 0.3% | GDP: 2.4%",
-          primary: {
-            key: "cpi",
-            label: "CPI",
-            status: "live",
-            latest_value: "0.3%",
-            previous_value: "0.2%",
-            change_label: "+0.1 pts",
-            trend: "up",
-            frequency: "monthly",
-            source_label: "National Bureau of Statistics",
-            source_url: "https://example.com/cpi",
-            updated_at: "2026-03-30T08:30:00Z",
-            period_label: "Feb 2026",
-            context: "Price growth stayed contained.",
-            unit: "%",
-            points: [],
-          },
-          secondary: null,
-          delta_label: "Gap",
-          delta_points: [],
-          sources: [{ label: "National Bureau of Statistics", url: "https://example.com/cpi" }],
-        },
+        factor_code: "housing_price",
+        factor_label: "房价数据",
+        category: "housing",
+        description: "住宅价格变化跟踪。",
+        default_unit: "%",
+        frequency: "monthly",
+        source_key: "official-housing",
+        storage_table: "macro_housing_price_history",
+        calculation_method: "官方发布值",
+        display_order: 1,
+        status: "candidate",
       },
     ],
+    series: [],
+    table_rows: [],
+    sources: [],
+  },
+  source_matrix: {
+    status: "candidate",
+    label: "数据源矩阵",
+    summary: {
+      factor_count: 1,
+      source_count: 1,
+      official_primary_count: 1,
+      degraded_count: 0,
+      unavailable_count: 0,
+      last_verified_at: "2026-03-30T09:00:00Z",
+    },
+    rows: [],
+  },
+  data_models: {
+    status: "reserved",
+    label: "数据模型",
+    models: [],
   },
 };
 
@@ -474,28 +481,13 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
 
     if (url.pathname === "/api/frontend/dashboard") {
       return jsonResponse({
-        ...clone(payloads.dashboard),
-        news_mode: url.searchParams.get("news_mode") ?? "hybrid",
-      });
-    }
-
-    if (url.pathname === "/api/frontend/modules/news") {
-      return jsonResponse({
-        ...clone(payloads.news),
+        ...buildDashboardPayload(payloads),
         news_mode: url.searchParams.get("news_mode") ?? "hybrid",
       });
     }
 
     if (url.pathname === "/api/frontend/modules/macro") {
       return jsonResponse(payloads.macro);
-    }
-
-    if (url.pathname === "/api/frontend/modules/market") {
-      return jsonResponse(payloads.market);
-    }
-
-    if (url.pathname === "/api/frontend/modules/events") {
-      return jsonResponse(payloads.events);
     }
 
     if (url.pathname === "/api/frontend/modules/status") {
@@ -620,6 +612,27 @@ function jsonResponse(body: unknown) {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function buildDashboardPayload(payloads: WorkbenchPayloads): Record<string, unknown> {
+  const dashboard = clone(payloads.dashboard);
+
+  return {
+    ...dashboard,
+    news_sections: extractModuleSections(payloads.news, "news", dashboard.news_sections),
+    market_sections: extractModuleSections(payloads.market, "market", dashboard.market_sections),
+    event_sections: extractModuleSections(payloads.events, "events", dashboard.event_sections),
+  };
+}
+
+function extractModuleSections(payload: Record<string, unknown>, moduleId: string, fallback: unknown) {
+  const module = payload.module as { id?: string; details?: Array<{ section: unknown }> } | undefined;
+
+  if (module?.id !== moduleId || !Array.isArray(module.details)) {
+    return fallback;
+  }
+
+  return module.details.map((detail) => detail.section);
 }
 
 function clone<T>(value: T): T {

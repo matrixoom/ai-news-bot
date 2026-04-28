@@ -1,14 +1,3 @@
-import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
-
-export type MarketModuleTab = "overview" | "signals" | "models" | "watchlist";
-
-export const MARKET_MODULE_TABS: readonly ModuleTabDefinition<MarketModuleTab>[] = [
-  { value: "overview", label: "Overview" },
-  { value: "signals", label: "Signals" },
-  { value: "models", label: "Models" },
-  { value: "watchlist", label: "Watchlist" },
-];
-
 export type MarketChartPoint = {
   tradeDate: string;
   closePrice: number;

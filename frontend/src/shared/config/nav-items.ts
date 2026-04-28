@@ -37,26 +37,7 @@ export const moduleDirectories: ModuleDirectory[] = [
   {
     id: "news",
     item: moduleRootNavItems[0],
-    children: [
-      {
-        to: "/news?tab=channels",
-        title: "Topics",
-        ariaLabel: "News > Topics",
-        description: "Technology, finance, and policy channels",
-      },
-      {
-        to: "/news?tab=sources",
-        title: "Sources",
-        ariaLabel: "News > Sources",
-        description: "Upstream state and mode options",
-      },
-      {
-        to: "/news?tab=brief",
-        title: "Brief",
-        ariaLabel: "News > Brief",
-        description: "Compact daily summary",
-      },
-    ],
+    children: [],
     defaultExpanded: false,
   },
   {
@@ -87,51 +68,13 @@ export const moduleDirectories: ModuleDirectory[] = [
   {
     id: "market",
     item: moduleRootNavItems[2],
-    children: [
-      {
-        to: "/market?tab=overview",
-        title: "Overview",
-        ariaLabel: "Market > Overview",
-        description: "Signal overview",
-      },
-      {
-        to: "/market?tab=signals",
-        title: "Signals",
-        ariaLabel: "Market > Signals",
-        description: "Signal matrix",
-      },
-      {
-        to: "/market?tab=watchlist",
-        title: "Watchlist",
-        ariaLabel: "Market > Watchlist",
-        description: "Focus names",
-      },
-    ],
+    children: [],
     defaultExpanded: false,
   },
   {
     id: "events",
     item: moduleRootNavItems[3],
-    children: [
-      {
-        to: "/events?tab=week",
-        title: "近一周",
-        ariaLabel: "Events > 近一周",
-        description: "7-day event window",
-      },
-      {
-        to: "/events?tab=month",
-        title: "近1个月",
-        ariaLabel: "Events > 近1个月",
-        description: "30-day event window",
-      },
-      {
-        to: "/events?tab=halfyear",
-        title: "近6个月",
-        ariaLabel: "Events > 近6个月",
-        description: "6-month event window",
-      },
-    ],
+    children: [],
     defaultExpanded: false,
   },
   {

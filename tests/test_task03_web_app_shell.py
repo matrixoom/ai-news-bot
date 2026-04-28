@@ -35,11 +35,11 @@ class Task03DocumentationTests(unittest.TestCase):
         self.assertIn("tests/test_task03_web_app_shell.py", content)
 
     def test_frontend_shell_keeps_push_module_lazy_loaded(self):
-        content = Path("to_delete/src/app/web/static/app.js").read_text(encoding="utf-8")
+        content = Path("frontend/src/features/push/hooks/use-push-module-query.ts").read_text(encoding="utf-8")
 
-        self.assertIn('if (module.id === "push") {', content)
-        self.assertIn('note: "按需加载"', content)
-        self.assertIn('loadModule(module.id, { resetContent: true });', content)
+        self.assertIn('const includePreview = activeTab !== "history";', content)
+        self.assertIn('queryKey: ["push-module", includePreview]', content)
+        self.assertIn('getPushModule({ signal, includePreview, refresh: includePreview })', content)
 
 
 class FastAPIWebShellTests(unittest.TestCase):
@@ -91,16 +91,15 @@ class FastAPIWebShellTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["news_mode"], "upstream")
 
-    def test_frontend_news_module_endpoint_returns_module_payload(self):
-        response = self.client.get("/api/frontend/modules/news?news_mode=upstream")
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["module"]["id"], "news")
-        self.assertEqual(payload["news_mode"], "upstream")
-        self.assertIn("news_mode_options", payload)
-        self.assertIn("upstream_service_status", payload)
-        self.assertIn("details", payload["module"])
+    def test_removed_frontend_child_module_endpoints_return_not_found(self):
+        for path in (
+            "/api/frontend/modules/news?news_mode=upstream",
+            "/api/frontend/modules/market",
+            "/api/frontend/modules/events",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 404)
 
     def test_frontend_status_module_endpoint_returns_shell_status(self):
         response = self.client.get("/api/frontend/modules/status")
@@ -111,16 +110,6 @@ class FastAPIWebShellTests(unittest.TestCase):
         self.assertIn("coverage_note", payload)
         self.assertEqual(payload["coverage_note"], "")
         self.assertIn("details", payload["module"])
-
-    def test_frontend_market_module_endpoint_returns_module_payload(self):
-        response = self.client.get("/api/frontend/modules/market")
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["module"]["id"], "market")
-        self.assertIn("details", payload["module"])
-        self.assertGreaterEqual(len(payload["module"]["details"]), 1)
-        self.assertIn("chart_points", payload["module"]["details"][0]["section"])
 
     def test_legacy_route_renders_named_dashboard_panels(self):
         response = self.client.get("/legacy")

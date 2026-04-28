@@ -1,24 +1,21 @@
 import { LastUpdatedBadge } from "../../../shared/ui/last-updated-badge";
-import type { MarketModuleTab, MarketModuleViewModel } from "../model/market-module.types";
+import type { MarketModuleViewModel } from "../model/market-module.types";
 
 type MarketWatchPanelProps = {
   model: MarketModuleViewModel;
-  activeTab: MarketModuleTab;
 };
 
-const tabCopy: Record<MarketModuleTab, string> = {
-  overview: "Overview keeps the market model set compact and easy to scan.",
-  signals: "Signals mode emphasizes the live posture of each tracked index.",
-  models: "Models mode surfaces the data window and source behind each card.",
-  watchlist: "Watchlist mode keeps the most actionable signals at the top.",
-};
-
-export function MarketWatchPanel({ model, activeTab }: MarketWatchPanelProps) {
+/**
+ * 渲染 Market 单页右侧观察面板。
+ * 参数 model 表示市场模块视图模型。
+ * 返回市场状态摘要、观察清单与更新时间。
+ */
+export function MarketWatchPanel({ model }: MarketWatchPanelProps) {
   return (
     <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Watch status</p>
       <h3 className="mt-3 text-lg font-semibold text-slate-950">Watchlist</h3>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{tabCopy[activeTab]}</p>
+      <p className="mt-3 text-sm leading-6 text-slate-600">Overview keeps the market model set compact and easy to scan.</p>
 
       <div className="mt-5 space-y-3">
         {model.watchSummaries.map((summary) => (
