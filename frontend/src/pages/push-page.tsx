@@ -93,7 +93,7 @@ export function PushPage() {
     setDraft(model.config);
     setPreview(model.preview);
     setRecentRuns(model.recentRuns);
-    queryClient.setQueryData(["push-module"], model);
+    queryClient.setQueryData(["push-module", activeTab !== "history"], model);
   }
 
   if (query.isPending) {
