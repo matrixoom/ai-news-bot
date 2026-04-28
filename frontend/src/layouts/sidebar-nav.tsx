@@ -183,6 +183,7 @@ function ExpandedModuleDirectories({
   return (
     <div className="space-y-2">
       {directories.map((directory) => {
+        const hasChildren = directory.children.length > 0;
         const expanded = expandedByDirectory[directory.id] ?? Boolean(directory.defaultExpanded);
         const childActive = directory.children.some((child) => isNavTargetActive(child.to, pathname, searchParams));
         const parentActive = !childActive && isNavTargetActive(directory.item.to, pathname, searchParams);
@@ -206,18 +207,20 @@ function ExpandedModuleDirectories({
                   {directory.item.description}
                 </div>
               </Link>
-              <button
-                aria-expanded={expanded}
-                aria-label={expanded ? `Collapse ${directory.item.title} directory` : `Expand ${directory.item.title} directory`}
-                className="mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                onClick={() => onToggleDirectory(directory.id)}
-                type="button"
-              >
-                {expanded ? "-" : "+"}
-              </button>
+              {hasChildren ? (
+                <button
+                  aria-expanded={expanded}
+                  aria-label={expanded ? `Collapse ${directory.item.title} directory` : `Expand ${directory.item.title} directory`}
+                  className="mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                  onClick={() => onToggleDirectory(directory.id)}
+                  type="button"
+                >
+                  {expanded ? "-" : "+"}
+                </button>
+              ) : null}
             </div>
 
-            {expanded ? (
+            {hasChildren && expanded ? (
               <div className="mt-2 space-y-1 border-l border-slate-200 pl-3">
                 {directory.children.map((child) => {
                   const active = isNavTargetActive(child.to, pathname, searchParams);

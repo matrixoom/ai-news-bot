@@ -56,7 +56,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(
-        fetchMock.mock.calls.some(([input]) => String(input).includes("/api/frontend/modules/news?news_mode=api")),
+        fetchMock.mock.calls.some(([input]) => String(input).includes("/api/frontend/dashboard?news_mode=api")),
       ).toBe(true);
     });
   });

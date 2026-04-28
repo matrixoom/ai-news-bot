@@ -15,6 +15,7 @@
 
 ### Changed
 
+- News / Market / Events 顶层模块移除页内子 tab 与侧栏子目录，页面统一展示单页总览；`/api/frontend/modules/news|market|events` 独立后端接口移除，前端改从 `/api/frontend/dashboard` 聚合 payload 读取对应模块数据。
 - Macro 前端模块移除旧 `Overview / Compare / Indicators / Sources` 标签与配对研究视图，`/macro` 默认进入“数据因子”；`/api/frontend/modules/macro` 的 `module.details` 兼容保留为空数组，前端改用 `data_factors`、`source_matrix`、`data_models`。
 - 修复推送中心“页面预览与实际发送日报图表不一致”的分叉：页面加载预览时默认请求最新快照，手动发送会在配置匹配时直接复用当前预览 HTML，保证所见即所得。
 - 修复推送中心模块级日报预览标题与摘要的中文乱码问题，模块级 preview 的标题文案恢复为可读中文。

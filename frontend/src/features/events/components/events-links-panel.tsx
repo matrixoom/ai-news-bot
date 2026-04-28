@@ -1,23 +1,21 @@
 import { LastUpdatedBadge } from "../../../shared/ui/last-updated-badge";
-import type { EventsModuleTab, EventsModuleViewModel } from "../model/events-module.types";
+import type { EventsModuleViewModel } from "../model/events-module.types";
 
 type EventsLinksPanelProps = {
   model: EventsModuleViewModel;
-  activeTab: EventsModuleTab;
 };
 
-const tabCopy: Record<EventsModuleTab, string> = {
-  week: "近一周视图聚焦 7 天内的高优先级事件与官方日历窗口。",
-  month: "近1个月视图按自然时间窗口聚合未来 30 天事件，便于排期。",
-  halfyear: "近6个月视图保留中期大事件，支持季度级观察和风险提示。",
-};
-
-export function EventsLinksPanel({ model, activeTab }: EventsLinksPanelProps) {
+/**
+ * 渲染 Events 单页右侧官方链接与观察面板。
+ * 参数 model 表示事件模块视图模型。
+ * 返回官方链接、观察事项与模块状态。
+ */
+export function EventsLinksPanel({ model }: EventsLinksPanelProps) {
   return (
     <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Official links and watch panel</p>
       <h3 className="mt-3 text-lg font-semibold text-slate-950">Operational snapshot</h3>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{tabCopy[activeTab]}</p>
+      <p className="mt-3 text-sm leading-6 text-slate-600">事件页已合并为单一视图，集中展示官方窗口、重点事项与来源链接。</p>
 
       <div className="mt-5 space-y-3">
         <StatusRow label="Windows" value={`${model.windowSections.length}`} />

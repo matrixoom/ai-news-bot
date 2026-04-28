@@ -56,7 +56,7 @@ export function adaptMarketModule(response: MarketModuleRawPayload): MarketModul
       {
         label: "Tracked signals",
         value: `${signalCards.length} tracked signals`,
-        detail: "Market models returned by /api/frontend/modules/market.",
+        detail: "Market models returned by the shared dashboard payload.",
       },
       {
         label: "Leading signal",

@@ -50,46 +50,6 @@ def build_frontend_payload(snapshot: DashboardSnapshot) -> dict[str, Any]:
     }
 
 
-def build_frontend_news_module_payload(
-    *,
-    generated_at: str,
-    news_mode: str,
-    news_sections: list[NewsSectionView],
-    news_status: DataStatusItem,
-    module_loading: bool = False,
-    loading_note: str | None = None,
-) -> dict[str, Any]:
-    sections = _build_news_sections_from_views(news_sections)
-    return {
-        "generated_at": generated_at,
-        "news_mode": news_mode,
-        "news_mode_options": [
-            {"value": "hybrid", "label": "Hybrid"},
-            {"value": "api", "label": "API"},
-            {"value": "upstream", "label": "Upstream"},
-        ],
-        "upstream_service_status": get_upstream_service_status(),
-        "module": {
-            "id": "news",
-            "label": "新闻情报",
-            "note": f"{len(sections)} 个频道",
-            "description": "科技、财经、政策新闻",
-            "status": "loading" if module_loading else _group_status(sections, fallback=news_status.status),
-            "loading": module_loading,
-            "details": [
-                {
-                    "id": section["key"],
-                    "label": section["title"],
-                    "kind": "news",
-                    "note": f"{section['item_count']} 条",
-                    "section": section,
-                }
-                for section in sections
-            ],
-        },
-    }
-
-
 def build_frontend_macro_module_payload(
     *,
     generated_at: str,
@@ -116,68 +76,6 @@ def build_frontend_macro_module_payload(
             "status": "reserved",
             "label": "数据模型",
             "models": [],
-        },
-    }
-
-
-def build_frontend_market_module_payload(
-    *,
-    generated_at: str,
-    market_sections: list[MarketCard],
-    module_loading: bool = False,
-    loading_note: str | None = None,
-) -> dict[str, Any]:
-    sections = _build_market_sections_from_views(market_sections)
-    return {
-        "generated_at": generated_at,
-        "module": {
-            "id": "market",
-            "label": "市场模型",
-            "note": f"{len(sections)} 个模型",
-            "description": "技术指标",
-            "status": "loading" if module_loading else _group_status(sections),
-            "loading": module_loading,
-            "details": [
-                {
-                    "id": section["key"],
-                    "label": section["label"],
-                    "kind": "market",
-                    "note": section["signal"],
-                    "section": section,
-                }
-                for section in sections
-            ],
-        },
-    }
-
-
-def build_frontend_events_module_payload(
-    *,
-    generated_at: str,
-    event_sections: list[EventSectionView],
-    module_loading: bool = False,
-    loading_note: str | None = None,
-) -> dict[str, Any]:
-    sections = _build_event_sections_from_views(event_sections)
-    return {
-        "generated_at": generated_at,
-        "module": {
-            "id": "events",
-            "label": "事件展望",
-            "note": f"{len(sections)} 个窗口",
-            "description": "未来展望",
-            "status": "loading" if module_loading else _group_status(sections),
-            "loading": module_loading,
-            "details": [
-                {
-                    "id": section["key"],
-                    "label": section["title"],
-                    "kind": "events",
-                    "note": f"{len(section['items'])} 条",
-                    "section": section,
-                }
-                for section in sections
-            ],
         },
     }
 

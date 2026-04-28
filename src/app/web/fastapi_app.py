@@ -9,14 +9,11 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from ...services.dashboard_service import DashboardService, DataStatusItem
+from ...services.dashboard_service import DashboardService
 from ...services.push_center_service import PushCenterService
 from .app import build_dashboard_payload, render_dashboard_html, render_error_html
 from .frontend_payload import (
-    build_frontend_events_module_payload,
     build_frontend_macro_module_payload,
-    build_frontend_market_module_payload,
-    build_frontend_news_module_payload,
     build_frontend_payload,
     build_frontend_status_module_payload,
 )
@@ -89,39 +86,6 @@ def create_fastapi_app(
                 status_code=503,
             )
 
-    @app.get("/api/frontend/modules/news")
-    def frontend_news_module(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
-        try:
-            if not refresh and service.should_serve_loading_module("news", news_mode=news_mode):
-                _, detail = service.get_module_bootstrap_state("news", news_mode=news_mode)
-                return _loading_response(
-                    build_frontend_news_module_payload(
-                        generated_at=_generated_at_now(),
-                        news_mode=news_mode or "hybrid",
-                        news_sections=[],
-                        news_status=DataStatusItem("news", "新闻情报", "loading", detail),
-                        module_loading=True,
-                    ),
-                    detail,
-                )
-            generated_at, effective_news_mode, news_sections, news_status = service.build_news_module(
-                news_mode=news_mode,
-                force_refresh=refresh,
-            )
-            return JSONResponse(
-                build_frontend_news_module_payload(
-                    generated_at=generated_at,
-                    news_mode=effective_news_mode,
-                    news_sections=news_sections,
-                    news_status=news_status,
-                )
-            )
-        except Exception:
-            return JSONResponse(
-                {"error": "frontend_news_module_unavailable"},
-                status_code=503,
-            )
-
     @app.get("/api/frontend/modules/macro")
     def frontend_macro_module(refresh: bool = False) -> JSONResponse:
         try:
@@ -145,58 +109,6 @@ def create_fastapi_app(
         except Exception:
             return JSONResponse(
                 {"error": "frontend_macro_module_unavailable"},
-                status_code=503,
-            )
-
-    @app.get("/api/frontend/modules/market")
-    def frontend_market_module(refresh: bool = False) -> JSONResponse:
-        try:
-            if not refresh and service.should_serve_loading_module("market"):
-                _, detail = service.get_module_bootstrap_state("market")
-                return _loading_response(
-                    build_frontend_market_module_payload(
-                        generated_at=_generated_at_now(),
-                        market_sections=[],
-                        module_loading=True,
-                    ),
-                    detail,
-                )
-            generated_at, market_sections = service.build_market_module(force_refresh=refresh)
-            return JSONResponse(
-                build_frontend_market_module_payload(
-                    generated_at=generated_at,
-                    market_sections=market_sections,
-                )
-            )
-        except Exception:
-            return JSONResponse(
-                {"error": "frontend_market_module_unavailable"},
-                status_code=503,
-            )
-
-    @app.get("/api/frontend/modules/events")
-    def frontend_events_module(refresh: bool = False) -> JSONResponse:
-        try:
-            if not refresh and service.should_serve_loading_module("events"):
-                _, detail = service.get_module_bootstrap_state("events")
-                return _loading_response(
-                    build_frontend_events_module_payload(
-                        generated_at=_generated_at_now(),
-                        event_sections=[],
-                        module_loading=True,
-                    ),
-                    detail,
-                )
-            generated_at, event_sections = service.build_events_module(force_refresh=refresh)
-            return JSONResponse(
-                build_frontend_events_module_payload(
-                    generated_at=generated_at,
-                    event_sections=event_sections,
-                )
-            )
-        except Exception:
-            return JSONResponse(
-                {"error": "frontend_events_module_unavailable"},
                 status_code=503,
             )
 

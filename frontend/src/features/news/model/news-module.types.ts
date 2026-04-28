@@ -1,14 +1,3 @@
-import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
-
-export type NewsModuleTab = "overview" | "channels" | "sources" | "brief";
-
-export const NEWS_MODULE_TABS: readonly ModuleTabDefinition<NewsModuleTab>[] = [
-  { value: "overview", label: "Overview" },
-  { value: "channels", label: "Topics" },
-  { value: "sources", label: "Sources" },
-  { value: "brief", label: "Brief" },
-];
-
 export type NewsUpstreamServiceStatusRaw = {
   status: string;
   healthy: boolean;
