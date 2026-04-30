@@ -12,13 +12,14 @@
 
 ### 2.1 单元与模块测试（后端）
 
-路径：`tests/test_task0x_*.py`、`tests/test_*.py`
+路径：`tests/test_task*.py`、`tests/test_*.py`
 
 关注点：
 
 - provider 合同与降级策略
 - dashboard service 聚合逻辑
 - push center 配置、预览、触发逻辑
+- 历史文档校验类 / demo 类测试已归档到 `to_delete/tests/`
 
 ### 2.2 集成测试（后端 API）
 

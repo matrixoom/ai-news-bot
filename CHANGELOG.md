@@ -13,7 +13,7 @@
 
 ### Changed
 
-- Dashboard / News / Macro / Market / Events 前端页面已清空并从导航与默认入口移除；`/api/dashboard`、`/api/frontend/dashboard`、`/legacy` 与对应页面 SPA 入口移除，Push Center 与 Status 后端接口保留。
+- Dashboard / News / Macro / Market / Events / Status 前端页面已清空并从导航与默认入口移除；`/api/dashboard`、`/api/frontend/dashboard`、`/api/frontend/modules/status`、`/legacy` 与对应页面 SPA 入口移除，Push Center 后端接口保留。
 - News / Market / Events 顶层模块移除页内子 tab 与侧栏子目录，页面统一展示单页总览；`/api/frontend/modules/news|market|events` 独立后端接口移除，前端改从 `/api/frontend/dashboard` 聚合 payload 读取对应模块数据。
 - Macro 顶层模块移除页内子 tab、侧栏子目录和 `/api/frontend/modules/macro` 独立后端接口；`/macro` 改为从 `/api/frontend/dashboard` 的 `macro_sections` 渲染单页总览。
 - 修复推送中心“页面预览与实际发送日报图表不一致”的分叉：页面加载预览时默认请求最新快照，手动发送会在配置匹配时直接复用当前预览 HTML，保证所见即所得。
@@ -21,7 +21,9 @@
 - 推送中心日报预览 iframe 改为按内容高度自动拉伸，减少预览区内部竖向滚动条的出现频率。
 - 统一推送中心与旧 `push_job` 的邮件报告生成链路：邮件发送现在也复用 HTML 日报渲染结果，避免出现“预览图表已更新但实际收到的邮件仍沿用旧 markdown 内容”的分叉。
 - 推送中心改为按页面上下文裁剪预览开销：`History` 标签页请求可跳过 preview 构建，推送预览也优先按已选模块组装，避免普通加载被全量 dashboard snapshot 拖慢。
+- 推送中心移除冗余 `Overview` 页面与侧栏子目录；旧 `tab=overview` 链接会自动归一到 `tab=schedules`，保留配置、计划与历史操作入口。
 - 推送中心布局调整为「左侧配置/计划约三分之一，右侧预览约三分之二」；同时移除预览里的 `Text fallback`，并删除 `Schedules` 标签页的冗余发送历史侧栏与 `History` 标签页的预览侧栏。
+- 推送中心 `History` 页面移除冗余 `Run controls` 卡片，仅保留推送运行历史记录。
 - Settings 页面移除冗余正文卡片和默认入口偏好表单，仅保留应用壳层中的 Settings 路由入口。
 - 修复推送中心日报中市场模块“表格值已刷新但趋势图尾点仍停留旧值”的展示错位问题；日报图表渲染现在会优先与表格侧最新 `trade_date / close / MA20 / deviation` 对齐。
 - 前端浏览器标签页标题由 `AI News Bot` 调整为 `Trend Insight`，与当前产品命名保持一致。
@@ -86,6 +88,14 @@
 ### Notes
 
 - 该阶段以“从脚本到平台化”重构为主线，细粒度提交记录请结合 Git 历史查看。
+
+## [2026-04-29] - 测试冗余清理
+
+### Changed
+
+- 移除 `tests/test_task02` 到 `tests/test_task09` 中仅校验任务文档存在性的冗余测试。
+- 将阶段性 demo / smoke 测试与重复度较高的历史测试归档到 `to_delete/tests/`。
+- 同步更新 `docs/test-strategy.md` 与 `.vscode/launch.json`，避免引用已归档测试。
 
 ---
 

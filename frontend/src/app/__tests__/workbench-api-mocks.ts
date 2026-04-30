@@ -6,7 +6,6 @@ type WorkbenchPayloads = {
   macro: Record<string, unknown>;
   market: Record<string, unknown>;
   events: Record<string, unknown>;
-  status: Record<string, unknown>;
   push: Record<string, unknown>;
 };
 
@@ -257,45 +256,6 @@ export const eventsPayload: WorkbenchPayloads["events"] = {
   },
 };
 
-export const statusPayload: WorkbenchPayloads["status"] = {
-  generated_at: "2026-03-30T09:00:00Z",
-  coverage_note: "128 stories indexed in the last 24 hours.",
-  module: {
-    id: "status",
-    label: "Data Status",
-    note: "2 data cards",
-    description: "Freshness and source health across the workbench.",
-    status: "live",
-    loading: false,
-    details: [
-      {
-        id: "news-coverage",
-        label: "News coverage",
-        kind: "status",
-        note: "live",
-        section: {
-          key: "news-coverage",
-          label: "News coverage",
-          status: "live",
-          detail: "128 stories indexed in the last 24 hours.",
-        },
-      },
-      {
-        id: "upstream-health",
-        label: "Upstream health",
-        kind: "status",
-        note: "running",
-        section: {
-          key: "upstream-health",
-          label: "Upstream health",
-          status: "live",
-          detail: "upstream service is reachable",
-        },
-      },
-    ],
-  },
-};
-
 export const pushPayload: WorkbenchPayloads["push"] = {
   generated_at: "2026-03-30T09:00:00Z",
   refresh_after_ms: 30000,
@@ -418,7 +378,6 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     macro: overrides.macro ?? macroPayload,
     market: overrides.market ?? marketPayload,
     events: overrides.events ?? eventsPayload,
-    status: overrides.status ?? statusPayload,
     push: overrides.push ?? pushPayload,
   };
 
@@ -428,10 +387,6 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const url = new URL(rawUrl, window.location.origin);
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
-
-    if (url.pathname === "/api/frontend/modules/status") {
-      return jsonResponse(payloads.status);
-    }
 
     if (url.pathname === "/api/frontend/modules/push") {
       return jsonResponse(pushState);

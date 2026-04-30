@@ -6,7 +6,6 @@ import {
   installWorkbenchFetchMock,
   marketPayload,
   pushPayload,
-  statusPayload,
 } from "../../../app/__tests__/workbench-api-mocks";
 
 describe("PushPage", () => {
@@ -15,26 +14,25 @@ describe("PushPage", () => {
     window.localStorage.clear();
   });
 
-  function renderPushApp(initialEntry = "/push?tab=overview") {
+  function renderPushApp(initialEntry = "/push?tab=schedules") {
     window.history.pushState({}, "", initialEntry);
     render(<App />);
   }
 
-  it("renders configuration, preview, and schedule tabs from the push payload", async () => {
-    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, status: statusPayload, market: marketPayload });
+  it("renders the schedules workspace as the first push tab", async () => {
+    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
     const user = userEvent.setup();
 
-    renderPushApp("/push?tab=overview");
+    renderPushApp("/push?tab=schedules");
 
     expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
     expect(screen.getByLabelText("SMTP server")).toHaveValue("smtp.example.com");
+    expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
     expect(screen.getByTitle("Push preview")).toBeInTheDocument();
     expect(screen.queryByText("Text fallback")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("link", { name: "Schedules" }));
-
     expect(window.location.search).toContain("tab=schedules");
-    expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByTitle("Push preview")).toBeInTheDocument();
     expect(screen.queryByText("Manual runs and scheduled deliveries")).not.toBeInTheDocument();
 
@@ -44,18 +42,30 @@ describe("PushPage", () => {
     expect(screen.getByRole("link", { name: "History" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByTitle("Push preview")).not.toBeInTheDocument();
     expect(screen.queryByText("Text fallback")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send now" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Run controls" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send now" })).not.toBeInTheDocument();
+    expect(screen.getByText("Market Daily")).toBeInTheDocument();
 
     expect(
       fetchMock.mock.calls.some(([input]) => String(input).includes("/api/frontend/modules/push?refresh=1")),
     ).toBe(true);
   });
 
-  it("saves configuration and refreshes preview from the current draft", async () => {
-    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, status: statusPayload, market: marketPayload });
-    const user = userEvent.setup();
+  it("falls back to schedules when the old overview tab is requested", async () => {
+    installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
 
     renderPushApp("/push?tab=overview");
+
+    expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
+  });
+
+  it("saves configuration and refreshes preview from the current draft", async () => {
+    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
+    const user = userEvent.setup();
+
+    renderPushApp("/push?tab=schedules");
 
     const smtpServerInput = await screen.findByLabelText("SMTP server");
     await user.clear(smtpServerInput);
@@ -86,15 +96,13 @@ describe("PushPage", () => {
     expect(screen.getByText("Preview for briefing")).toBeInTheDocument();
   });
 
-  it("triggers a manual push and appends the latest run to history", async () => {
-    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, status: statusPayload, market: marketPayload });
+  it("triggers a manual push from the schedules controls", async () => {
+    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
     const user = userEvent.setup();
 
-    renderPushApp("/push?tab=history");
+    renderPushApp("/push?tab=schedules");
 
-    expect(await screen.findByText("Market Daily")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Send now" }));
+    await user.click(await screen.findByRole("button", { name: "Send now" }));
 
     await waitFor(() => {
       expect(
@@ -105,6 +113,5 @@ describe("PushPage", () => {
     });
 
     expect(await screen.findByText("Manual push sent.")).toBeInTheDocument();
-    expect(screen.getByText("Manual send")).toBeInTheDocument();
   });
 });

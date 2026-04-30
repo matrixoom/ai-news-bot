@@ -1,7 +1,6 @@
 """FastAPI entrypoint for the separated frontend and backend dashboard."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import logging
 
 from fastapi import FastAPI
@@ -10,9 +9,6 @@ from fastapi.staticfiles import StaticFiles
 
 from ...services.dashboard_service import DashboardService
 from ...services.push_center_service import PushCenterService
-from .frontend_payload import (
-    build_frontend_status_module_payload,
-)
 from .spa_assets import WORKBENCH_ROUTES, build_spa_unavailable_response, load_spa_assets
 
 logger = logging.getLogger(__name__)
@@ -59,9 +55,6 @@ def create_fastapi_app(
     if spa_assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=spa_assets_dir), name="spa-assets")
 
-    def _generated_at_now() -> str:
-        return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-
     def _loading_response(payload: dict[str, object], detail: str) -> JSONResponse:
         module = payload.get("module")
         if isinstance(module, dict):
@@ -78,37 +71,6 @@ def create_fastapi_app(
     def shutdown_background_refresh() -> None:
         service.stop_background_refresh()
         push_service.stop_scheduler()
-
-    @app.get("/api/frontend/modules/status")
-    def frontend_status_module(news_mode: str | None = None, refresh: bool = False) -> JSONResponse:
-        try:
-            if not refresh and service.should_serve_loading_module("status", news_mode=news_mode):
-                _, detail = service.get_module_bootstrap_state("status", news_mode=news_mode)
-                return _loading_response(
-                    build_frontend_status_module_payload(
-                        generated_at=_generated_at_now(),
-                        data_status=[],
-                        coverage_note="",
-                        module_loading=True,
-                    ),
-                    detail,
-                )
-            generated_at, data_status, coverage_note = service.build_status_module(
-                news_mode=news_mode,
-                force_refresh=refresh,
-            )
-            return JSONResponse(
-                build_frontend_status_module_payload(
-                    generated_at=generated_at,
-                    data_status=data_status,
-                    coverage_note=coverage_note,
-                )
-            )
-        except Exception:
-            return JSONResponse(
-                {"error": "frontend_status_module_unavailable"},
-                status_code=503,
-            )
 
     @app.get("/api/frontend/modules/push")
     def frontend_push_module(refresh: bool = False, include_preview: bool = True) -> JSONResponse:
