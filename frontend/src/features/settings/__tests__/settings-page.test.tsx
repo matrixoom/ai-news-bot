@@ -1,8 +1,7 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../../app/app";
-import { installWorkbenchFetchMock, pushPayload, statusPayload } from "../../../app/__tests__/workbench-api-mocks";
+import { installWorkbenchFetchMock, pushPayload } from "../../../app/__tests__/workbench-api-mocks";
 
 describe("SettingsPage", () => {
   afterEach(() => {
@@ -16,33 +15,17 @@ describe("SettingsPage", () => {
     render(<App />);
   }
 
-  it("persists the remaining workspace route preference", async () => {
-    const user = userEvent.setup();
-
-    installWorkbenchFetchMock({ push: pushPayload, status: statusPayload });
+  it("removes the unused settings body cards", async () => {
+    installWorkbenchFetchMock({ push: pushPayload });
     renderSettingsApp("/settings");
 
-    expect(await screen.findByRole("heading", { name: "Workspace preferences" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.queryByText("Module workspace")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Workspace preferences" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Current defaults" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Default landing page")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save preferences" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Default news mode")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Show market ticker")).not.toBeInTheDocument();
-
-    await user.selectOptions(screen.getByLabelText("Default landing page"), "/status");
-    await user.click(screen.getByRole("button", { name: "Save preferences" }));
-
-    await waitFor(() => {
-      expect(window.localStorage.getItem("dashboard-default-route")).toBe("/status");
-    });
-
-    expect(await screen.findByText("Preferences saved.")).toBeInTheDocument();
-
-    cleanup();
-    installWorkbenchFetchMock({ push: pushPayload, status: statusPayload });
-    window.history.pushState({}, "", "/");
-    render(<App />);
-
-    await waitFor(() => {
-      expect(window.location.pathname).toBe("/status");
-    });
-    expect(await screen.findByRole("heading", { name: "Freshness snapshot" })).toBeInTheDocument();
   });
 });
