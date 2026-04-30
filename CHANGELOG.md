@@ -22,6 +22,7 @@
 - 统一推送中心与旧 `push_job` 的邮件报告生成链路：邮件发送现在也复用 HTML 日报渲染结果，避免出现“预览图表已更新但实际收到的邮件仍沿用旧 markdown 内容”的分叉。
 - 推送中心改为按页面上下文裁剪预览开销：`History` 标签页请求可跳过 preview 构建，推送预览也优先按已选模块组装，避免普通加载被全量 dashboard snapshot 拖慢。
 - 推送中心布局调整为「左侧配置/计划约三分之一，右侧预览约三分之二」；同时移除预览里的 `Text fallback`，并删除 `Schedules` 标签页的冗余发送历史侧栏与 `History` 标签页的预览侧栏。
+- Settings 页面移除冗余正文卡片和默认入口偏好表单，仅保留应用壳层中的 Settings 路由入口。
 - 修复推送中心日报中市场模块“表格值已刷新但趋势图尾点仍停留旧值”的展示错位问题；日报图表渲染现在会优先与表格侧最新 `trade_date / close / MA20 / deviation` 对齐。
 - 前端浏览器标签页标题由 `AI News Bot` 调整为 `Trend Insight`，与当前产品命名保持一致。
 - 宏观数据页升级为配对研究视图：按相关指标成对展示 `relative performance / spread / raw series` 图表，复用现有 `points / delta_points` 数据生成更贴近量化研究工作流的 ECharts 可视化。

@@ -29,7 +29,8 @@ describe("Workbench shell", () => {
     cleanup();
     installWorkbenchFetchMock({ push: pushPayload, status: statusPayload });
     renderApp("/settings");
-    expect(await screen.findByRole("heading", { name: "Workspace preferences" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Workspace preferences" })).not.toBeInTheDocument();
   });
 
   it("converges the root path to /push", async () => {
