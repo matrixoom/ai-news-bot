@@ -44,7 +44,7 @@ export function PushConfigForm({
     <section className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Overview</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuration</p>
           <h3 className="mt-2 text-xl font-semibold text-slate-950">Delivery configuration</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Tune the active modules, report style, and SMTP delivery profile before saving or sending.

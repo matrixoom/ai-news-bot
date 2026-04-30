@@ -19,7 +19,6 @@ export const moduleRootNavItems: NavItem[] = [
 export const primaryNavItems: NavItem[] = [...moduleRootNavItems];
 
 export const secondaryNavItems: NavItem[] = [
-  { to: "/status", title: "Status", description: "Freshness and source health" },
   { to: "/settings", title: "Settings", description: "Preferences and system defaults" },
 ];
 
@@ -28,12 +27,6 @@ export const moduleDirectories: ModuleDirectory[] = [
     id: "push",
     item: moduleRootNavItems[0],
     children: [
-      {
-        to: "/push?tab=overview",
-        title: "Overview",
-        ariaLabel: "Push Center > Overview",
-        description: "Config and preview",
-      },
       {
         to: "/push?tab=schedules",
         title: "Schedules",

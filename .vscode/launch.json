@@ -56,7 +56,6 @@
             "request": "launch",
             "module": "unittest",
             "args": [
-                "tests.test_task01_architecture",
                 "tests.test_task02_provider_strategy",
                 "tests.test_task03_web_app_shell",
                 "tests.test_task04_news_pipeline",
@@ -65,8 +64,12 @@
                 "tests.test_task07_events_outlook",
                 "tests.test_task08_push_workflow",
                 "tests.test_task09_integration_suite",
-                "tests.test_task10_local_dev_environment",
+                "tests.test_task11_frontend_spa_serving",
+                "tests.test_dev_server",
+                "tests.test_push_center_module",
+                "tests.test_email_notifier",
                 "tests.test_main_entrypoint",
+                "tests.test_macro_live_sources",
                 "tests.test_live_provider_fallbacks"
             ],
             "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",

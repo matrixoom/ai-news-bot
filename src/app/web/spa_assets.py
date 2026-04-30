@@ -9,7 +9,6 @@ from fastapi.responses import HTMLResponse
 
 WORKBENCH_ROUTES = (
     "/push",
-    "/status",
     "/settings",
 )
 

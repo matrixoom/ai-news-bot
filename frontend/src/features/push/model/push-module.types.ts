@@ -211,10 +211,9 @@ export type TriggerPushResponseRaw = {
   };
 };
 
-export type PushModuleTab = "overview" | "schedules" | "history";
+export type PushModuleTab = "schedules" | "history";
 
 export const PUSH_MODULE_TABS: readonly ModuleTabDefinition<PushModuleTab>[] = [
-  { value: "overview", label: "Overview" },
   { value: "schedules", label: "Schedules" },
   { value: "history", label: "History" },
 ];

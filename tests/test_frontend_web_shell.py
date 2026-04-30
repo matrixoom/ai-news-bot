@@ -69,15 +69,10 @@ class FastAPIWebShellTests(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 404)
 
-    def test_frontend_status_module_endpoint_returns_shell_status(self):
+    def test_frontend_status_module_endpoint_is_removed(self):
         response = self.client.get("/api/frontend/modules/status")
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["module"]["id"], "status")
-        self.assertIn("coverage_note", payload)
-        self.assertEqual(payload["coverage_note"], "")
-        self.assertIn("details", payload["module"])
+        self.assertEqual(response.status_code, 404)
 
     def test_legacy_dashboard_route_is_removed(self):
         response = self.client.get("/legacy")

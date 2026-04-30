@@ -223,7 +223,6 @@ class DashboardService:
             "macro": float(os.getenv("DASHBOARD_MACRO_REFRESH_SECONDS", "86400")),
             "market": float(os.getenv("DASHBOARD_MARKET_REFRESH_SECONDS", "900")),
             "events": float(os.getenv("DASHBOARD_EVENTS_REFRESH_SECONDS", "86400")),
-            "status": float(os.getenv("DASHBOARD_STATUS_REFRESH_SECONDS", "900")),
             "snapshot": float(os.getenv("DASHBOARD_SNAPSHOT_REFRESH_SECONDS", "900")),
         }
         self._refresh_check_interval_seconds = max(
@@ -295,7 +294,7 @@ class DashboardService:
         }
 
     def _module_cache_key(self, module_id: str, *, news_mode: str | None = None) -> str:
-        if module_id in {"news", "status"}:
+        if module_id == "news":
             effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
             return f"module:{module_id}:{effective_news_mode}"
         return f"module:{module_id}"
@@ -358,21 +357,6 @@ class DashboardService:
         return self._get_or_build_module(
             "module:events",
             lambda: self._build_events_module_uncached(force_refresh=force_refresh),
-            force_refresh=force_refresh,
-        )
-
-    def build_status_module(
-        self,
-        *,
-        news_mode: str | None = None,
-        force_refresh: bool = False,
-    ) -> tuple[str, List[DataStatusItem], str]:
-        """Build the lightweight status module used by the shell chrome."""
-        effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
-        cache_key = f"module:status:{effective_news_mode}"
-        return self._get_or_build_module(
-            cache_key,
-            lambda: self._build_status_module_uncached(effective_news_mode=effective_news_mode),
             force_refresh=force_refresh,
         )
 
@@ -457,12 +441,6 @@ class DashboardService:
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         events_snapshot = self._build_events_service_snapshot(force_refresh=force_refresh)
         return generated_at, self._build_event_sections_from_snapshot(events_snapshot)
-
-    def _build_status_module_uncached(self, *, effective_news_mode: str) -> tuple[str, List[DataStatusItem], str]:
-        generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        _, news_provider, search_provider = self._resolve_news_runtime(effective_news_mode)
-        data_status = self._build_data_status(news_provider=news_provider, search_provider=search_provider)
-        return generated_at, data_status, self._coverage_note(data_status)
 
     def _get_or_build_snapshot(self, cache_key: str, builder, *, force_refresh: bool = False):
         if not force_refresh:

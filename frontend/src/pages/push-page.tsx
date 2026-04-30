@@ -21,8 +21,8 @@ type FlashState = { tone: "success" | "error" | "neutral"; message: string } | n
 
 export function PushPage() {
   const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const activeTab = resolveModuleTab(searchParams.get("tab"), PUSH_MODULE_TABS, "overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = resolveModuleTab(searchParams.get("tab"), PUSH_MODULE_TABS, "schedules");
   const queryClient = useQueryClient();
   const query = usePushModuleQuery(activeTab);
   const [draft, setDraft] = useState<PushConfig | null>(null);
@@ -38,6 +38,16 @@ export function PushPage() {
     setPreview(query.data.preview);
     setRecentRuns(query.data.recentRuns);
   }, [query.data]);
+
+  useEffect(() => {
+    if (searchParams.get("tab") === activeTab) {
+      return;
+    }
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set("tab", activeTab);
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [activeTab, searchParams, setSearchParams]);
 
   const toolbar = (
     <ModuleTabBar
@@ -207,70 +217,9 @@ function renderPushTab(
 ) {
   const { workspace, draft, flash, recentRuns, onDraftChange } = props;
 
-  if (activeTab === "schedules") {
-    return (
-      <div className="space-y-6">
-        <PushSchedulesEditor
-          channelTypeOptions={workspace.options.channelTypeOptions}
-          onSchedulesChange={(nextSchedules) => {
-            onDraftChange({ ...draft, schedules: nextSchedules });
-          }}
-          schedules={draft.schedules}
-          sourceModuleOptions={workspace.options.sourceModuleOptions}
-        />
-        <PushConfigForm
-          channelTypeOptions={workspace.options.channelTypeOptions}
-          configPath={workspace.configPath}
-          draft={draft}
-          flash={flash}
-          isPreviewing={props.isPreviewing}
-          isSaving={props.isSaving}
-          isSending={props.isSending}
-          onDraftChange={props.onDraftChange}
-          onPreview={props.onPreview}
-          onSave={props.onSave}
-          onSend={props.onSend}
-          sourceModuleOptions={workspace.options.sourceModuleOptions}
-          styleOptions={workspace.options.styleOptions}
-        />
-      </div>
-    );
-  }
-
   if (activeTab === "history") {
     return (
       <div className="space-y-6">
-        <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">History</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">Run controls</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Review the latest delivery attempts before sending another manual run.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              className="rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-medium text-cyan-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-              disabled={props.isSending}
-              onClick={props.onSend}
-              type="button"
-            >
-              {props.isSending ? "Sending..." : "Send now"}
-            </button>
-          </div>
-        </section>
-        {flash ? (
-          <div
-            className={[
-              "rounded-2xl border px-4 py-3 text-sm",
-              flash.tone === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : flash.tone === "error"
-                  ? "border-rose-200 bg-rose-50 text-rose-700"
-                  : "border-slate-200 bg-slate-50 text-slate-700",
-            ].join(" ")}
-          >
-            {flash.message}
-          </div>
-        ) : null}
         <PushRunHistory runs={recentRuns} />
       </div>
     );
@@ -278,6 +227,14 @@ function renderPushTab(
 
   return (
     <div className="space-y-6">
+      <PushSchedulesEditor
+        channelTypeOptions={workspace.options.channelTypeOptions}
+        onSchedulesChange={(nextSchedules) => {
+          onDraftChange({ ...draft, schedules: nextSchedules });
+        }}
+        schedules={draft.schedules}
+        sourceModuleOptions={workspace.options.sourceModuleOptions}
+      />
       <PushConfigForm
         channelTypeOptions={workspace.options.channelTypeOptions}
         configPath={workspace.configPath}
@@ -292,14 +249,6 @@ function renderPushTab(
         onSend={props.onSend}
         sourceModuleOptions={workspace.options.sourceModuleOptions}
         styleOptions={workspace.options.styleOptions}
-      />
-      <PushSchedulesEditor
-        channelTypeOptions={workspace.options.channelTypeOptions}
-        onSchedulesChange={(nextSchedules) => {
-          onDraftChange({ ...draft, schedules: nextSchedules });
-        }}
-        schedules={draft.schedules}
-        sourceModuleOptions={workspace.options.sourceModuleOptions}
       />
     </div>
   );

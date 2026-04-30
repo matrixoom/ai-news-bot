@@ -40,7 +40,7 @@ class FrontendSpaServingTests(unittest.TestCase):
             index_path.write_text("<!doctype html><title>Workbench SPA</title><div id='app'></div>", encoding="utf-8")
             client = self._client_with_spa_assets(SpaAssets(dist_dir=dist_dir, index_path=index_path))
 
-            for route in ("/push", "/status", "/settings"):
+            for route in ("/push", "/settings"):
                 with self.subTest(route=route):
                     response = client.get(route)
 
@@ -85,7 +85,7 @@ class FrontendSpaServingTests(unittest.TestCase):
     def test_workbench_routes_return_503_html_when_compiled_spa_missing(self):
         client = self._client_with_spa_assets(self._missing_spa_assets())
 
-        for route in ("/push", "/status", "/settings"):
+        for route in ("/push", "/settings"):
             with self.subTest(route=route):
                 response = client.get(route)
 
@@ -113,7 +113,7 @@ class FrontendSpaServingTests(unittest.TestCase):
             index_path.write_text("<!doctype html><title>Workbench SPA</title>", encoding="utf-8")
             client = self._client_with_spa_assets(SpaAssets(dist_dir=dist_dir, index_path=index_path))
 
-            for route in ("/dashboard", "/news", "/macro", "/market", "/events"):
+            for route in ("/dashboard", "/news", "/macro", "/market", "/events", "/status"):
                 with self.subTest(route=route):
                     response = client.get(route)
 
