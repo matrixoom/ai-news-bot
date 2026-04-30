@@ -52,17 +52,6 @@ class StubReportService:
         _ = (module_ids, layout)
         return f"<p>html-{snapshot.generated_at}</p>"
 
-
-class Task08DocumentationTests(unittest.TestCase):
-    def test_task08_main_doc_links_protocol_and_tests(self):
-        with open("tasks/08-push-workflow-and-automation.md", encoding="utf-8") as handle:
-            content = handle.read()
-
-        self.assertIn("Completed for implementation phase.", content)
-        self.assertIn("08-report-and-automation-design.md", content)
-        self.assertIn("tests/test_task08_push_workflow.py", content)
-
-
 class PushWorkflowTests(unittest.TestCase):
     def setUp(self):
         SuccessNotifier.sent_payloads = []

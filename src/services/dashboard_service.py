@@ -15,15 +15,12 @@ from ..providers import (
     AkshareMacroDataProvider,
     AkshareMarketDataProvider,
     ArkResearchProvider,
-    CompositeNewsProvider,
     FallbackMacroProvider,
     FallbackMarketDataProvider,
     FallbackNewsProvider,
     FallbackResearchProvider,
     FallbackSearchProvider,
     GoogleNewsSearchProvider,
-    NewsNowModeProvider,
-    NewsNowSourceMode,
     OfficialMacroDataProvider,
     ProviderAvailability,
     PublicRssNewsProvider,
@@ -40,6 +37,8 @@ from .news_pipeline_service import NewsPipelineService
 
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_NEWS_MODE = "rss"
 
 
 @dataclass(frozen=True)
@@ -205,7 +204,7 @@ class DashboardService:
         events_service: EventsOutlookService | None = None,
         *,
         prefer_live_data: bool = False,
-        news_mode: str = NewsNowSourceMode.HYBRID.value,
+        news_mode: str = DEFAULT_NEWS_MODE,
         enable_background_refresh: bool = True,
     ) -> None:
         self._prefer_live_data = prefer_live_data
@@ -293,12 +292,6 @@ class DashboardService:
     def _build_background_managed_module_keys(self) -> set[str]:
         return {
             "module:macro",
-            f"module:news:{NewsNowSourceMode.HYBRID.value}",
-            f"module:news:{NewsNowSourceMode.API.value}",
-            f"module:news:{NewsNowSourceMode.UPSTREAM.value}",
-            f"module:status:{NewsNowSourceMode.HYBRID.value}",
-            f"module:status:{NewsNowSourceMode.API.value}",
-            f"module:status:{NewsNowSourceMode.UPSTREAM.value}",
         }
 
     def _module_cache_key(self, module_id: str, *, news_mode: str | None = None) -> str:
@@ -512,48 +505,6 @@ class DashboardService:
     def prime_caches(self, *, force_refresh: bool = False) -> None:
         """Warm module caches so the frontend can switch views without live refetches."""
         tasks = [
-            (
-                f"module:news:{NewsNowSourceMode.HYBRID.value}",
-                lambda: self.build_news_module(
-                    news_mode=NewsNowSourceMode.HYBRID.value,
-                    force_refresh=force_refresh,
-                ),
-            ),
-            (
-                f"module:news:{NewsNowSourceMode.API.value}",
-                lambda: self.build_news_module(
-                    news_mode=NewsNowSourceMode.API.value,
-                    force_refresh=force_refresh,
-                ),
-            ),
-            (
-                f"module:news:{NewsNowSourceMode.UPSTREAM.value}",
-                lambda: self.build_news_module(
-                    news_mode=NewsNowSourceMode.UPSTREAM.value,
-                    force_refresh=force_refresh,
-                ),
-            ),
-            (
-                f"module:status:{NewsNowSourceMode.HYBRID.value}",
-                lambda: self.build_status_module(
-                    news_mode=NewsNowSourceMode.HYBRID.value,
-                    force_refresh=force_refresh,
-                ),
-            ),
-            (
-                f"module:status:{NewsNowSourceMode.API.value}",
-                lambda: self.build_status_module(
-                    news_mode=NewsNowSourceMode.API.value,
-                    force_refresh=force_refresh,
-                ),
-            ),
-            (
-                f"module:status:{NewsNowSourceMode.UPSTREAM.value}",
-                lambda: self.build_status_module(
-                    news_mode=NewsNowSourceMode.UPSTREAM.value,
-                    force_refresh=force_refresh,
-                ),
-            ),
             ("module:macro", lambda: self.build_macro_module(force_refresh=force_refresh)),
             ("module:market", lambda: self.build_market_module(force_refresh=force_refresh)),
             ("module:events", lambda: self.build_events_module(force_refresh=force_refresh)),
@@ -595,23 +546,6 @@ class DashboardService:
             self._refresh_due_caches()
 
     def _refresh_due_caches(self) -> None:
-        news_modes = (
-            NewsNowSourceMode.HYBRID.value,
-            NewsNowSourceMode.API.value,
-            NewsNowSourceMode.UPSTREAM.value,
-        )
-        for mode in news_modes:
-            self._refresh_module_if_due(
-                cache_key=f"module:news:{mode}",
-                interval_key="news",
-                refresher=lambda mode=mode: self.build_news_module(news_mode=mode, force_refresh=True),
-            )
-            self._refresh_module_if_due(
-                cache_key=f"module:status:{mode}",
-                interval_key="status",
-                refresher=lambda mode=mode: self.build_status_module(news_mode=mode, force_refresh=True),
-            )
-
         self._refresh_module_if_due(
             cache_key="module:macro",
             interval_key="macro",
@@ -693,15 +627,7 @@ class DashboardService:
         news_service = self._news_service
         news_provider = self._news_provider
         search_provider = self._search_provider
-        if self._prefer_live_data and effective_news_mode != self._news_mode:
-            news_provider, search_provider = self._build_news_providers(
-                prefer_live_data=True,
-                news_mode=effective_news_mode,
-            )
-            news_service = NewsPipelineService(
-                news_provider=news_provider,
-                search_provider=search_provider,
-            )
+        _ = effective_news_mode
         return news_service, news_provider, search_provider
 
     def _build_news_sections_from_snapshot(self, news_snapshot) -> List[NewsSectionView]:
@@ -848,19 +774,11 @@ class DashboardService:
         ]
 
     def _build_news_providers(self, *, prefer_live_data: bool, news_mode: str):
+        _ = news_mode
         if not prefer_live_data:
             return SampleNewsProvider(), SampleSearchProvider()
-        selected_news_provider = NewsNowModeProvider(mode=news_mode)
         return (
-            FallbackNewsProvider(
-                CompositeNewsProvider(
-                    (
-                        selected_news_provider,
-                        PublicRssNewsProvider(),
-                    )
-                ),
-                SampleNewsProvider(),
-            ),
+            FallbackNewsProvider(PublicRssNewsProvider(), SampleNewsProvider()),
             FallbackSearchProvider(GoogleNewsSearchProvider(), SampleSearchProvider()),
         )
 
@@ -934,9 +852,8 @@ class DashboardService:
         _ = data_status
         return base
 
-    def _resolve_news_mode(self, value: str | NewsNowSourceMode) -> str:
-        try:
-            return NewsNowSourceMode(str(value)).value
-        except ValueError:
-            return NewsNowSourceMode.HYBRID.value
+    def _resolve_news_mode(self, value: str | None) -> str:
+        """保留旧 `news_mode` 参数入口，但不再切换 NewsNow 数据源。"""
+        _ = value
+        return DEFAULT_NEWS_MODE
 
