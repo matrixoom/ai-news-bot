@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 
 
 WORKBENCH_ROUTES = (
+    "/macro-data",
     "/push",
     "/settings",
 )

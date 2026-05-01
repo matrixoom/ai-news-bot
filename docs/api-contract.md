@@ -1,6 +1,6 @@
 # 接口契约（API Contract）
 
-本文档描述当前仍对前端开放的 HTTP 接口。Dashboard、News、Macro、Market、Events 页面与聚合 API 已按需求移除；Push Center 相关后端逻辑保留。
+本文档描述当前仍对前端开放的 HTTP 接口。Dashboard、News、Market、Events 页面与聚合 API 已按需求移除；Macro Data 与 Push Center 相关后端逻辑保留。
 
 ## 1. 约定总览
 
@@ -16,12 +16,12 @@
 | 路径 | 方法 | 说明 |
 | --- | --- | --- |
 | `/` | GET | SPA 可用时重定向到 `/push`；否则返回 workbench unavailable |
+| `/macro-data` | GET | Macro Data SPA 入口 |
 | `/push` | GET | Push Center SPA 入口 |
-| `/status` | GET | Status SPA 入口 |
 | `/settings` | GET | Settings SPA 入口 |
 | `/healthz` | GET | 健康检查，返回 `{"status":"ok"}` |
 
-已移除：`/dashboard`、`/news`、`/macro`、`/market`、`/events`、`/legacy`。
+已移除：`/dashboard`、`/news`、`/macro`、`/market`、`/events`、`/status`、`/legacy`。
 
 ## 3. 已移除的聚合与模块接口
 
@@ -33,23 +33,91 @@
 - `GET /api/frontend/modules/macro`
 - `GET /api/frontend/modules/market`
 - `GET /api/frontend/modules/events`
+- `GET /api/frontend/modules/status`
 
-说明：Push Center 日报生成仍会在后端内部复用必要的数据快照能力，但这些能力不再作为 Dashboard/News/Macro/Market/Events 页面 API 暴露。
+说明：Push Center 日报生成仍会在后端内部复用必要的数据快照能力，但这些能力不再作为 Dashboard/News/Macro/Market/Events 页面 API 暴露。新增 Macro Data 使用 `/api/frontend/modules/macro-data` 独立契约，不复用已移除的 `/api/frontend/modules/macro`。
 
 ## 4. 保留模块接口
 
-### 4.1 `GET /api/frontend/modules/status`
+### 4.1 `GET /api/frontend/modules/macro-data`
 
 查询参数：
 
-- `news_mode`（可选，兼容旧调用）
-- `refresh`（可选）
+- `tab`：`gdp | credit | leverage | prices`，默认 `gdp`
 
-成功：`200` 或 `202`
+用途：返回 Macro Data 模块元数据、子标签、时间范围选项和当前分类下的图表定义。
 
-失败：`503`，`frontend_status_module_unavailable`
+成功：`200`
 
-### 4.2 `GET /api/frontend/modules/push`
+```json
+{
+  "generated_at": "2026-05-01T00:00:00Z",
+  "module": {
+    "id": "macro-data",
+    "label": "Macro Data",
+    "description": "GDP, credit, leverage, and inflation indicators",
+    "status": "live",
+    "loading": false
+  },
+  "tab": "gdp",
+  "default_range": "1y",
+  "charts": [
+    {
+      "id": "nominal_gdp",
+      "title": "名义GDP",
+      "unit": "亿元",
+      "frequency": "quarterly",
+      "status": "sample"
+    }
+  ]
+}
+```
+
+失败：
+
+- `400`：`invalid_macro_data_tab`
+- `503`：`frontend_macro_data_module_unavailable`
+
+### 4.2 `GET /api/frontend/modules/macro-data/charts/{chart_id}`
+
+查询参数：
+
+- `range`：`6m | 1y | 3y | 5y | 10y | custom`，默认 `1y`
+- `start_date`：自定义范围起始日期，`YYYY-MM-DD`
+- `end_date`：自定义范围结束日期，`YYYY-MM-DD`
+
+用途：按单张图表读取 SQLite 中对应指标表的数据。8 个指标分别持久化在 `.data/macro_data.db` 的独立事实表中，例如 `macro_nominal_gdp`、`macro_cpi`。
+
+成功：`200`
+
+```json
+{
+  "id": "nominal_gdp",
+  "title": "名义GDP",
+  "unit": "亿元",
+  "frequency": "quarterly",
+  "range": {
+    "type": "1y",
+    "start_date": "2025-05-01",
+    "end_date": "2026-05-01"
+  },
+  "series": [
+    {
+      "name": "名义GDP",
+      "points": [
+        { "date": "2026-03-31", "period_label": "2026Q1", "value": 322000, "unit": "亿元" }
+      ]
+    }
+  ]
+}
+```
+
+失败：
+
+- `400`：`invalid_macro_data_range`
+- `503`：`frontend_macro_data_chart_unavailable`
+
+### 4.3 `GET /api/frontend/modules/push`
 
 查询参数：
 

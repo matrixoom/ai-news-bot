@@ -7,6 +7,8 @@ type WorkbenchPayloads = {
   market: Record<string, unknown>;
   events: Record<string, unknown>;
   push: Record<string, unknown>;
+  macroData: Record<string, unknown>;
+  macroChart: Record<string, unknown>;
 };
 
 type WorkbenchOverrides = Partial<WorkbenchPayloads>;
@@ -371,6 +373,65 @@ export const pushPayload: WorkbenchPayloads["push"] = {
   },
 };
 
+export const macroDataPayload: WorkbenchPayloads["macroData"] = {
+  generated_at: "2026-05-01T08:00:00Z",
+  module: {
+    id: "macro-data",
+    label: "Macro Data",
+    description: "GDP, credit, leverage, and inflation indicators",
+    status: "live",
+    loading: false,
+  },
+  tabs: [
+    { value: "gdp", label: "GDP" },
+    { value: "credit", label: "信贷" },
+    { value: "leverage", label: "杠杆率" },
+    { value: "prices", label: "物价" },
+  ],
+  tab: "gdp",
+  default_range: "1y",
+  range_options: [
+    { value: "6m", label: "半年" },
+    { value: "1y", label: "一年" },
+    { value: "3y", label: "三年" },
+    { value: "5y", label: "5年" },
+    { value: "10y", label: "10年" },
+    { value: "custom", label: "自定义" },
+  ],
+  charts: [
+    { id: "nominal_gdp", title: "名义GDP", unit: "亿元", frequency: "quarterly", status: "sample" },
+    { id: "real_gdp", title: "实际GDP", unit: "亿元", frequency: "quarterly", status: "sample" },
+  ],
+};
+
+export const macroChartPayload: WorkbenchPayloads["macroChart"] = {
+  id: "nominal_gdp",
+  title: "名义GDP",
+  unit: "亿元",
+  frequency: "quarterly",
+  status: "sample",
+  range: {
+    type: "1y",
+    start_date: "2025-05-01",
+    end_date: "2026-05-01",
+  },
+  sync_state: {
+    status: "sample",
+    synced_at: "2026-05-01T08:00:00Z",
+    warning_message: "sample data",
+    point_count: 2,
+  },
+  series: [
+    {
+      name: "名义GDP",
+      points: [
+        { date: "2025-12-31", period_label: "2025Q4", value: 1260000, unit: "亿元", released_at: "" },
+        { date: "2026-03-31", period_label: "2026Q1", value: 322000, unit: "亿元", released_at: "" },
+      ],
+    },
+  ],
+};
+
 export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
   const payloads: WorkbenchPayloads = {
     dashboard: overrides.dashboard ?? dashboardPayload,
@@ -379,6 +440,8 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     market: overrides.market ?? marketPayload,
     events: overrides.events ?? eventsPayload,
     push: overrides.push ?? pushPayload,
+    macroData: overrides.macroData ?? macroDataPayload,
+    macroChart: overrides.macroChart ?? macroChartPayload,
   };
 
   let pushState: any = clone(payloads.push);
@@ -390,6 +453,29 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
 
     if (url.pathname === "/api/frontend/modules/push") {
       return jsonResponse(pushState);
+    }
+
+    if (url.pathname === "/api/frontend/modules/macro-data") {
+      return jsonResponse(payloads.macroData);
+    }
+
+    if (url.pathname.startsWith("/api/frontend/modules/macro-data/charts/")) {
+      const chartId = url.pathname.split("/").pop() ?? "nominal_gdp";
+      return jsonResponse({
+        ...payloads.macroChart,
+        id: chartId,
+        title: chartId === "real_gdp" ? "实际GDP" : payloads.macroChart.title,
+        series: [
+          {
+            ...(payloads.macroChart.series as Array<Record<string, unknown>>)[0],
+            name: chartId === "real_gdp" ? "实际GDP" : "名义GDP",
+          },
+        ],
+        range: {
+          ...(payloads.macroChart.range as Record<string, unknown>),
+          type: url.searchParams.get("range") ?? "1y",
+        },
+      });
     }
 
     if (url.pathname === "/api/push/config" && method === "PUT") {

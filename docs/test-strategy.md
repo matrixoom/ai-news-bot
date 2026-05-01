@@ -18,6 +18,7 @@
 
 - provider 合同与降级策略
 - dashboard service 聚合逻辑
+- macro data SQLite 分表、时间范围解析与 API 契约
 - push center 配置、预览、触发逻辑
 - 历史文档校验类 / demo 类测试已归档到 `to_delete/tests/`
 
@@ -38,6 +39,7 @@
 
 - 路由壳、query 参数与 `news_mode` 保留
 - 页面渲染和关键交互（包括侧栏折叠/导航折叠等）
+- Macro Data 分类子标签、图表卡片和自定义时间范围
 - push 页面行为（保存配置、预览、触发）
 
 ## 3. 回归门禁（建议最小集合）
@@ -59,6 +61,7 @@ uv run python -m pytest tests/test_task02_provider_strategy.py tests/test_task04
 ### 3.3 Macro / Market / Events 改动
 
 ```powershell
+uv run python -m pytest tests/test_macro_data_module.py -q
 uv run python -m pytest tests/test_task05_macro_monitoring.py tests/test_task06_market_models.py tests/test_task07_events_outlook.py -q
 ```
 
@@ -74,6 +77,7 @@ uv run python -m pytest tests/test_task08_push_workflow.py tests/test_push_cente
 
 ```powershell
 cmd /c npm run test -- src/app/__tests__/router-shell.test.tsx --run
+cmd /c npm run test -- src/features/macro-data/__tests__/macro-page.test.tsx --run
 cmd /c npm run build
 ```
 
@@ -83,8 +87,8 @@ cmd /c npm run build
 2. 前端构建通过（`npm run build`）
 3. 健康检查通过：`GET /healthz`
 4. 核心接口抽查：
-   - `/api/frontend/dashboard`
-   - `/api/frontend/modules/status?news_mode=api`
+   - `/api/frontend/modules/macro-data?tab=gdp`
+   - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=1y`
    - `/api/frontend/modules/push`
 5. 推送链路抽查（本地或测试环境）：
    - 更新配置
@@ -120,6 +124,7 @@ uv run python -m pytest tests/test_task04_newsnow_integration.py -k NewsNowAllSo
 
 - 新增/删除 API 字段
 - 新增模块或路由
+- 新增或调整 SQLite 表结构、seed 数据或本地持久化路径
 - 调整 push 配置结构
 - 调整 `news_mode` 或刷新语义
 
