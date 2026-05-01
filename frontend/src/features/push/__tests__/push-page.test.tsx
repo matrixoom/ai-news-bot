@@ -26,6 +26,8 @@ describe("PushPage", () => {
     renderPushApp("/push?tab=schedules");
 
     expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
+    expect(screen.queryByText("Config path")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\.data[\\/]push_center\.json/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("SMTP server")).toHaveValue("smtp.example.com");
     expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
@@ -47,7 +49,9 @@ describe("PushPage", () => {
     expect(screen.getByText("Market Daily")).toBeInTheDocument();
 
     expect(
-      fetchMock.mock.calls.some(([input]) => String(input).includes("/api/frontend/modules/push?refresh=1")),
+      fetchMock.mock.calls
+        .filter(([input]) => String(input).includes("/api/frontend/modules/push"))
+        .every(([input]) => !String(input).includes("refresh=1")),
     ).toBe(true);
   });
 
