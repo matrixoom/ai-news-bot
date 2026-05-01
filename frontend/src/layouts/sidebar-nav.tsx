@@ -1,3 +1,4 @@
+import { ChevronDoubleLeftIcon, ChevronDoubleRightIcon, Cog6ToothIcon, RocketLaunchIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { moduleDirectories, primaryNavItems, secondaryNavItems } from "../shared/config/nav-items";
@@ -76,28 +77,23 @@ function isNavTargetActive(target: string, pathname: string, currentSearchParams
   return true;
 }
 
-function itemInitials(title: string): string {
-  const words = title.split(" ").filter(Boolean);
+/** 展示侧栏展开/收起按钮图标；参数 collapsed 表示当前是否折叠，返回对应的 Heroicons 图标。 */
+function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
+  const Icon = collapsed ? ChevronDoubleRightIcon : ChevronDoubleLeftIcon;
 
-  if (words.length === 0) {
-    return "?";
-  }
-
-  if (words.length === 1) {
-    return words[0].slice(0, 2).toUpperCase();
-  }
-
-  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  return <Icon aria-hidden="true" className="h-4 w-4" />;
 }
 
-function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-      <rect x="1.5" y="2" width="13" height="12" rx="2.5" className="stroke-slate-500" strokeWidth="1.2" />
-      <line x1="7.75" y1="2.8" x2="7.75" y2="13.2" className="stroke-slate-400" strokeWidth="1.2" />
-      <rect x={collapsed ? "8.1" : "2.1"} y="2.6" width="5.1" height="10.8" rx="1.6" className="fill-slate-300" />
-    </svg>
-  );
+/** 根据导航目标选择折叠态图标；参数 item 为导航配置，返回对应的 Heroicons 装饰图标。 */
+function CompactNavIcon({ item }: { item: NavItem }) {
+  const { pathname } = parseTarget(item.to);
+  const iconClassName = "h-5 w-5";
+
+  if (pathname === "/settings") {
+    return <Cog6ToothIcon aria-hidden="true" className={iconClassName} />;
+  }
+
+  return <RocketLaunchIcon aria-hidden="true" className={iconClassName} />;
 }
 
 function CompactNavSection({
@@ -128,7 +124,7 @@ function CompactNavSection({
                 : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900",
             )}
           >
-            <span aria-hidden="true">{itemInitials(item.title)}</span>
+            <CompactNavIcon item={item} />
           </Link>
         );
       })}
@@ -317,12 +313,6 @@ export function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
               <SidebarToggleIcon collapsed={collapsed} />
             </button>
           </div>
-
-          {collapsed ? (
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-              TI
-            </div>
-          ) : null}
         </div>
 
         {collapsed ? (

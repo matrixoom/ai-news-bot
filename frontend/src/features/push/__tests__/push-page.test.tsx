@@ -19,6 +19,16 @@ describe("PushPage", () => {
     render(<App />);
   }
 
+  function formatExpectedLocalTime(value: string): string {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(value));
+  }
+
   it("renders the schedules workspace as the first push tab", async () => {
     const fetchMock = installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
     const user = userEvent.setup();
@@ -63,6 +73,21 @@ describe("PushPage", () => {
     expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
+  });
+
+  it("renders workspace and history timestamps in the browser local timezone", async () => {
+    installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
+    const user = userEvent.setup();
+
+    renderPushApp("/push?tab=schedules");
+
+    expect(await screen.findByText(formatExpectedLocalTime(String(pushPayload.generated_at)))).toBeInTheDocument();
+    expect(screen.queryByText(/UTC/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "History" }));
+
+    expect(await screen.findByText(formatExpectedLocalTime("2026-03-30T08:00:00+08:00"))).toBeInTheDocument();
+    expect(screen.queryByText("2026-03-30T08:00:00+08:00")).not.toBeInTheDocument();
   });
 
   it("saves configuration and refreshes preview from the current draft", async () => {
