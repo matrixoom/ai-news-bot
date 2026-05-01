@@ -1,4 +1,10 @@
-import { ChevronDoubleLeftIcon, ChevronDoubleRightIcon, Cog6ToothIcon, RocketLaunchIcon } from "@heroicons/react/24/outline";
+import {
+  ChartBarSquareIcon,
+  ChevronDoubleLeftIcon,
+  ChevronDoubleRightIcon,
+  Cog6ToothIcon,
+  RocketLaunchIcon,
+} from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { moduleDirectories, primaryNavItems, secondaryNavItems } from "../shared/config/nav-items";
@@ -91,6 +97,10 @@ function CompactNavIcon({ item }: { item: NavItem }) {
 
   if (pathname === "/settings") {
     return <Cog6ToothIcon aria-hidden="true" className={iconClassName} />;
+  }
+
+  if (pathname === "/macro-data") {
+    return <ChartBarSquareIcon aria-hidden="true" className={iconClassName} />;
   }
 
   return <RocketLaunchIcon aria-hidden="true" className={iconClassName} />;

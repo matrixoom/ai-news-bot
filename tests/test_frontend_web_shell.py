@@ -20,7 +20,7 @@ class FrontendShellSourceGuardTests(unittest.TestCase):
 
         self.assertIn('const includePreview = activeTab !== "history";', content)
         self.assertIn('queryKey: ["push-module", includePreview]', content)
-        self.assertIn('getPushModule({ signal, includePreview, refresh: includePreview })', content)
+        self.assertIn('getPushModule({ signal, includePreview })', content)
 
     def test_live_frontend_background_refresh_excludes_newsnow_modes(self):
         """校验实时工作台后台预热不再注册 NewsNow 的三种新闻模式。"""

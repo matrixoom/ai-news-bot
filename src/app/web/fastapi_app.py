@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from ...services.dashboard_service import DashboardService
+from ...services.macro_data_service import MacroDataService, MacroDataValidationError
 from ...services.push_center_service import PushCenterService
 from .spa_assets import WORKBENCH_ROUTES, build_spa_unavailable_response, load_spa_assets
 
@@ -36,13 +37,24 @@ def render_error_html(title: str, message: str) -> bytes:
 def create_fastapi_app(
     dashboard_service: DashboardService | None = None,
     push_center_service: PushCenterService | None = None,
+    macro_data_service: MacroDataService | None = None,
 ) -> FastAPI:
-    """Create the FastAPI app used by the development web server."""
+    """创建开发 Web 服务使用的 FastAPI 应用。
+
+    Args:
+        dashboard_service: Dashboard 聚合服务。
+        push_center_service: 推送中心服务。
+        macro_data_service: Macro Data 模块服务。
+
+    Returns:
+        已注册前端工作台接口和 SPA 路由的 FastAPI 应用。
+    """
     service = dashboard_service or DashboardService()
     push_service = push_center_service or PushCenterService(
         dashboard_service=service,
         enable_scheduler=True,
     )
+    macro_service = macro_data_service or MacroDataService()
     app = FastAPI(
         title="Finance And Policy Intelligence Dashboard",
         docs_url=None,
@@ -93,6 +105,57 @@ def create_fastapi_app(
                 {"error": "frontend_push_module_unavailable"},
                 status_code=503,
             )
+
+    @app.get("/api/frontend/modules/macro-data")
+    def frontend_macro_data_module(tab: str = "gdp") -> JSONResponse:
+        """返回 Macro Data 模块元数据。
+
+        Args:
+            tab: 当前分类子标签。
+
+        Returns:
+            前端可渲染的模块元数据 JSON。
+        """
+        try:
+            return JSONResponse(macro_service.build_module_payload(tab=tab))
+        except MacroDataValidationError:
+            return JSONResponse({"error": "invalid_macro_data_tab"}, status_code=400)
+        except Exception:
+            logger.exception("frontend macro data module failed")
+            return JSONResponse({"error": "frontend_macro_data_module_unavailable"}, status_code=503)
+
+    @app.get("/api/frontend/modules/macro-data/charts/{chart_id}")
+    def frontend_macro_data_chart(
+        chart_id: str,
+        range: str = "1y",
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> JSONResponse:
+        """返回 Macro Data 单张图表序列。
+
+        Args:
+            chart_id: 图表指标 ID。
+            range: 时间范围类型。
+            start_date: 自定义起始日期。
+            end_date: 自定义结束日期。
+
+        Returns:
+            前端可渲染的图表数据 JSON。
+        """
+        try:
+            return JSONResponse(
+                macro_service.build_chart_payload(
+                    chart_id,
+                    range_type=range,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            )
+        except MacroDataValidationError:
+            return JSONResponse({"error": "invalid_macro_data_range"}, status_code=400)
+        except Exception:
+            logger.exception("frontend macro data chart failed", extra={"chart_id": chart_id})
+            return JSONResponse({"error": "frontend_macro_data_chart_unavailable"}, status_code=503)
 
     @app.put("/api/push/config")
     def update_push_config(payload: dict | None = None) -> JSONResponse:

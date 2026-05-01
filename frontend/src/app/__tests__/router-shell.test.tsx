@@ -15,9 +15,14 @@ describe("Workbench shell", () => {
     return render(<App />);
   }
 
-  it("renders the remaining Push Center and Settings routes", async () => {
+  it("renders the remaining Macro Data, Push Center, and Settings routes", async () => {
     installWorkbenchFetchMock({ push: pushPayload });
 
+    renderApp("/macro-data");
+    expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
+
+    cleanup();
+    installWorkbenchFetchMock({ push: pushPayload });
     renderApp("/push");
     expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
 
@@ -50,15 +55,16 @@ describe("Workbench shell", () => {
     });
   });
 
-  it("removes Dashboard, News, Macro, Market, Events, and market ticker from the shell", async () => {
+  it("shows Macro Data and removes Dashboard, News, Market, Events, and market ticker from the shell", async () => {
     installWorkbenchFetchMock({ push: pushPayload });
 
     renderApp("/push");
 
     expect(await screen.findByRole("link", { name: "Push Center" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data > GDP" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "News" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Macro" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Market" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Events" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();
@@ -113,7 +119,8 @@ describe("Workbench shell", () => {
     const primaryNavigation = screen.getByRole("navigation", { name: "Primary" });
     const links = within(primaryNavigation).getAllByRole("link");
 
-    expect(links).toHaveLength(2);
+    expect(links).toHaveLength(3);
+    expect(within(primaryNavigation).getByRole("link", { name: "Macro Data" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Push Center" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Settings" })).toBeInTheDocument();
     expect(within(primaryNavigation).queryByText("TI")).not.toBeInTheDocument();

@@ -13,6 +13,7 @@ export type ModuleDirectory = {
 };
 
 export const moduleRootNavItems: NavItem[] = [
+  { to: "/macro-data", title: "Macro Data", description: "GDP, credit, leverage, and prices" },
   { to: "/push", title: "Push Center", description: "Templates and schedules" },
 ];
 
@@ -24,8 +25,39 @@ export const secondaryNavItems: NavItem[] = [
 
 export const moduleDirectories: ModuleDirectory[] = [
   {
-    id: "push",
+    id: "macro-data",
     item: moduleRootNavItems[0],
+    children: [
+      {
+        to: "/macro-data?tab=gdp",
+        title: "GDP",
+        ariaLabel: "Macro Data > GDP",
+        description: "Nominal and real GDP",
+      },
+      {
+        to: "/macro-data?tab=credit",
+        title: "信贷",
+        ariaLabel: "Macro Data > 信贷",
+        description: "Household and corporate new loans",
+      },
+      {
+        to: "/macro-data?tab=leverage",
+        title: "杠杆率",
+        ariaLabel: "Macro Data > 杠杆率",
+        description: "Household and corporate leverage",
+      },
+      {
+        to: "/macro-data?tab=prices",
+        title: "物价",
+        ariaLabel: "Macro Data > 物价",
+        description: "PPI and CPI",
+      },
+    ],
+    defaultExpanded: true,
+  },
+  {
+    id: "push",
+    item: moduleRootNavItems[1],
     children: [
       {
         to: "/push?tab=schedules",
