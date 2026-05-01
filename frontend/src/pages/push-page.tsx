@@ -237,7 +237,6 @@ function renderPushTab(
       />
       <PushConfigForm
         channelTypeOptions={workspace.options.channelTypeOptions}
-        configPath={workspace.configPath}
         draft={draft}
         flash={flash}
         isPreviewing={props.isPreviewing}

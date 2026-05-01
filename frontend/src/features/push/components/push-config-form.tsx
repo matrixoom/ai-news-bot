@@ -9,7 +9,6 @@ type FlashState = { tone: "success" | "error" | "neutral"; message: string } | n
 
 type PushConfigFormProps = {
   draft: PushConfig;
-  configPath: string;
   channelTypeOptions: PushChannelOption[];
   sourceModuleOptions: PushSourceModuleOption[];
   styleOptions: PushStyleOption[];
@@ -25,7 +24,6 @@ type PushConfigFormProps = {
 
 export function PushConfigForm({
   draft,
-  configPath,
   channelTypeOptions,
   sourceModuleOptions,
   styleOptions,
@@ -49,10 +47,6 @@ export function PushConfigForm({
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Tune the active modules, report style, and SMTP delivery profile before saving or sending.
           </p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          <p className="font-medium text-slate-900">Config path</p>
-          <p className="mt-1 break-all">{configPath}</p>
         </div>
       </div>
 

@@ -8,7 +8,7 @@ export function usePushModuleQuery(activeTab: PushModuleTab) {
   return useQuery({
     queryKey: ["push-module", includePreview],
     staleTime: 15_000,
-    queryFn: ({ signal }) => getPushModule({ signal, includePreview, refresh: includePreview }).then(adaptPushModule),
+    queryFn: ({ signal }) => getPushModule({ signal, includePreview }).then(adaptPushModule),
     refetchInterval: (query) => (query.state.data?.moduleLoading ? query.state.data.refreshAfterMs : false),
   });
 }
