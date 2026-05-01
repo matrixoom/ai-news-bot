@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
@@ -100,5 +100,24 @@ describe("Workbench shell", () => {
       expect(window.localStorage.getItem("dashboard-sidebar-collapsed")).toBe("true");
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     });
+  });
+
+  it("uses icon-only navigation without text initials when the sidebar is collapsed", async () => {
+    installWorkbenchFetchMock({ push: pushPayload });
+    const user = userEvent.setup();
+
+    renderApp("/push");
+
+    await user.click(await screen.findByRole("button", { name: /collapse sidebar/i }));
+
+    const primaryNavigation = screen.getByRole("navigation", { name: "Primary" });
+    const links = within(primaryNavigation).getAllByRole("link");
+
+    expect(links).toHaveLength(2);
+    expect(within(primaryNavigation).getByRole("link", { name: "Push Center" })).toBeInTheDocument();
+    expect(within(primaryNavigation).getByRole("link", { name: "Settings" })).toBeInTheDocument();
+    expect(within(primaryNavigation).queryByText("TI")).not.toBeInTheDocument();
+    expect(within(primaryNavigation).queryByText("PC")).not.toBeInTheDocument();
+    expect(within(primaryNavigation).queryByText("SE")).not.toBeInTheDocument();
   });
 });
