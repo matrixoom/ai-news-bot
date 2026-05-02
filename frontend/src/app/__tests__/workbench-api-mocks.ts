@@ -401,6 +401,7 @@ export const macroDataPayload: WorkbenchPayloads["macroData"] = {
   charts: [
     { id: "nominal_gdp", title: "名义GDP", unit: "亿元", frequency: "quarterly", status: "sample" },
     { id: "real_gdp", title: "实际GDP", unit: "亿元", frequency: "quarterly", status: "sample" },
+    { id: "gdp_growth", title: "GDP增速", unit: "%", frequency: "quarterly", status: "sample" },
   ],
 };
 
@@ -461,6 +462,28 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
 
     if (url.pathname.startsWith("/api/frontend/modules/macro-data/charts/")) {
       const chartId = url.pathname.split("/").pop() ?? "nominal_gdp";
+      if (chartId === "gdp_growth") {
+        return jsonResponse({
+          ...payloads.macroChart,
+          id: chartId,
+          title: "GDP增速",
+          unit: "%",
+          series: [
+            {
+              name: "名义GDP增速",
+              points: [{ date: "2026-03-31", period_label: "2026Q1", value: 3.87, unit: "%", released_at: "" }],
+            },
+            {
+              name: "实际GDP增速",
+              points: [{ date: "2026-03-31", period_label: "2026Q1", value: 4.75, unit: "%", released_at: "" }],
+            },
+          ],
+          range: {
+            ...(payloads.macroChart.range as Record<string, unknown>),
+            type: url.searchParams.get("range") ?? "1y",
+          },
+        });
+      }
       return jsonResponse({
         ...payloads.macroChart,
         id: chartId,
