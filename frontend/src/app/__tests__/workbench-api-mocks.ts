@@ -390,6 +390,11 @@ export const macroDataPayload: WorkbenchPayloads["macroData"] = {
   ],
   tab: "gdp",
   default_range: "1y",
+  default_frequency: "quarterly",
+  frequency_options: [
+    { value: "quarterly", label: "季度" },
+    { value: "yearly", label: "年度" },
+  ],
   range_options: [
     { value: "6m", label: "半年" },
     { value: "1y", label: "1年" },
@@ -403,8 +408,7 @@ export const macroDataPayload: WorkbenchPayloads["macroData"] = {
     { value: "custom", label: "自定义" },
   ],
   charts: [
-    { id: "nominal_gdp", title: "名义GDP", unit: "亿元", frequency: "quarterly", status: "sample" },
-    { id: "real_gdp", title: "实际GDP", unit: "亿元", frequency: "quarterly", status: "sample" },
+    { id: "gdp_total_combined", title: "名义与实际GDP总量", unit: "亿元", frequency: "quarterly", status: "sample" },
     { id: "gdp_growth", title: "GDP增速", unit: "%", frequency: "quarterly", status: "sample" },
   ],
 };
@@ -466,6 +470,35 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
 
     if (url.pathname.startsWith("/api/frontend/modules/macro-data/charts/")) {
       const chartId = url.pathname.split("/").pop() ?? "nominal_gdp";
+      if (chartId === "gdp_total_combined") {
+        return jsonResponse({
+          ...payloads.macroChart,
+          id: chartId,
+          title: "名义与实际GDP总量",
+          unit: "亿元",
+          series: [
+            {
+              name: "名义GDP",
+              points: [
+                { date: "2025-12-31", period_label: "2025Q4", value: 1260000, unit: "亿元", released_at: "" },
+                { date: "2026-03-31", period_label: "2026Q1", value: 322000, unit: "亿元", released_at: "" },
+              ],
+            },
+            {
+              name: "实际GDP",
+              points: [
+                { date: "2025-12-31", period_label: "2025Q4", value: 1100000, unit: "亿元", released_at: "" },
+                { date: "2026-03-31", period_label: "2026Q1", value: 305000, unit: "亿元", released_at: "" },
+              ],
+            },
+          ],
+          range: {
+            ...(payloads.macroChart.range as Record<string, unknown>),
+            type: url.searchParams.get("range") ?? "1y",
+          },
+          frequency: url.searchParams.get("frequency") ?? "quarterly",
+        });
+      }
       if (chartId === "gdp_growth") {
         return jsonResponse({
           ...payloads.macroChart,
@@ -486,6 +519,7 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
             ...(payloads.macroChart.range as Record<string, unknown>),
             type: url.searchParams.get("range") ?? "1y",
           },
+          frequency: url.searchParams.get("frequency") ?? "quarterly",
         });
       }
       return jsonResponse({
@@ -502,6 +536,7 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
           ...(payloads.macroChart.range as Record<string, unknown>),
           type: url.searchParams.get("range") ?? "1y",
         },
+        frequency: url.searchParams.get("frequency") ?? "quarterly",
       });
     }
 

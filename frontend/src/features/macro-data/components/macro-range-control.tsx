@@ -1,13 +1,28 @@
 import { useState } from "react";
-import type { MacroDataRangeSelection, MacroRangeOption } from "../model/macro-data.types";
+import type {
+  MacroDataFrequency,
+  MacroDataRangeSelection,
+  MacroFrequencyOption,
+  MacroRangeOption,
+} from "../model/macro-data.types";
 
 type MacroRangeControlProps = {
   options: MacroRangeOption[];
   value: MacroDataRangeSelection;
   onChange: (nextRange: MacroDataRangeSelection) => void;
+  frequencyOptions?: MacroFrequencyOption[];
+  frequency?: MacroDataFrequency;
+  onFrequencyChange?: (next: MacroDataFrequency) => void;
 };
 
-export function MacroRangeControl({ options, value, onChange }: MacroRangeControlProps) {
+export function MacroRangeControl({
+  options,
+  value,
+  onChange,
+  frequencyOptions,
+  frequency,
+  onFrequencyChange,
+}: MacroRangeControlProps) {
   const [customOpen, setCustomOpen] = useState(value.type === "custom");
   const [startDate, setStartDate] = useState(value.startDate ?? "");
   const [endDate, setEndDate] = useState(value.endDate ?? "");
@@ -38,7 +53,7 @@ export function MacroRangeControl({ options, value, onChange }: MacroRangeContro
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2" aria-label="图表时间范围">
+      <div className="flex flex-wrap items-center gap-1.5" aria-label="图表时间范围">
         {options.map((option) => {
           const selected = option.value === value.type;
 
@@ -46,7 +61,7 @@ export function MacroRangeControl({ options, value, onChange }: MacroRangeContro
             <button
               key={option.value}
               className={[
-                "inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition",
+                "inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium transition",
                 selected
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-950",
@@ -58,6 +73,31 @@ export function MacroRangeControl({ options, value, onChange }: MacroRangeContro
             </button>
           );
         })}
+
+        {frequencyOptions && frequencyOptions.length > 0 && frequency ? (
+          <div className="ml-auto flex rounded-full border border-slate-200 overflow-hidden" aria-label="数据频率切换">
+            {frequencyOptions.map((option, index) => {
+              const selected = option.value === frequency;
+
+              return (
+                <button
+                  key={option.value}
+                  className={[
+                    "inline-flex items-center px-2 py-1 text-xs font-medium transition",
+                    selected
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-transparent bg-white text-slate-500 hover:text-slate-700",
+                    index === 0 ? "border-r border-slate-200" : "",
+                  ].join(" ")}
+                  onClick={() => onFrequencyChange?.(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       {customOpen ? (

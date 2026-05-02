@@ -130,6 +130,7 @@ def create_fastapi_app(
         range: str = "1y",
         start_date: str | None = None,
         end_date: str | None = None,
+        frequency: str | None = None,
     ) -> JSONResponse:
         """返回 Macro Data 单张图表序列。
 
@@ -138,6 +139,7 @@ def create_fastapi_app(
             range: 时间范围类型。
             start_date: 自定义起始日期。
             end_date: 自定义结束日期。
+            frequency: 数据频率。
 
         Returns:
             前端可渲染的图表数据 JSON。
@@ -149,6 +151,7 @@ def create_fastapi_app(
                     range_type=range,
                     start_date=start_date,
                     end_date=end_date,
+                    frequency=frequency,
                 )
             )
         except MacroDataValidationError:

@@ -240,7 +240,7 @@ class MacroDataRepository:
                     INSERT INTO {table_name} (
                         period_end, period_label, value, unit, frequency, provider_key, source_url, released_at, last_seen_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(period_end) DO UPDATE SET
+                    ON CONFLICT(period_end, frequency) DO UPDATE SET
                         period_label=excluded.period_label,
                         value=excluded.value,
                         unit=excluded.unit,
@@ -314,13 +314,21 @@ class MacroDataRepository:
             connection.execute("DELETE FROM macro_data_sync_state WHERE indicator_id = ?", (indicator_id,))
         self.upsert_points(indicator_id, points, status=status, warning_message=warning_message)
 
-    def load_points(self, *, indicator_id: str, start_date: str, end_date: str) -> list[MacroDataPoint]:
+    def load_points(
+        self,
+        *,
+        indicator_id: str,
+        start_date: str,
+        end_date: str,
+        frequency: str | None = None,
+    ) -> list[MacroDataPoint]:
         """按时间范围读取单个指标事实表。
 
         Args:
             indicator_id: 指标稳定 ID。
             start_date: 起始日期，格式 `YYYY-MM-DD`。
             end_date: 结束日期，格式 `YYYY-MM-DD`。
+            frequency: 可选频率过滤，例如 `yearly` 或 `quarterly`。
 
         Returns:
             按周期升序排列的点位列表。
@@ -331,15 +339,26 @@ class MacroDataRepository:
             raise ValueError(f"unknown macro indicator: {indicator_id}")
         table_name = self._safe_table_name(definition.table_name)
         with self._session() as connection:
-            rows = connection.execute(
-                f"""
-                SELECT period_end, period_label, value, unit, frequency, released_at
-                FROM {table_name}
-                WHERE period_end >= ? AND period_end <= ?
-                ORDER BY period_end ASC
-                """,
-                (start_date, end_date),
-            ).fetchall()
+            if frequency:
+                rows = connection.execute(
+                    f"""
+                    SELECT period_end, period_label, value, unit, frequency, released_at
+                    FROM {table_name}
+                    WHERE period_end >= ? AND period_end <= ? AND frequency = ?
+                    ORDER BY period_end ASC
+                    """,
+                    (start_date, end_date, frequency),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    f"""
+                    SELECT period_end, period_label, value, unit, frequency, released_at
+                    FROM {table_name}
+                    WHERE period_end >= ? AND period_end <= ?
+                    ORDER BY period_end ASC, frequency ASC
+                    """,
+                    (start_date, end_date),
+                ).fetchall()
         return [
             MacroDataPoint(
                 period_end=str(row["period_end"]),
@@ -397,7 +416,7 @@ class MacroDataRepository:
                 connection.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS {table_name} (
-                        period_end TEXT PRIMARY KEY,
+                        period_end TEXT NOT NULL,
                         period_label TEXT NOT NULL,
                         value REAL NOT NULL,
                         unit TEXT NOT NULL,
@@ -405,10 +424,12 @@ class MacroDataRepository:
                         provider_key TEXT NOT NULL,
                         source_url TEXT NOT NULL,
                         released_at TEXT NOT NULL,
-                        last_seen_at TEXT NOT NULL
+                        last_seen_at TEXT NOT NULL,
+                        PRIMARY KEY (period_end, frequency)
                     )
                     """
                 )
+                self._migrate_fact_table_primary_key(connection, table_name)
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS macro_data_indicator_registry (
@@ -451,6 +472,54 @@ class MacroDataRepository:
                 )
                 """
             )
+
+    def _migrate_fact_table_primary_key(self, connection: sqlite3.Connection, table_name: str) -> None:
+        """将旧版单日期主键事实表迁移为日期和频率联合主键。
+
+        Args:
+            connection: 当前 SQLite 连接。
+            table_name: 事实表名。
+
+        Returns:
+            无返回值；已是新结构时保持不变。
+        """
+
+        index_rows = connection.execute(f"PRAGMA index_list({table_name})").fetchall()
+        for index_row in index_rows:
+            if str(index_row["origin"]) != "pk":
+                continue
+            index_columns = connection.execute(f"PRAGMA index_info({index_row['name']})").fetchall()
+            column_names = [str(column["name"]) for column in index_columns]
+            if column_names == ["period_end", "frequency"]:
+                return
+        temporary_table_name = f"{table_name}_v2"
+        connection.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {temporary_table_name} (
+                period_end TEXT NOT NULL,
+                period_label TEXT NOT NULL,
+                value REAL NOT NULL,
+                unit TEXT NOT NULL,
+                frequency TEXT NOT NULL,
+                provider_key TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                released_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                PRIMARY KEY (period_end, frequency)
+            )
+            """
+        )
+        connection.execute(
+            f"""
+            INSERT OR REPLACE INTO {temporary_table_name} (
+                period_end, period_label, value, unit, frequency, provider_key, source_url, released_at, last_seen_at
+            )
+            SELECT period_end, period_label, value, unit, frequency, provider_key, source_url, released_at, last_seen_at
+            FROM {table_name}
+            """
+        )
+        connection.execute(f"DROP TABLE {table_name}")
+        connection.execute(f"ALTER TABLE {temporary_table_name} RENAME TO {table_name}")
 
     def _seed_defaults(self) -> None:
         """写入默认指标注册信息和确定性样例数据。

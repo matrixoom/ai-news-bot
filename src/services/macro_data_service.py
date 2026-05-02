@@ -17,7 +17,9 @@ MACRO_DATA_TABS = {
 }
 
 MACRO_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"}
+MACRO_DATA_FREQUENCIES = {"monthly", "quarterly", "yearly"}
 GDP_GROWTH_CHART_ID = "gdp_growth"
+GDP_TOTAL_COMBINED_CHART_ID = "gdp_total_combined"
 
 
 @dataclass(frozen=True)
@@ -76,6 +78,8 @@ class MacroDataService:
         charts = self._repository.list_indicators(normalized_tab)
         chart_payloads = [self._chart_definition_payload(chart) for chart in charts]
         if normalized_tab == "gdp":
+            chart_payloads = [c for c in chart_payloads if c["id"] not in ("nominal_gdp", "real_gdp")]
+            chart_payloads.append(self._gdp_total_combined_definition_payload())
             chart_payloads.append(self._gdp_growth_definition_payload())
         return {
             "generated_at": _utc_now(),
@@ -92,6 +96,11 @@ class MacroDataService:
             ],
             "tab": normalized_tab,
             "default_range": "1y",
+            "default_frequency": "quarterly",
+            "frequency_options": [
+                {"value": "quarterly", "label": "季度"},
+                {"value": "yearly", "label": "年度"},
+            ],
             "range_options": [
                 {"value": "6m", "label": "半年"},
                 {"value": "1y", "label": "1年"},
@@ -114,6 +123,7 @@ class MacroDataService:
         range_type: str = "1y",
         start_date: str | None = None,
         end_date: str | None = None,
+        frequency: str | None = None,
     ) -> dict[str, Any]:
         """构造单张图表数据 payload。
 
@@ -122,6 +132,7 @@ class MacroDataService:
             range_type: 时间范围类型。
             start_date: 自定义范围起始日期。
             end_date: 自定义范围结束日期。
+            frequency: 数据频率；未传入时使用指标默认频率。
 
         Returns:
             前端图表序列数据。
@@ -133,22 +144,28 @@ class MacroDataService:
             end_date=end_date,
         )
         if chart_id == GDP_GROWTH_CHART_ID:
-            return self._build_gdp_growth_payload(resolved_range)
+            normalized_frequency = self._validate_frequency(frequency or "quarterly")
+            return self._build_gdp_growth_payload(resolved_range, normalized_frequency)
+        if chart_id == GDP_TOTAL_COMBINED_CHART_ID:
+            normalized_frequency = self._validate_frequency(frequency or "quarterly")
+            return self._build_gdp_total_combined_payload(resolved_range, normalized_frequency)
 
         definition = self._repository.get_indicator(chart_id)
         if definition is None:
             raise MacroDataValidationError("unknown chart id")
+        normalized_frequency = self._validate_frequency(frequency or definition.frequency)
         points = self._repository.load_points(
             indicator_id=chart_id,
             start_date=resolved_range.start_date,
             end_date=resolved_range.end_date,
+            frequency=normalized_frequency,
         )
         sync_state = self._repository.get_sync_state(chart_id)
         return {
             "id": definition.indicator_id,
             "title": definition.title,
             "unit": definition.unit,
-            "frequency": definition.frequency,
+            "frequency": normalized_frequency,
             "status": definition.status,
             "range": {
                 "type": resolved_range.range_type,
@@ -191,6 +208,20 @@ class MacroDataService:
         if tab not in MACRO_DATA_TABS:
             raise MacroDataValidationError("invalid macro data tab")
         return tab
+
+    def _validate_frequency(self, frequency: str) -> str:
+        """校验并归一化数据频率。
+
+        Args:
+            frequency: 原始频率值。
+
+        Returns:
+            允许的频率。
+        """
+
+        if frequency not in MACRO_DATA_FREQUENCIES:
+            raise MacroDataValidationError("invalid macro data frequency")
+        return frequency
 
     def _resolve_range(
         self,
@@ -284,7 +315,92 @@ class MacroDataService:
             "status": "sample",
         }
 
-    def _build_gdp_growth_payload(self, resolved_range: ResolvedDateRange) -> dict[str, Any]:
+    def _gdp_total_combined_definition_payload(self) -> dict[str, Any]:
+        """构造名义与实际 GDP 总量合并图表定义。
+
+        Returns:
+            前端可直接使用的合并图表定义。
+        """
+
+        return {
+            "id": GDP_TOTAL_COMBINED_CHART_ID,
+            "title": "名义与实际GDP总量",
+            "unit": "亿元",
+            "frequency": "quarterly",
+            "status": "sample",
+        }
+
+    def _build_gdp_total_combined_payload(
+        self, resolved_range: ResolvedDateRange, frequency: str
+    ) -> dict[str, Any]:
+        """合并名义 GDP 和实际 GDP 总量为单张图表。
+
+        Args:
+            resolved_range: 已解析的目标展示范围。
+            frequency: 数据频率。
+
+        Returns:
+            包含名义 GDP 和实际 GDP 两条序列的图表 payload。
+        """
+
+        nominal_points = self._repository.load_points(
+            indicator_id="nominal_gdp",
+            start_date=resolved_range.start_date,
+            end_date=resolved_range.end_date,
+            frequency=frequency,
+        )
+        real_points = self._repository.load_points(
+            indicator_id="real_gdp",
+            start_date=resolved_range.start_date,
+            end_date=resolved_range.end_date,
+            frequency=frequency,
+        )
+        nominal_payload_points = self._points_payload(nominal_points, resolved_range)
+        real_payload_points = self._points_payload(real_points, resolved_range)
+        sync_state = self._combined_gdp_total_sync_state(nominal_payload_points, real_payload_points)
+
+        return {
+            **self._gdp_total_combined_definition_payload(),
+            "frequency": frequency,
+            "range": {
+                "type": resolved_range.range_type,
+                "start_date": resolved_range.start_date,
+                "end_date": resolved_range.end_date,
+            },
+            "sync_state": sync_state,
+            "series": [
+                {"name": "名义GDP", "points": nominal_payload_points},
+                {"name": "实际GDP", "points": real_payload_points},
+            ],
+        }
+
+    def _combined_gdp_total_sync_state(
+        self,
+        nominal_points: list[dict[str, Any]],
+        real_points: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """合并名义与实际 GDP 总量图表的源数据同步状态。
+
+        Args:
+            nominal_points: 名义 GDP 点位。
+            real_points: 实际 GDP 点位。
+
+        Returns:
+            前端展示用同步状态。
+        """
+
+        nominal_state = self._repository.get_sync_state("nominal_gdp")
+        real_state = self._repository.get_sync_state("real_gdp")
+        states = [state for state in [nominal_state, real_state] if state is not None]
+        warning_messages = [state.warning_message for state in states if state.warning_message]
+        return {
+            "status": states[0].status if states else "unavailable",
+            "synced_at": max((state.synced_at for state in states), default=""),
+            "warning_message": "；".join(warning_messages),
+            "point_count": len(nominal_points) + len(real_points),
+        }
+
+    def _build_gdp_growth_payload(self, resolved_range: ResolvedDateRange, frequency: str) -> dict[str, Any]:
         """基于名义和实际 GDP 总量构造同比增速图表。
 
         Args:
@@ -300,11 +416,13 @@ class MacroDataService:
             indicator_id="nominal_gdp_growth",
             start_date=lookback_start,
             end_date=resolved_range.end_date,
+            frequency=frequency,
         )
         real_growth_points = self._repository.load_points(
             indicator_id="real_gdp_growth",
             start_date=lookback_start,
             end_date=resolved_range.end_date,
+            frequency=frequency,
         )
         if nominal_growth_points:
             nominal_payload_points = self._points_payload(nominal_growth_points, resolved_range)
@@ -313,6 +431,7 @@ class MacroDataService:
                 indicator_id="nominal_gdp",
                 start_date=lookback_start,
                 end_date=resolved_range.end_date,
+                frequency=frequency,
             )
             nominal_payload_points = self._year_over_year_growth_points(nominal_total_points, resolved_range)
         if real_growth_points:
@@ -322,12 +441,14 @@ class MacroDataService:
                 indicator_id="real_gdp",
                 start_date=lookback_start,
                 end_date=resolved_range.end_date,
+                frequency=frequency,
             )
             real_payload_points = self._year_over_year_growth_points(real_total_points, resolved_range)
         sync_state = self._combined_gdp_growth_sync_state(nominal_payload_points, real_payload_points)
 
         return {
             **self._gdp_growth_definition_payload(),
+            "frequency": frequency,
             "range": {
                 "type": resolved_range.range_type,
                 "start_date": resolved_range.start_date,

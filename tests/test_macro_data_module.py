@@ -87,6 +87,53 @@ class MacroDataRepositoryTests(unittest.TestCase):
         self.assertIn(100.0, values)
         self.assertNotIn(999.0, values)
 
+    def test_repository_keeps_yearly_and_quarterly_points_for_same_period_end(self) -> None:
+        """校验同一日期的年度与季度点位不会互相覆盖。"""
+        repository = MacroDataRepository(self.db_path)
+        repository.replace_points(
+            "nominal_gdp",
+            [
+                {
+                    "period_end": "2024-12-31",
+                    "period_label": "2024",
+                    "value": 700.0,
+                    "unit": "亿元",
+                    "frequency": "yearly",
+                    "provider_key": "unit_test",
+                    "source_url": "https://example.com/yearly",
+                    "released_at": "2025-01-01T00:00:00Z",
+                },
+                {
+                    "period_end": "2024-12-31",
+                    "period_label": "2024Q4",
+                    "value": 250.0,
+                    "unit": "亿元",
+                    "frequency": "quarterly",
+                    "provider_key": "unit_test",
+                    "source_url": "https://example.com/quarterly",
+                    "released_at": "2025-01-01T00:00:00Z",
+                },
+            ],
+            status="success",
+            warning_message="",
+        )
+
+        yearly_points = repository.load_points(
+            indicator_id="nominal_gdp",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            frequency="yearly",
+        )
+        quarterly_points = repository.load_points(
+            indicator_id="nominal_gdp",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            frequency="quarterly",
+        )
+
+        self.assertEqual([point.value for point in yearly_points], [700.0])
+        self.assertEqual([point.value for point in quarterly_points], [250.0])
+
 
 class MacroDataApiTests(unittest.TestCase):
     """校验前端 Macro Data API 契约。"""
@@ -95,7 +142,8 @@ class MacroDataApiTests(unittest.TestCase):
         self.db_path = Path(".tmp-events-tests") / "macro-data-api" / f"{self.id().split('.')[-1]}.db"
         if self.db_path.exists():
             self.db_path.unlink()
-        service = MacroDataService(repository=MacroDataRepository(self.db_path))
+        self.repository = MacroDataRepository(self.db_path)
+        service = MacroDataService(repository=self.repository)
         self.client = TestClient(create_fastapi_app(macro_data_service=service))
 
     def test_frontend_macro_data_module_returns_gdp_charts(self) -> None:
@@ -106,13 +154,14 @@ class MacroDataApiTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["module"]["id"], "macro-data")
         self.assertEqual(payload["tab"], "gdp")
-        self.assertEqual([chart["id"] for chart in payload["charts"]], ["nominal_gdp", "real_gdp", "gdp_growth"])
+        self.assertEqual([chart["id"] for chart in payload["charts"]], ["gdp_total_combined", "gdp_growth"])
         self.assertEqual(
             [option["value"] for option in payload["range_options"]],
             ["6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"],
         )
         self.assertIn({"value": "1y", "label": "1年"}, payload["range_options"])
         self.assertIn({"value": "3y", "label": "3年"}, payload["range_options"])
+        self.assertEqual(payload["frequency_options"], [{"value": "quarterly", "label": "季度"}, {"value": "yearly", "label": "年度"}])
 
     def test_frontend_macro_data_chart_returns_gdp_growth_series(self) -> None:
         """校验 GDP 增速图按名义和实际 GDP 总量派生两条同比序列。"""
@@ -139,6 +188,47 @@ class MacroDataApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["range"]["type"], "30y")
+
+    def test_frontend_macro_data_chart_filters_by_frequency(self) -> None:
+        """校验 GDP 图表可按年度或季度频率分别查询。"""
+        self.repository.replace_points(
+            "nominal_gdp",
+            [
+                {
+                    "period_end": "2024-12-31",
+                    "period_label": "2024",
+                    "value": 700.0,
+                    "unit": "亿元",
+                    "frequency": "yearly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                },
+                {
+                    "period_end": "2024-12-31",
+                    "period_label": "2024Q4",
+                    "value": 250.0,
+                    "unit": "亿元",
+                    "frequency": "quarterly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                },
+            ],
+            status="success",
+            warning_message="",
+        )
+
+        response = self.client.get(
+            "/api/frontend/modules/macro-data/charts/nominal_gdp"
+            "?range=custom&start_date=2024-01-01&end_date=2024-12-31&frequency=yearly"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["frequency"], "yearly")
+        self.assertEqual(payload["series"][0]["points"][0]["period_label"], "2024")
+        self.assertEqual(payload["series"][0]["points"][0]["value"], 700.0)
 
     def test_frontend_macro_data_chart_supports_custom_range(self) -> None:
         """校验单图接口支持自定义起止日期并返回点位序列。"""
@@ -188,7 +278,9 @@ class MacroDataSyncServiceTests(unittest.TestCase):
             ],
             constant_price_loader=lambda: [
                 {"period_end": "2024-03-31", "period_label": "2024Q1", "value": 290845.8},
+                {"period_end": "2025-03-31", "period_label": "2025Q1", "value": 306551.47},
             ],
+            historical_loader=lambda: [],
         )
 
         result = service.sync_gdp_history()
@@ -214,6 +306,40 @@ class MacroDataSyncServiceTests(unittest.TestCase):
         self.assertAlmostEqual(real_points[-1].value, 306551.47)
         self.assertEqual(growth_points[-1].value, 5.4)
         self.assertEqual(repository.get_sync_state("nominal_gdp").status, "live")
+
+    def test_sync_gdp_history_derives_quarter_values_and_matching_yearly_totals(self) -> None:
+        """校验季度图使用当季值，完整年度图与四个季度之和一致。"""
+        repository = MacroDataRepository(self.db_path)
+        service = MacroDataSyncService(
+            repository=repository,
+            world_bank_loader=lambda indicator: [],
+            eastmoney_loader=lambda: [
+                {"label": "2024年第1季度", "nominal_value": 100.0, "real_growth": 5.0},
+                {"label": "2024年第1-2季度", "nominal_value": 250.0, "real_growth": 5.0},
+                {"label": "2024年第1-3季度", "nominal_value": 450.0, "real_growth": 5.0},
+                {"label": "2024年第1-4季度", "nominal_value": 700.0, "real_growth": 5.0},
+            ],
+            constant_price_loader=lambda: [],
+            historical_loader=lambda: [],
+        )
+
+        service.sync_gdp_history()
+
+        quarterly_points = repository.load_points(
+            indicator_id="nominal_gdp",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            frequency="quarterly",
+        )
+        yearly_points = repository.load_points(
+            indicator_id="nominal_gdp",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            frequency="yearly",
+        )
+
+        self.assertEqual([point.value for point in quarterly_points], [100.0, 150.0, 200.0, 250.0])
+        self.assertEqual(yearly_points[0].value, sum(point.value for point in quarterly_points))
 
 
 if __name__ == "__main__":

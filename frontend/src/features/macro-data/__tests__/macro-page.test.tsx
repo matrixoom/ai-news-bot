@@ -25,10 +25,12 @@ describe("MacroDataPage", () => {
     expect(screen.getByRole("link", { name: "信贷" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "杠杆率" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "物价" })).toBeInTheDocument();
-    expect(await screen.findByText("名义GDP")).toBeInTheDocument();
-    expect(await screen.findByText("实际GDP")).toBeInTheDocument();
+    expect(await screen.findByText("名义与实际GDP总量")).toBeInTheDocument();
+    expect(await screen.findByText(/名义GDP \/ 实际GDP/)).toBeInTheDocument();
     expect(await screen.findByText("GDP增速")).toBeInTheDocument();
     expect(await screen.findByText(/名义GDP增速 \/ 实际GDP增速/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "季度" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "年度" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "半年" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "1年" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "3年" }).length).toBeGreaterThan(0);
@@ -69,11 +71,30 @@ describe("MacroDataPage", () => {
         fetchMock.mock.calls.some(([input]) => {
           const value = String(input);
           return (
-            value.includes("/api/frontend/modules/macro-data/charts/nominal_gdp") &&
+            value.includes("/api/frontend/modules/macro-data/charts/gdp_total_combined") &&
             value.includes("range=custom") &&
             value.includes("start_date=2025-01-01") &&
             value.includes("end_date=2026-05-01")
           );
+        }),
+      ).toBe(true);
+    });
+  });
+
+  it("lets a GDP chart switch between quarterly and yearly data", async () => {
+    const fetchMock = installWorkbenchFetchMock();
+    const user = userEvent.setup();
+
+    renderMacroApp();
+
+    const yearlyButtons = await screen.findAllByRole("button", { name: "年度" });
+    await user.click(yearlyButtons[0]);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) => {
+          const value = String(input);
+          return value.includes("/api/frontend/modules/macro-data/charts/gdp_total_combined") && value.includes("frequency=yearly");
         }),
       ).toBe(true);
     });
