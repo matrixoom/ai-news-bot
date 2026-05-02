@@ -14,9 +14,21 @@ type MacroChartCardProps = {
 export function MacroChartCard({ chart, range, rangeOptions, onRangeChange }: MacroChartCardProps) {
   const chartRef = useRef<HTMLDivElement | null>(null);
   const query = useMacroDataChartQuery(chart.id, range);
-  const points = query.data?.series[0]?.points ?? [];
+  const series = query.data?.series ?? [];
+  const points = series[0]?.points ?? [];
   const chartLabels = useMemo(() => points.map((point) => point.period_label || point.date), [points]);
-  const chartValues = useMemo(() => points.map((point) => point.value), [points]);
+  const legendNames = useMemo(() => series.map((item) => item.name), [series]);
+  const chartSeries = useMemo(
+    () =>
+      series.map((item) => ({
+        name: item.name,
+        type: "line",
+        smooth: true,
+        symbol: "circle",
+        data: item.points.map((point) => point.value),
+      })),
+    [series],
+  );
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
@@ -29,25 +41,17 @@ export function MacroChartCard({ chart, range, rangeOptions, onRangeChange }: Ma
     instance.setOption({
       animation: false,
       tooltip: { trigger: "axis" },
-      legend: { top: 0, data: [query.data.series[0]?.name ?? chart.title] },
+      legend: { top: 0, data: legendNames },
       grid: { left: 48, right: 20, top: 48, bottom: 36 },
       xAxis: { type: "category", data: chartLabels },
       yAxis: { type: "value", name: query.data.unit },
-      series: [
-        {
-          name: query.data.series[0]?.name ?? chart.title,
-          type: "line",
-          smooth: true,
-          symbol: "circle",
-          data: chartValues,
-        },
-      ],
+      series: chartSeries,
     });
 
     return () => {
       instance.dispose();
     };
-  }, [chart.title, chartLabels, chartValues, points.length, query.data]);
+  }, [chartLabels, chartSeries, legendNames, points.length, query.data]);
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -55,7 +59,7 @@ export function MacroChartCard({ chart, range, rangeOptions, onRangeChange }: Ma
         <div>
           <h3 className="text-lg font-semibold text-slate-950">{chart.title}</h3>
           <p className="mt-1 text-sm text-slate-500">
-            单位：{chart.unit} · 频率：{chart.frequency} · 图例：{chart.title}
+            单位：{chart.unit} · 频率：{chart.frequency} · 图例：{legendNames.join(" / ") || chart.title}
           </p>
         </div>
         <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">

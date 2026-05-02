@@ -68,6 +68,20 @@
       "unit": "亿元",
       "frequency": "quarterly",
       "status": "sample"
+    },
+    {
+      "id": "real_gdp",
+      "title": "实际GDP",
+      "unit": "亿元",
+      "frequency": "quarterly",
+      "status": "sample"
+    },
+    {
+      "id": "gdp_growth",
+      "title": "GDP增速",
+      "unit": "%",
+      "frequency": "quarterly",
+      "status": "sample"
     }
   ]
 }
@@ -86,7 +100,7 @@
 - `start_date`：自定义范围起始日期，`YYYY-MM-DD`
 - `end_date`：自定义范围结束日期，`YYYY-MM-DD`
 
-用途：按单张图表读取 SQLite 中对应指标表的数据。8 个指标分别持久化在 `.data/macro_data.db` 的独立事实表中，例如 `macro_nominal_gdp`、`macro_cpi`。
+用途：按单张图表读取 SQLite 中对应指标表的数据。8 个指标分别持久化在 `.data/macro_data.db` 的独立事实表中，例如 `macro_nominal_gdp`、`macro_cpi`。`gdp_growth` 为派生图表，不新增事实表，服务层会基于 `macro_nominal_gdp` 与 `macro_real_gdp` 计算同比增速并返回两条序列。
 
 成功：`200`
 
@@ -106,6 +120,36 @@
       "name": "名义GDP",
       "points": [
         { "date": "2026-03-31", "period_label": "2026Q1", "value": 322000, "unit": "亿元" }
+      ]
+    }
+  ]
+}
+```
+
+`gdp_growth` 成功响应示例：
+
+```json
+{
+  "id": "gdp_growth",
+  "title": "GDP增速",
+  "unit": "%",
+  "frequency": "quarterly",
+  "range": {
+    "type": "1y",
+    "start_date": "2025-05-01",
+    "end_date": "2026-05-01"
+  },
+  "series": [
+    {
+      "name": "名义GDP增速",
+      "points": [
+        { "date": "2026-03-31", "period_label": "2026Q1", "value": 3.87, "unit": "%" }
+      ]
+    },
+    {
+      "name": "实际GDP增速",
+      "points": [
+        { "date": "2026-03-31", "period_label": "2026Q1", "value": 4.75, "unit": "%" }
       ]
     }
   ]

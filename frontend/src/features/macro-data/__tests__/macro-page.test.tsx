@@ -27,6 +27,8 @@ describe("MacroDataPage", () => {
     expect(screen.getByRole("link", { name: "物价" })).toBeInTheDocument();
     expect(await screen.findByText("名义GDP")).toBeInTheDocument();
     expect(await screen.findByText("实际GDP")).toBeInTheDocument();
+    expect(await screen.findByText("GDP增速")).toBeInTheDocument();
+    expect(await screen.findByText(/名义GDP增速 \/ 实际GDP增速/)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "半年" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "一年" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "三年" }).length).toBeGreaterThan(0);

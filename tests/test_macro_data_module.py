@@ -96,14 +96,32 @@ class MacroDataApiTests(unittest.TestCase):
         self.client = TestClient(create_fastapi_app(macro_data_service=service))
 
     def test_frontend_macro_data_module_returns_gdp_charts(self) -> None:
-        """校验模块接口按 GDP 子标签返回两张图定义。"""
+        """校验模块接口按 GDP 子标签返回总量与增速图定义。"""
         response = self.client.get("/api/frontend/modules/macro-data?tab=gdp")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["module"]["id"], "macro-data")
         self.assertEqual(payload["tab"], "gdp")
-        self.assertEqual([chart["id"] for chart in payload["charts"]], ["nominal_gdp", "real_gdp"])
+        self.assertEqual([chart["id"] for chart in payload["charts"]], ["nominal_gdp", "real_gdp", "gdp_growth"])
+
+    def test_frontend_macro_data_chart_returns_gdp_growth_series(self) -> None:
+        """校验 GDP 增速图按名义和实际 GDP 总量派生两条同比序列。"""
+        response = self.client.get(
+            "/api/frontend/modules/macro-data/charts/gdp_growth"
+            "?range=custom&start_date=2025-01-01&end_date=2026-12-31"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["id"], "gdp_growth")
+        self.assertEqual(payload["title"], "GDP增速")
+        self.assertEqual(payload["unit"], "%")
+        self.assertEqual(payload["range"]["type"], "custom")
+        self.assertEqual([series["name"] for series in payload["series"]], ["名义GDP增速", "实际GDP增速"])
+        self.assertEqual(payload["series"][0]["points"][0]["date"], "2026-03-31")
+        self.assertAlmostEqual(payload["series"][0]["points"][0]["value"], 3.87)
+        self.assertAlmostEqual(payload["series"][1]["points"][0]["value"], 4.75)
 
     def test_frontend_macro_data_chart_supports_custom_range(self) -> None:
         """校验单图接口支持自定义起止日期并返回点位序列。"""

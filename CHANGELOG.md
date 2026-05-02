@@ -9,6 +9,7 @@
 - 新增与 Push Center 平级的 Macro Data 模块，提供 `GDP / 信贷 / 杠杆率 / 物价` 子标签页、ECharts 图表、预设时间跨度和自定义日期范围。
 - 新增 Macro Data 后端接口：`/api/frontend/modules/macro-data` 与 `/api/frontend/modules/macro-data/charts/{chart_id}`。
 - 新增 `.data/macro_data.db` 本地 SQLite 持久化，8 个宏观指标各自一张事实表，并提供注册表与同步状态表。
+- GDP 子标签新增 `GDP增速` 组合图，基于名义 GDP 与实际 GDP 总量表派生同比增速，并在同一图中展示两条序列。
 - 新增 `AGENTS.md`，统一 Codex/代理协作与变更规则。
 - 新增 `docs/architecture.md`，明确架构分层与模块边界。
 - 新增 `docs/api-contract.md`，固化前后端接口契约与错误语义。
