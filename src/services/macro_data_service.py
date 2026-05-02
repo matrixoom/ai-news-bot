@@ -16,7 +16,7 @@ MACRO_DATA_TABS = {
     "prices": "物价",
 }
 
-MACRO_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "custom"}
+MACRO_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"}
 GDP_GROWTH_CHART_ID = "gdp_growth"
 
 
@@ -94,10 +94,14 @@ class MacroDataService:
             "default_range": "1y",
             "range_options": [
                 {"value": "6m", "label": "半年"},
-                {"value": "1y", "label": "一年"},
-                {"value": "3y", "label": "三年"},
+                {"value": "1y", "label": "1年"},
+                {"value": "3y", "label": "3年"},
                 {"value": "5y", "label": "5年"},
                 {"value": "10y", "label": "10年"},
+                {"value": "15y", "label": "15年"},
+                {"value": "20y", "label": "20年"},
+                {"value": "25y", "label": "25年"},
+                {"value": "30y", "label": "30年"},
                 {"value": "custom", "label": "自定义"},
             ],
             "charts": chart_payloads,
@@ -216,7 +220,17 @@ class MacroDataService:
             end = self._parse_date(end_date)
         else:
             end = today
-            months_by_range = {"6m": 6, "1y": 12, "3y": 36, "5y": 60, "10y": 120}
+            months_by_range = {
+                "6m": 6,
+                "1y": 12,
+                "3y": 36,
+                "5y": 60,
+                "10y": 120,
+                "15y": 180,
+                "20y": 240,
+                "25y": 300,
+                "30y": 360,
+            }
             start = _shift_months(end, -months_by_range[range_type])
         if start > end:
             raise MacroDataValidationError("start date must be before end date")
@@ -282,19 +296,35 @@ class MacroDataService:
 
         range_start = date.fromisoformat(resolved_range.start_date)
         lookback_start = _shift_months(range_start, -12).isoformat()
-        nominal_points = self._repository.load_points(
-            indicator_id="nominal_gdp",
+        nominal_growth_points = self._repository.load_points(
+            indicator_id="nominal_gdp_growth",
             start_date=lookback_start,
             end_date=resolved_range.end_date,
         )
-        real_points = self._repository.load_points(
-            indicator_id="real_gdp",
+        real_growth_points = self._repository.load_points(
+            indicator_id="real_gdp_growth",
             start_date=lookback_start,
             end_date=resolved_range.end_date,
         )
-        nominal_growth_points = self._year_over_year_growth_points(nominal_points, resolved_range)
-        real_growth_points = self._year_over_year_growth_points(real_points, resolved_range)
-        sync_state = self._combined_gdp_growth_sync_state(nominal_growth_points, real_growth_points)
+        if nominal_growth_points:
+            nominal_payload_points = self._points_payload(nominal_growth_points, resolved_range)
+        else:
+            nominal_total_points = self._repository.load_points(
+                indicator_id="nominal_gdp",
+                start_date=lookback_start,
+                end_date=resolved_range.end_date,
+            )
+            nominal_payload_points = self._year_over_year_growth_points(nominal_total_points, resolved_range)
+        if real_growth_points:
+            real_payload_points = self._points_payload(real_growth_points, resolved_range)
+        else:
+            real_total_points = self._repository.load_points(
+                indicator_id="real_gdp",
+                start_date=lookback_start,
+                end_date=resolved_range.end_date,
+            )
+            real_payload_points = self._year_over_year_growth_points(real_total_points, resolved_range)
+        sync_state = self._combined_gdp_growth_sync_state(nominal_payload_points, real_payload_points)
 
         return {
             **self._gdp_growth_definition_payload(),
@@ -305,10 +335,39 @@ class MacroDataService:
             },
             "sync_state": sync_state,
             "series": [
-                {"name": "名义GDP增速", "points": nominal_growth_points},
-                {"name": "实际GDP增速", "points": real_growth_points},
+                {"name": "名义GDP增速", "points": nominal_payload_points},
+                {"name": "实际GDP增速", "points": real_payload_points},
             ],
         }
+
+    def _points_payload(
+        self,
+        points: list[MacroDataPoint],
+        resolved_range: ResolvedDateRange,
+    ) -> list[dict[str, Any]]:
+        """将已持久化点位限制到目标范围并映射为前端点位。
+
+        Args:
+            points: Repository 返回的点位。
+            resolved_range: 目标展示范围。
+
+        Returns:
+            前端图表点位列表。
+        """
+
+        start = date.fromisoformat(resolved_range.start_date)
+        end = date.fromisoformat(resolved_range.end_date)
+        return [
+            {
+                "date": point.period_end,
+                "period_label": point.period_label,
+                "value": point.value,
+                "unit": point.unit,
+                "released_at": point.released_at,
+            }
+            for point in points
+            if start <= date.fromisoformat(point.period_end) <= end
+        ]
 
     def _year_over_year_growth_points(
         self,
@@ -364,8 +423,8 @@ class MacroDataService:
             前端展示用同步状态。
         """
 
-        nominal_state = self._repository.get_sync_state("nominal_gdp")
-        real_state = self._repository.get_sync_state("real_gdp")
+        nominal_state = self._repository.get_sync_state("nominal_gdp_growth") or self._repository.get_sync_state("nominal_gdp")
+        real_state = self._repository.get_sync_state("real_gdp_growth") or self._repository.get_sync_state("real_gdp")
         states = [state for state in [nominal_state, real_state] if state is not None]
         warning_messages = [state.warning_message for state in states if state.warning_message]
         return {

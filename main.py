@@ -8,6 +8,7 @@ from typing import Sequence
 
 from src.app.jobs.push_job import run_push_job
 from src.app.web import run_dev_server
+from src.services.macro_data_sync_service import MacroDataSyncService
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "mode",
         nargs="?",
-        choices=("web", "push"),
+        choices=("web", "push", "macro-sync"),
         default="web",
         help="Execution mode. Defaults to 'web'.",
     )
@@ -48,6 +49,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.mode == "push":
         return run_push_job()
+
+    if args.mode == "macro-sync":
+        result = MacroDataSyncService().sync_gdp_history()
+        print(f"Macro Data GDP sync complete: {result}")
+        return 0
 
     run_dev_server(host=args.host, port=args.port, reload=args.reload)
     return 0

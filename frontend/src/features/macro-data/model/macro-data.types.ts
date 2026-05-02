@@ -2,7 +2,7 @@ import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
 
 export type MacroDataTab = "gdp" | "credit" | "leverage" | "prices";
 
-export type MacroDataRange = "6m" | "1y" | "3y" | "5y" | "10y" | "custom";
+export type MacroDataRange = "6m" | "1y" | "3y" | "5y" | "10y" | "15y" | "20y" | "25y" | "30y" | "custom";
 
 export type MacroDataRangeSelection = {
   type: MacroDataRange;

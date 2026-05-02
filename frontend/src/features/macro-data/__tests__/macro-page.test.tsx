@@ -30,10 +30,14 @@ describe("MacroDataPage", () => {
     expect(await screen.findByText("GDP增速")).toBeInTheDocument();
     expect(await screen.findByText(/名义GDP增速 \/ 实际GDP增速/)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "半年" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: "一年" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: "三年" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "1年" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "3年" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "5年" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "10年" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "15年" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "20年" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "25年" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "30年" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "自定义" }).length).toBeGreaterThan(0);
   });
 

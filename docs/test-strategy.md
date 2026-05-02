@@ -89,6 +89,8 @@ cmd /c npm run build
 4. 核心接口抽查：
    - `/api/frontend/modules/macro-data?tab=gdp`
    - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=1y`
+   - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=30y`
+   - `uv run python main.py macro-sync` 后检查 `.data/macro_data.db` 中 `macro_nominal_gdp`、`macro_real_gdp`、`macro_nominal_gdp_growth`、`macro_real_gdp_growth` 的同步状态为 `live`
    - `/api/frontend/modules/push`
 5. 推送链路抽查（本地或测试环境）：
    - 更新配置

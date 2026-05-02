@@ -19,6 +19,8 @@ MACRO_DATA_TABLES: dict[str, str] = {
     "corporate_leverage_ratio": "macro_corporate_leverage_ratio",
     "ppi": "macro_ppi",
     "cpi": "macro_cpi",
+    "nominal_gdp_growth": "macro_nominal_gdp_growth",
+    "real_gdp_growth": "macro_real_gdp_growth",
 }
 
 
@@ -283,6 +285,35 @@ class MacroDataRepository:
                 ),
             )
 
+    def replace_points(
+        self,
+        indicator_id: str,
+        points: Sequence[Mapping[str, Any]],
+        *,
+        status: str,
+        warning_message: str,
+    ) -> None:
+        """替换单个指标事实表内的全部历史点。
+
+        Args:
+            indicator_id: 指标稳定 ID。
+            points: 新的完整历史点集合。
+            status: 本次同步状态。
+            warning_message: 降级或失败原因。
+
+        Returns:
+            无返回值；替换完成后同步状态会反映新历史集合。
+        """
+
+        definition = self.get_indicator(indicator_id)
+        if definition is None:
+            raise ValueError(f"unknown macro indicator: {indicator_id}")
+        table_name = self._safe_table_name(definition.table_name)
+        with self._session() as connection:
+            connection.execute(f"DELETE FROM {table_name}")
+            connection.execute("DELETE FROM macro_data_sync_state WHERE indicator_id = ?", (indicator_id,))
+        self.upsert_points(indicator_id, points, status=status, warning_message=warning_message)
+
     def load_points(self, *, indicator_id: str, start_date: str, end_date: str) -> list[MacroDataPoint]:
         """按时间范围读取单个指标事实表。
 
@@ -518,6 +549,30 @@ def _default_indicator_rows(timestamp: str) -> list[tuple[str, str, str, str, st
     return [
         ("nominal_gdp", "macro_nominal_gdp", "gdp", "名义GDP", "亿元", "quarterly", 1, "sample", timestamp, timestamp),
         ("real_gdp", "macro_real_gdp", "gdp", "实际GDP", "亿元", "quarterly", 2, "sample", timestamp, timestamp),
+        (
+            "nominal_gdp_growth",
+            "macro_nominal_gdp_growth",
+            "derived",
+            "名义GDP增速",
+            "%",
+            "quarterly",
+            1,
+            "sample",
+            timestamp,
+            timestamp,
+        ),
+        (
+            "real_gdp_growth",
+            "macro_real_gdp_growth",
+            "derived",
+            "实际GDP增速",
+            "%",
+            "quarterly",
+            2,
+            "sample",
+            timestamp,
+            timestamp,
+        ),
         (
             "household_new_loans",
             "macro_household_new_loans",
