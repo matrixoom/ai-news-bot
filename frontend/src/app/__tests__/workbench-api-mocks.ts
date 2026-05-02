@@ -392,10 +392,14 @@ export const macroDataPayload: WorkbenchPayloads["macroData"] = {
   default_range: "1y",
   range_options: [
     { value: "6m", label: "半年" },
-    { value: "1y", label: "一年" },
-    { value: "3y", label: "三年" },
+    { value: "1y", label: "1年" },
+    { value: "3y", label: "3年" },
     { value: "5y", label: "5年" },
     { value: "10y", label: "10年" },
+    { value: "15y", label: "15年" },
+    { value: "20y", label: "20年" },
+    { value: "25y", label: "25年" },
+    { value: "30y", label: "30年" },
     { value: "custom", label: "自定义" },
   ],
   charts: [

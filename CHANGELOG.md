@@ -10,6 +10,8 @@
 - 新增 Macro Data 后端接口：`/api/frontend/modules/macro-data` 与 `/api/frontend/modules/macro-data/charts/{chart_id}`。
 - 新增 `.data/macro_data.db` 本地 SQLite 持久化，8 个宏观指标各自一张事实表，并提供注册表与同步状态表。
 - GDP 子标签新增 `GDP增速` 组合图，基于名义 GDP 与实际 GDP 总量表派生同比增速，并在同一图中展示两条序列。
+- 新增 `main.py macro-sync` 宏观数据同步命令，回填 GDP 历史数据到本地 SQLite，并新增名义/实际 GDP 增速持久化表。
+- Macro Data 图表时间范围新增 `15年 / 20年 / 25年 / 30年`，并将 `一年 / 三年` 展示文案调整为 `1年 / 3年`。
 - 新增 `AGENTS.md`，统一 Codex/代理协作与变更规则。
 - 新增 `docs/architecture.md`，明确架构分层与模块边界。
 - 新增 `docs/api-contract.md`，固化前后端接口契约与错误语义。

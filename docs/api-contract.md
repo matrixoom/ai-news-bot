@@ -96,11 +96,23 @@
 
 查询参数：
 
-- `range`：`6m | 1y | 3y | 5y | 10y | custom`，默认 `1y`
+- `range`：`6m | 1y | 3y | 5y | 10y | 15y | 20y | 25y | 30y | custom`，默认 `1y`
 - `start_date`：自定义范围起始日期，`YYYY-MM-DD`
 - `end_date`：自定义范围结束日期，`YYYY-MM-DD`
 
-用途：按单张图表读取 SQLite 中对应指标表的数据。8 个指标分别持久化在 `.data/macro_data.db` 的独立事实表中，例如 `macro_nominal_gdp`、`macro_cpi`。`gdp_growth` 为派生图表，不新增事实表，服务层会基于 `macro_nominal_gdp` 与 `macro_real_gdp` 计算同比增速并返回两条序列。
+用途：按单张图表读取 SQLite 中对应指标表的数据。基础指标分别持久化在 `.data/macro_data.db` 的独立事实表中，例如 `macro_nominal_gdp`、`macro_cpi`。`gdp_growth` 为组合图表，优先读取本地持久化的 `macro_nominal_gdp_growth` 与 `macro_real_gdp_growth`，缺少增长表时再基于 `macro_nominal_gdp` 与 `macro_real_gdp` 回退计算同比增速。
+
+同步命令：
+
+```bash
+uv run python main.py macro-sync
+```
+
+当前 GDP 同步策略：
+
+- 名义 GDP：World Bank 年度人民币 GDP + 东方财富/AkShare 季度累计值。
+- 实际 GDP：World Bank 年度不变价人民币 GDP + 可访问的不变价 GDP 镜像近年季度值 + 官方同比增速推导的最新季度值。
+- GDP 增速：名义 GDP 增速由本地名义 GDP 同比推导；实际 GDP 增速使用东方财富/AkShare 披露的 NBS 同比增速。
 
 成功：`200`
 

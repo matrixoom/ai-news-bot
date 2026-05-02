@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from src.app.web import create_fastapi_app
 from src.services.macro_data_repository import MacroDataRepository
 from src.services.macro_data_service import MacroDataService
+from src.services.macro_data_sync_service import MacroDataSyncService
 
 
 class MacroDataRepositoryTests(unittest.TestCase):
@@ -18,7 +19,7 @@ class MacroDataRepositoryTests(unittest.TestCase):
             self.db_path.unlink()
 
     def test_repository_initializes_one_table_per_indicator(self) -> None:
-        """校验初始化会创建八张指标事实表和共享注册/同步状态表。"""
+        """校验初始化会创建指标事实表和共享注册/同步状态表。"""
         repository = MacroDataRepository(self.db_path)
 
         table_names = repository.list_table_names()
@@ -31,6 +32,8 @@ class MacroDataRepositoryTests(unittest.TestCase):
         self.assertIn("macro_corporate_leverage_ratio", table_names)
         self.assertIn("macro_ppi", table_names)
         self.assertIn("macro_cpi", table_names)
+        self.assertIn("macro_nominal_gdp_growth", table_names)
+        self.assertIn("macro_real_gdp_growth", table_names)
         self.assertIn("macro_data_indicator_registry", table_names)
         self.assertIn("macro_data_sync_state", table_names)
 
@@ -104,6 +107,12 @@ class MacroDataApiTests(unittest.TestCase):
         self.assertEqual(payload["module"]["id"], "macro-data")
         self.assertEqual(payload["tab"], "gdp")
         self.assertEqual([chart["id"] for chart in payload["charts"]], ["nominal_gdp", "real_gdp", "gdp_growth"])
+        self.assertEqual(
+            [option["value"] for option in payload["range_options"]],
+            ["6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"],
+        )
+        self.assertIn({"value": "1y", "label": "1年"}, payload["range_options"])
+        self.assertIn({"value": "3y", "label": "3年"}, payload["range_options"])
 
     def test_frontend_macro_data_chart_returns_gdp_growth_series(self) -> None:
         """校验 GDP 增速图按名义和实际 GDP 总量派生两条同比序列。"""
@@ -122,6 +131,14 @@ class MacroDataApiTests(unittest.TestCase):
         self.assertEqual(payload["series"][0]["points"][0]["date"], "2026-03-31")
         self.assertAlmostEqual(payload["series"][0]["points"][0]["value"], 3.87)
         self.assertAlmostEqual(payload["series"][1]["points"][0]["value"], 4.75)
+
+    def test_frontend_macro_data_chart_supports_30_year_range(self) -> None:
+        """校验单图接口支持新增 30 年预设范围。"""
+        response = self.client.get("/api/frontend/modules/macro-data/charts/nominal_gdp?range=30y")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["range"]["type"], "30y")
 
     def test_frontend_macro_data_chart_supports_custom_range(self) -> None:
         """校验单图接口支持自定义起止日期并返回点位序列。"""
@@ -147,6 +164,56 @@ class MacroDataApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "invalid_macro_data_range")
+
+
+class MacroDataSyncServiceTests(unittest.TestCase):
+    """校验宏观数据历史同步服务会写入本地 SQLite。"""
+
+    def setUp(self) -> None:
+        self.db_path = Path(".tmp-events-tests") / "macro-data-sync" / f"{self.id().split('.')[-1]}.db"
+        if self.db_path.exists():
+            self.db_path.unlink()
+
+    def test_sync_gdp_history_persists_totals_and_growth_points(self) -> None:
+        """校验 GDP 同步会写入名义/实际总量和两条增速序列。"""
+        repository = MacroDataRepository(self.db_path)
+        service = MacroDataSyncService(
+            repository=repository,
+            world_bank_loader=lambda indicator: [
+                {"year": 2024, "value_yuan": 1_349_083_546_278_00 if indicator.endswith(".CN") else 1_282_315_896_159_00},
+            ],
+            eastmoney_loader=lambda: [
+                {"label": "2024年第1季度", "nominal_value": 304761.8, "real_growth": 5.3},
+                {"label": "2025年第1季度", "nominal_value": 318466.4, "real_growth": 5.4},
+            ],
+            constant_price_loader=lambda: [
+                {"period_end": "2024-03-31", "period_label": "2024Q1", "value": 290845.8},
+            ],
+        )
+
+        result = service.sync_gdp_history()
+
+        self.assertEqual(result["nominal_gdp"], 3)
+        self.assertEqual(result["real_gdp"], 3)
+        nominal_points = repository.load_points(
+            indicator_id="nominal_gdp",
+            start_date="2024-01-01",
+            end_date="2025-12-31",
+        )
+        real_points = repository.load_points(
+            indicator_id="real_gdp",
+            start_date="2024-01-01",
+            end_date="2025-12-31",
+        )
+        growth_points = repository.load_points(
+            indicator_id="real_gdp_growth",
+            start_date="2025-01-01",
+            end_date="2025-12-31",
+        )
+        self.assertEqual(nominal_points[-1].value, 318466.4)
+        self.assertAlmostEqual(real_points[-1].value, 306551.47)
+        self.assertEqual(growth_points[-1].value, 5.4)
+        self.assertEqual(repository.get_sync_state("nominal_gdp").status, "live")
 
 
 if __name__ == "__main__":
