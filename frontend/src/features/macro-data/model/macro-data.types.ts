@@ -4,6 +4,8 @@ export type MacroDataTab = "gdp" | "credit" | "leverage" | "prices";
 
 export type MacroDataRange = "6m" | "1y" | "3y" | "5y" | "10y" | "15y" | "20y" | "25y" | "30y" | "custom";
 
+export type MacroDataFrequency = "monthly" | "quarterly" | "yearly";
+
 export type MacroDataRangeSelection = {
   type: MacroDataRange;
   startDate?: string;
@@ -12,6 +14,11 @@ export type MacroDataRangeSelection = {
 
 export type MacroRangeOption = {
   value: MacroDataRange;
+  label: string;
+};
+
+export type MacroFrequencyOption = {
+  value: MacroDataFrequency;
   label: string;
 };
 
@@ -35,6 +42,8 @@ export type MacroDataModulePayload = {
   tabs: ModuleTabDefinition<MacroDataTab>[];
   tab: MacroDataTab;
   default_range: MacroDataRange;
+  default_frequency: MacroDataFrequency;
+  frequency_options: MacroFrequencyOption[];
   range_options: MacroRangeOption[];
   charts: MacroChartDefinition[];
 };

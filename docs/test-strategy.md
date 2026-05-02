@@ -90,7 +90,9 @@ cmd /c npm run build
    - `/api/frontend/modules/macro-data?tab=gdp`
    - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=1y`
    - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=30y`
+   - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=1y&frequency=yearly`
    - `uv run python main.py macro-sync` 后检查 `.data/macro_data.db` 中 `macro_nominal_gdp`、`macro_real_gdp`、`macro_nominal_gdp_growth`、`macro_real_gdp_growth` 的同步状态为 `live`
+   - GDP 年度与季度一致性：同一年四个 `quarterly` 点位之和应等于对应 `yearly` 点位；事实表主键应为 `(period_end, frequency)`
    - `/api/frontend/modules/push`
 5. 推送链路抽查（本地或测试环境）：
    - 更新配置

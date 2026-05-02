@@ -1,19 +1,36 @@
 import * as echarts from "echarts";
 import { useEffect, useMemo, useRef } from "react";
 import { useMacroDataChartQuery } from "../hooks/use-macro-data-chart-query";
-import type { MacroChartDefinition, MacroDataRangeSelection, MacroRangeOption } from "../model/macro-data.types";
+import type {
+  MacroChartDefinition,
+  MacroDataFrequency,
+  MacroDataRangeSelection,
+  MacroFrequencyOption,
+  MacroRangeOption,
+} from "../model/macro-data.types";
 import { MacroRangeControl } from "./macro-range-control";
 
 type MacroChartCardProps = {
   chart: MacroChartDefinition;
+  frequency: MacroDataFrequency;
+  frequencyOptions: MacroFrequencyOption[];
   range: MacroDataRangeSelection;
   rangeOptions: MacroRangeOption[];
+  onFrequencyChange: (nextFrequency: MacroDataFrequency) => void;
   onRangeChange: (nextRange: MacroDataRangeSelection) => void;
 };
 
-export function MacroChartCard({ chart, range, rangeOptions, onRangeChange }: MacroChartCardProps) {
+export function MacroChartCard({
+  chart,
+  frequency,
+  frequencyOptions,
+  range,
+  rangeOptions,
+  onFrequencyChange,
+  onRangeChange,
+}: MacroChartCardProps) {
   const chartRef = useRef<HTMLDivElement | null>(null);
-  const query = useMacroDataChartQuery(chart.id, range);
+  const query = useMacroDataChartQuery(chart.id, range, frequency);
   const series = query.data?.series ?? [];
   const points = series[0]?.points ?? [];
   const chartLabels = useMemo(() => points.map((point) => point.period_label || point.date), [points]);
@@ -68,7 +85,14 @@ export function MacroChartCard({ chart, range, rangeOptions, onRangeChange }: Ma
       </div>
 
       <div className="mt-4">
-        <MacroRangeControl options={rangeOptions} value={range} onChange={onRangeChange} />
+        <MacroRangeControl
+          options={rangeOptions}
+          value={range}
+          onChange={onRangeChange}
+          frequencyOptions={frequencyOptions}
+          frequency={frequency}
+          onFrequencyChange={onFrequencyChange}
+        />
       </div>
 
       {query.isPending ? (

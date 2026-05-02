@@ -1,11 +1,12 @@
-import type { MacroChartPayload, MacroDataRangeSelection } from "../model/macro-data.types";
+import type { MacroChartPayload, MacroDataFrequency, MacroDataRangeSelection } from "../model/macro-data.types";
 
 export async function getMacroDataChart(options: {
   chartId: string;
   range: MacroDataRangeSelection;
+  frequency: MacroDataFrequency;
   signal?: AbortSignal;
 }): Promise<MacroChartPayload> {
-  const params = new URLSearchParams({ range: options.range.type });
+  const params = new URLSearchParams({ frequency: options.frequency, range: options.range.type });
   if (options.range.type === "custom") {
     if (options.range.startDate) {
       params.set("start_date", options.range.startDate);

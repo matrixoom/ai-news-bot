@@ -4,6 +4,7 @@ import { MacroChartCard } from "../features/macro-data/components/macro-chart-ca
 import { useMacroDataModuleQuery } from "../features/macro-data/hooks/use-macro-data-module-query";
 import {
   MACRO_DATA_TABS,
+  type MacroDataFrequency,
   type MacroDataRangeSelection,
   type MacroDataTab,
 } from "../features/macro-data/model/macro-data.types";
@@ -19,6 +20,7 @@ export function MacroPage() {
   const activeTab = resolveModuleTab(searchParams.get("tab"), MACRO_DATA_TABS, "gdp");
   const query = useMacroDataModuleQuery(activeTab);
   const [rangesByChartId, setRangesByChartId] = useState<Record<string, MacroDataRangeSelection>>({});
+  const [frequenciesByChartId, setFrequenciesByChartId] = useState<Record<string, MacroDataFrequency>>({});
 
   useEffect(() => {
     if (searchParams.get("tab") === activeTab) {
@@ -44,23 +46,46 @@ export function MacroPage() {
     () =>
       query.data?.range_options ?? [
         { value: "6m" as const, label: "半年" },
-        { value: "1y" as const, label: "一年" },
-        { value: "3y" as const, label: "三年" },
+        { value: "1y" as const, label: "1年" },
+        { value: "3y" as const, label: "3年" },
         { value: "5y" as const, label: "5年" },
         { value: "10y" as const, label: "10年" },
+        { value: "15y" as const, label: "15年" },
+        { value: "20y" as const, label: "20年" },
+        { value: "25y" as const, label: "25年" },
+        { value: "30y" as const, label: "30年" },
         { value: "custom" as const, label: "自定义" },
       ],
     [query.data?.range_options],
+  );
+  const defaultFrequency = query.data?.default_frequency ?? "quarterly";
+  const frequencyOptions = useMemo(
+    () => (activeTab === "gdp" ? (query.data?.frequency_options ?? [
+      { value: "quarterly" as const, label: "季度" },
+      { value: "yearly" as const, label: "年度" },
+    ]) : []),
+    [activeTab, query.data?.frequency_options],
   );
 
   function chartRange(chartId: string): MacroDataRangeSelection {
     return rangesByChartId[chartId] ?? { type: defaultRange };
   }
 
+  function chartFrequency(chartId: string, chartDefaultFrequency: string): MacroDataFrequency {
+    return frequenciesByChartId[chartId] ?? (chartDefaultFrequency as MacroDataFrequency) ?? defaultFrequency;
+  }
+
   function updateChartRange(chartId: string, nextRange: MacroDataRangeSelection) {
     setRangesByChartId((prev) => ({
       ...prev,
       [chartId]: nextRange,
+    }));
+  }
+
+  function updateChartFrequency(chartId: string, nextFrequency: MacroDataFrequency) {
+    setFrequenciesByChartId((prev) => ({
+      ...prev,
+      [chartId]: nextFrequency,
     }));
   }
 
@@ -106,6 +131,9 @@ export function MacroPage() {
               <MacroChartCard
                 key={chart.id}
                 chart={chart}
+                frequency={chartFrequency(chart.id, chart.frequency)}
+                frequencyOptions={frequencyOptions}
+                onFrequencyChange={(nextFrequency) => updateChartFrequency(chart.id, nextFrequency)}
                 onRangeChange={(nextRange) => updateChartRange(chart.id, nextRange)}
                 range={chartRange(chart.id)}
                 rangeOptions={rangeOptions}

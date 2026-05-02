@@ -61,6 +61,11 @@
   },
   "tab": "gdp",
   "default_range": "1y",
+  "default_frequency": "quarterly",
+  "frequency_options": [
+    { "value": "quarterly", "label": "季度" },
+    { "value": "yearly", "label": "年度" }
+  ],
   "charts": [
     {
       "id": "nominal_gdp",
@@ -99,8 +104,9 @@
 - `range`：`6m | 1y | 3y | 5y | 10y | 15y | 20y | 25y | 30y | custom`，默认 `1y`
 - `start_date`：自定义范围起始日期，`YYYY-MM-DD`
 - `end_date`：自定义范围结束日期，`YYYY-MM-DD`
+- `frequency`：`quarterly | yearly`，GDP 页面使用；未传入时按指标默认频率读取，例如月度指标继续使用 `monthly`
 
-用途：按单张图表读取 SQLite 中对应指标表的数据。基础指标分别持久化在 `.data/macro_data.db` 的独立事实表中，例如 `macro_nominal_gdp`、`macro_cpi`。`gdp_growth` 为组合图表，优先读取本地持久化的 `macro_nominal_gdp_growth` 与 `macro_real_gdp_growth`，缺少增长表时再基于 `macro_nominal_gdp` 与 `macro_real_gdp` 回退计算同比增速。
+用途：按单张图表读取 SQLite 中对应指标表的数据。基础指标分别持久化在 `.data/macro_data.db` 的独立事实表中，例如 `macro_nominal_gdp`、`macro_cpi`。事实表以 `(period_end, frequency)` 作为幂等键，年度 `YYYY-12-31` 与四季度 `YYYYQ4` 可同时保存，不会互相覆盖。`gdp_growth` 为组合图表，优先读取本地持久化的 `macro_nominal_gdp_growth` 与 `macro_real_gdp_growth`，缺少增长表时再基于 `macro_nominal_gdp` 与 `macro_real_gdp` 回退计算同比增速。
 
 同步命令：
 
@@ -111,8 +117,9 @@ uv run python main.py macro-sync
 当前 GDP 同步策略：
 
 - 名义 GDP：World Bank 年度人民币 GDP + 东方财富/AkShare 季度累计值。
-- 实际 GDP：World Bank 年度不变价人民币 GDP + 可访问的不变价 GDP 镜像近年季度值 + 官方同比增速推导的最新季度值。
-- GDP 增速：名义 GDP 增速由本地名义 GDP 同比推导；实际 GDP 增速使用东方财富/AkShare 披露的 NBS 同比增速。
+- 名义 GDP：World Bank 年度人民币 GDP + 东方财富/AkShare 季度累计值；季度图展示当季值，年度图优先使用完整四季度合计，保证同年四个季度之和与年度值一致。
+- 实际 GDP：World Bank 年度不变价人民币 GDP + 可访问的不变价 GDP 镜像近年季度当季值；年度图优先使用完整四季度合计。
+- GDP 增速：从本地同频率总量点位同比推导，年度和季度分开计算。
 
 成功：`200`
 
