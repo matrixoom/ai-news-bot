@@ -18,6 +18,16 @@ WorldBankLoader = Callable[[str], list[dict[str, Any]]]
 EastmoneyLoader = Callable[[], list[dict[str, Any]]]
 ConstantPriceLoader = Callable[[], list[dict[str, Any]]]
 HistoricalLoader = Callable[[], list[dict[str, Any]]]
+MoneySupplyLoader = Callable[[], list[dict[str, Any]]]
+CpiMonthlyLoader = Callable[[], list[dict[str, Any]]]
+PpiLoader = Callable[[], list[dict[str, Any]]]
+PmiLoader = Callable[[], list[dict[str, Any]]]
+NonManPmiLoader = Callable[[], list[dict[str, Any]]]
+TradeLoader = Callable[[], list[dict[str, Any]]]
+CnbsLoader = Callable[[], list[dict[str, Any]]]
+NewLoansLoader = Callable[[], list[dict[str, Any]]]
+SocialFinancingLoader = Callable[[], list[dict[str, Any]]]
+PbocCreditBreakdownLoader = Callable[[], list[dict[str, Any]]]
 
 
 @dataclass(frozen=True)
@@ -61,12 +71,32 @@ class MacroDataSyncService:
         eastmoney_loader: EastmoneyLoader | None = None,
         constant_price_loader: ConstantPriceLoader | None = None,
         historical_loader: HistoricalLoader | None = None,
+        money_supply_loader: MoneySupplyLoader | None = None,
+        cpi_monthly_loader: CpiMonthlyLoader | None = None,
+        ppi_loader: PpiLoader | None = None,
+        pmi_loader: PmiLoader | None = None,
+        non_man_pmi_loader: NonManPmiLoader | None = None,
+        trade_loader: TradeLoader | None = None,
+        cnbs_loader: CnbsLoader | None = None,
+        new_loans_loader: NewLoansLoader | None = None,
+        social_financing_loader: SocialFinancingLoader | None = None,
+        pboc_credit_breakdown_loader: PbocCreditBreakdownLoader | None = None,
     ) -> None:
         self._repository = repository or MacroDataRepository()
         self._world_bank_loader = world_bank_loader or _load_world_bank_indicator
         self._eastmoney_loader = eastmoney_loader or _load_eastmoney_gdp_rows
         self._constant_price_loader = constant_price_loader or _load_chinairn_constant_price_rows
         self._historical_loader = historical_loader or load_historical_gdp_rows
+        self._money_supply_loader = money_supply_loader or _load_money_supply_rows
+        self._cpi_monthly_loader = cpi_monthly_loader or _load_cpi_monthly_rows
+        self._ppi_loader = ppi_loader or _load_ppi_rows
+        self._pmi_loader = pmi_loader or _load_pmi_rows
+        self._non_man_pmi_loader = non_man_pmi_loader or _load_non_man_pmi_rows
+        self._trade_loader = trade_loader or _load_trade_rows
+        self._cnbs_loader = cnbs_loader or _load_cnbs_rows
+        self._new_loans_loader = new_loans_loader or _load_new_loans_rows
+        self._social_financing_loader = social_financing_loader or _load_social_financing_rows
+        self._pboc_credit_breakdown_loader = pboc_credit_breakdown_loader or _load_pboc_credit_breakdown_rows
 
     def sync_gdp_history(self) -> dict[str, int]:
         """同步 GDP 总量和增速历史数据。
@@ -136,6 +166,272 @@ class MacroDataSyncService:
             "nominal_gdp_growth": len(nominal_growth_points),
             "real_gdp_growth": len(real_growth_points),
         }
+
+    def sync_all_history(self) -> dict[str, dict[str, int]]:
+        """同步所有宏观指标历史数据。
+
+        Returns:
+            每个分类本次写入的点位数量。
+        """
+
+        result: dict[str, dict[str, int]] = {}
+        result["gdp"] = self.sync_gdp_history()
+        result["currency"] = self.sync_currency_history()
+        result["prices"] = self.sync_prices_history()
+        result["climate"] = self.sync_climate_history()
+        result["trade"] = self.sync_trade_history()
+        result["credit"] = self.sync_credit_history()
+        result["credit_breakdown"] = self.sync_credit_breakdown_history()
+        return result
+
+    def sync_currency_history(self) -> dict[str, int]:
+        """同步货币供应量 M0/M1/M2 历史数据。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        rows = self._money_supply_loader()
+        m0_points = self._money_supply_points(rows, "m0")
+        m1_points = self._money_supply_points(rows, "m1")
+        m2_points = self._money_supply_points(rows, "m2")
+        for indicator_id, points in [("m0", m0_points), ("m1", m1_points), ("m2", m2_points)]:
+            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {"m0": len(m0_points), "m1": len(m1_points), "m2": len(m2_points)}
+
+    def sync_prices_history(self) -> dict[str, int]:
+        """同步物价 CPI/PPI 历史数据。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        cpi_rows = self._cpi_monthly_loader()
+        ppi_rows = self._ppi_loader()
+        cpi_points = self._monthly_points(cpi_rows, "cpi", "%", "akshare_cpi")
+        ppi_points = self._monthly_points(ppi_rows, "ppi", "%", "akshare_ppi")
+        for indicator_id, points in [("cpi", cpi_points), ("ppi", ppi_points)]:
+            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {"cpi": len(cpi_points), "ppi": len(ppi_points)}
+
+    def sync_climate_history(self) -> dict[str, int]:
+        """同步景气指数 PMI 历史数据。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        pmi_rows = self._pmi_loader()
+        non_man_rows = self._non_man_pmi_loader()
+        pmi_points = self._monthly_points(pmi_rows, "manufacturing_pmi", "%", "akshare_pmi")
+        non_man_points = self._monthly_points(non_man_rows, "non_manufacturing_pmi", "%", "akshare_non_man_pmi")
+        for indicator_id, points in [("manufacturing_pmi", pmi_points), ("non_manufacturing_pmi", non_man_points)]:
+            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {"manufacturing_pmi": len(pmi_points), "non_manufacturing_pmi": len(non_man_points)}
+
+    def sync_trade_history(self) -> dict[str, int]:
+        """同步外贸进出口历史数据。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        rows = self._trade_loader()
+        exports_points: list[dict[str, Any]] = []
+        imports_points: list[dict[str, Any]] = []
+        for row in rows:
+            period_end = str(row["period_end"])
+            year = int(period_end[:4])
+            exports_val = float(row["exports"])
+            imports_val = float(row["imports"])
+            exports_points.append(
+                _point(
+                    period_end=period_end,
+                    period_label=_month_label(period_end),
+                    value=_usd_thousands_to_yi_wan(year, exports_val),
+                    unit="亿元",
+                    frequency="monthly",
+                    provider_key="akshare_hgjck",
+                    source_url="https://data.eastmoney.com/cjsj/hgjck.html",
+                )
+            )
+            imports_points.append(
+                _point(
+                    period_end=period_end,
+                    period_label=_month_label(period_end),
+                    value=_usd_thousands_to_yi_wan(year, imports_val),
+                    unit="亿元",
+                    frequency="monthly",
+                    provider_key="akshare_hgjck",
+                    source_url="https://data.eastmoney.com/cjsj/hgjck.html",
+                )
+            )
+        for indicator_id, points in [("exports", exports_points), ("imports", imports_points)]:
+            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {"exports": len(exports_points), "imports": len(imports_points)}
+
+    def sync_credit_history(self) -> dict[str, int]:
+        """同步信贷/杠杆率/社融历史数据。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        cnbs_rows = self._cnbs_loader()
+        household_leverage_points: list[dict[str, Any]] = []
+        corporate_leverage_points: list[dict[str, Any]] = []
+        for row in cnbs_rows:
+            household_leverage_points.append(
+                _point(
+                    period_end=str(row["period_end"]),
+                    period_label=str(row["period_label"]),
+                    value=float(row["household_leverage"]),
+                    unit="%",
+                    frequency="quarterly",
+                    provider_key="akshare_cnbs",
+                    source_url="https://www.nifd.cn/",
+                )
+            )
+            corporate_leverage_points.append(
+                _point(
+                    period_end=str(row["period_end"]),
+                    period_label=str(row["period_label"]),
+                    value=float(row["corporate_leverage"]),
+                    unit="%",
+                    frequency="quarterly",
+                    provider_key="akshare_cnbs",
+                    source_url="https://www.nifd.cn/",
+                )
+            )
+
+        new_loans_rows = self._new_loans_loader()
+        new_loans_points = self._monthly_points(new_loans_rows, "new_rmb_loans", "亿元", "akshare_new_loans")
+
+        sf_rows = self._social_financing_loader()
+        sf_points = self._monthly_points(sf_rows, "social_financing", "亿元", "akshare_social_financing")
+
+        for indicator_id, points in [
+            ("household_leverage_ratio", household_leverage_points),
+            ("corporate_leverage_ratio", corporate_leverage_points),
+            ("new_rmb_loans", new_loans_points),
+            ("social_financing", sf_points),
+        ]:
+            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {
+            "household_leverage_ratio": len(household_leverage_points),
+            "corporate_leverage_ratio": len(corporate_leverage_points),
+            "new_rmb_loans": len(new_loans_points),
+            "social_financing": len(sf_points),
+        }
+
+    def sync_credit_breakdown_history(self) -> dict[str, int]:
+        """同步新增人民币贷款按部门与期限的细分数据（来源：人民银行金融机构人民币信贷收支表）。
+
+        从人民银行官网下载各年 Excel 表，提取住户短期/中长期、企业短期/中长期
+        贷款余额，计算月度环比增量作为当月新增贷款。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        rows = self._pboc_credit_breakdown_loader()
+        indicator_points: dict[str, list[dict[str, Any]]] = {
+            "household_short_term_loans": [],
+            "household_long_term_loans": [],
+            "corporate_short_term_loans": [],
+            "corporate_long_term_loans": [],
+        }
+        key_map = {
+            "household_short_term": "household_short_term_loans",
+            "household_long_term": "household_long_term_loans",
+            "corporate_short_term": "corporate_short_term_loans",
+            "corporate_long_term": "corporate_long_term_loans",
+        }
+        for row in rows:
+            period_end = str(row["period_end"])
+            for row_key, indicator_id in key_map.items():
+                value = _optional_float(row.get(row_key))
+                if value is None:
+                    continue
+                indicator_points[indicator_id].append(
+                    _point(
+                        period_end=period_end,
+                        period_label=_month_label(period_end),
+                        value=value,
+                        unit="亿元",
+                        frequency="monthly",
+                        provider_key="pboc_credit_balance",
+                        source_url="http://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html",
+                    )
+                )
+        for indicator_id, points in indicator_points.items():
+            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {k: len(v) for k, v in indicator_points.items()}
+
+    def _money_supply_points(self, rows: list[dict[str, Any]], series_key: str) -> list[dict[str, Any]]:
+        """从货币供应量行中提取单条序列的点位。
+
+        Args:
+            rows: 货币供应量行。
+            series_key: 取值 `m0`、`m1`、`m2`。
+
+        Returns:
+            可写入 Repository 的月度点位列表。
+        """
+
+        title_map = {"m0": "M0", "m1": "M1", "m2": "M2"}
+        points: list[dict[str, Any]] = []
+        for row in rows:
+            period_end = str(row["period_end"])
+            value = _optional_float(row.get(series_key))
+            if value is None:
+                continue
+            points.append(
+                _point(
+                    period_end=period_end,
+                    period_label=_month_label(period_end),
+                    value=value,
+                    unit="亿元",
+                    frequency="monthly",
+                    provider_key="akshare_money_supply",
+                    source_url="https://data.eastmoney.com/cjsj/hbgyl.html",
+                )
+            )
+        return points
+
+    def _monthly_points(
+        self, rows: list[dict[str, Any]], indicator_id: str, unit: str, provider_key: str
+    ) -> list[dict[str, Any]]:
+        """将通用月度行转换为可写入点位。
+
+        Args:
+            rows: 含 `period_end` 和 `value` 的月度行。
+            indicator_id: 指标 ID。
+            unit: 单位。
+            provider_key: 数据来源标识。
+
+        Returns:
+            可写入 Repository 的点位列表。
+        """
+
+        points: list[dict[str, Any]] = []
+        for row in rows:
+            period_end = str(row["period_end"])
+            value = _optional_float(row.get("value"))
+            if value is None:
+                continue
+            points.append(
+                _point(
+                    period_end=period_end,
+                    period_label=_month_label(period_end),
+                    value=value,
+                    unit=unit,
+                    frequency="monthly",
+                    provider_key=provider_key,
+                    source_url="",
+                )
+            )
+        return points
 
     def _world_bank_points(self, indicator: str, indicator_id: str) -> list[dict[str, Any]]:
         """将 World Bank 年度人民币 GDP 转为本地写入点位。
@@ -555,6 +851,526 @@ class MacroDataSyncService:
         return growth_points
 
 
+def _load_money_supply_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国货币供应量月度数据。
+
+    Returns:
+        含 M0/M1/M2 余额的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_china_money_supply()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        month_end = _parse_chinese_month_label(str(row.iloc[0]))
+        if month_end is None:
+            continue
+        rows.append(
+            {
+                "period_end": month_end,
+                "m2": _optional_float(row.iloc[1]),
+                "m1": _optional_float(row.iloc[4]),
+                "m0": _optional_float(row.iloc[7]),
+            }
+        )
+    return rows
+
+
+def _load_cpi_monthly_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国 CPI 月度同比数据。
+
+    Returns:
+        含 CPI 同比增速的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_china_cpi_monthly()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        date_val = row.iloc[1]
+        if not hasattr(date_val, "year"):
+            continue
+        period_end = f"{date_val.year}-{date_val.month:02d}-{_month_last_day(date_val.year, date_val.month)}"
+        value = _optional_float(row.iloc[2])
+        if value is None:
+            continue
+        rows.append({"period_end": period_end, "value": value})
+    return rows
+
+
+def _load_ppi_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国 PPI 月度同比数据。
+
+    Returns:
+        含 PPI 同比增速的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_china_ppi()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        month_end = _parse_chinese_month_label(str(row.iloc[0]))
+        if month_end is None:
+            continue
+        value = _optional_float(row.iloc[2])
+        if value is None:
+            continue
+        rows.append({"period_end": month_end, "value": value})
+    return rows
+
+
+def _load_pmi_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国制造业 PMI 月度数据。
+
+    Returns:
+        含制造业 PMI 指数值的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_china_pmi()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        month_end = _parse_chinese_month_label(str(row.iloc[0]))
+        if month_end is None:
+            continue
+        value = _optional_float(row.iloc[1])
+        if value is None:
+            continue
+        rows.append({"period_end": month_end, "value": value})
+    return rows
+
+
+def _load_non_man_pmi_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国非制造业 PMI 月度数据。
+
+    Returns:
+        含非制造业 PMI 指数值的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_china_non_man_pmi()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        date_val = row.iloc[1]
+        if not hasattr(date_val, "year"):
+            continue
+        period_end = f"{date_val.year}-{date_val.month:02d}-{_month_last_day(date_val.year, date_val.month)}"
+        value = _optional_float(row.iloc[2])
+        if value is None:
+            continue
+        rows.append({"period_end": period_end, "value": value})
+    return rows
+
+
+def _load_trade_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国进出口月度数据（美元计价）。
+
+    Returns:
+        含出口和进口金额（千美元）的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_china_hgjck()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        month_end = _parse_chinese_month_label(str(row.iloc[0]))
+        if month_end is None:
+            continue
+        exports = _optional_float(row.iloc[1])
+        imports = _optional_float(row.iloc[4])
+        if exports is None or imports is None:
+            continue
+        rows.append({"period_end": month_end, "exports": exports, "imports": imports})
+    return rows
+
+
+def _load_cnbs_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国宏观杠杆率季度数据。
+
+    Returns:
+        含居民杠杆率和企业杠杆率的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_cnbs()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        label = str(row.iloc[0]).strip()
+        quarter = _parse_cnbs_quarter_label(label)
+        if quarter is None:
+            continue
+        household = _optional_float(row.iloc[1])
+        corporate = _optional_float(row.iloc[2])
+        if household is None or corporate is None:
+            continue
+        rows.append(
+            {
+                "period_end": quarter["period_end"],
+                "period_label": quarter["period_label"],
+                "household_leverage": household,
+                "corporate_leverage": corporate,
+            }
+        )
+    return rows
+
+
+def _load_new_loans_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国新增人民币贷款月度数据。
+
+    Returns:
+        含当月新增贷款的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_china_new_financial_credit()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        month_end = _parse_chinese_month_label(str(row.iloc[0]))
+        if month_end is None:
+            continue
+        value = _optional_float(row.iloc[1])
+        if value is None:
+            continue
+        rows.append({"period_end": month_end, "value": value})
+    return rows
+
+
+def _load_social_financing_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国社会融资规模月度数据。
+
+    Returns:
+        含当月社融增量的标准化行列表。
+    """
+
+    import akshare as ak
+
+    frame = ak.macro_china_wbck()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        month_end = _parse_chinese_month_label(str(row.iloc[0]))
+        if month_end is None:
+            continue
+        value = _optional_float(row.iloc[1])
+        if value is None:
+            continue
+        rows.append({"period_end": month_end, "value": value})
+    return rows
+
+
+def _load_pboc_credit_breakdown_rows() -> list[dict[str, Any]]:
+    """从人民银行官网下载各年金融机构人民币信贷收支表 Excel 文件，
+    提取住户短期/中长期、企业短期/中长期贷款余额，计算月度环比增量。
+
+    数据覆盖 2015-2026 年（Excel 格式自此年开始提供）。
+
+    Returns:
+        含 household_short_term/household_long_term/corporate_short_term/
+        corporate_long_term 当月新增值的标准化行列表。
+    """
+
+    import io
+    import re
+
+    import pandas as pd
+    import requests
+
+    base = "http://www.pbc.gov.cn"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    # 各年统计页面 URL（2015 起采用新 ID 体系）
+    _YEAR_PAGES: dict[int, str] = {
+        2026: f"{base}/diaochatongjisi/116219/116319/2026ntjsj/index.html",
+        2025: f"{base}/diaochatongjisi/116219/116319/5570903/index.html",
+        2024: f"{base}/diaochatongjisi/116219/116319/5225358/index.html",
+        2023: f"{base}/diaochatongjisi/116219/116319/4780803/index.html",
+        2022: f"{base}/diaochatongjisi/116219/116319/4458449/index.html",
+        2021: f"{base}/diaochatongjisi/116219/116319/4184109/index.html",
+        2020: f"{base}/diaochatongjisi/116219/116319/3959050/index.html",
+        2019: f"{base}/diaochatongjisi/116219/116319/3750274/index.html",
+        2018: f"{base}/diaochatongjisi/116219/116319/3471721/index.html",
+        2017: f"{base}/diaochatongjisi/116219/116319/3245697/index.html",
+        2016: f"{base}/diaochatongjisi/116219/116319/3013637/index.html",
+        2015: f"{base}/diaochatongjisi/116219/116319/2161324/index.html",
+    }
+
+    # 收集所有年月的贷款余额原始数据
+    # outstanding[(year, month)] = {hh_short, hh_long, corp_short, corp_long}
+    outstanding: dict[tuple[int, int], dict[str, float]] = {}
+
+    for year in sorted(_YEAR_PAGES):
+        try:
+            year_page = _YEAR_PAGES[year]
+            resp = requests.get(year_page, headers=headers, timeout=30)
+            resp.encoding = "utf-8"
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            # 找到"金融机构信贷收支统计"链接
+            credit_link = None
+            for a in soup.find_all("a"):
+                text = a.get_text(strip=True)
+                if "信贷收支" in text:
+                    credit_link = a.get("href", "")
+                    break
+            if not credit_link:
+                continue
+
+            credit_url = credit_link if credit_link.startswith("http") else base + credit_link
+            resp2 = requests.get(credit_url, headers=headers, timeout=30)
+            resp2.encoding = "utf-8"
+            soup2 = BeautifulSoup(resp2.text, "html.parser")
+
+            # 收集所有 Excel 链接，第 5 个是"金融机构人民币信贷收支表"
+            xls_links = []
+            for a in soup2.find_all("a"):
+                href = a.get("href", "")
+                if ".xls" in href.lower():
+                    xls_links.append(href)
+
+            if len(xls_links) < 5:
+                continue
+
+            file_url = xls_links[4] if xls_links[4].startswith("http") else base + xls_links[4]
+            resp3 = requests.get(file_url, headers=headers, timeout=30)
+            df = pd.read_excel(io.BytesIO(resp3.content), header=None)
+
+            year_data = _parse_credit_balance_sheet(df, year)
+            for (y, m), values in year_data.items():
+                outstanding[(y, m)] = values
+        except Exception:
+            continue
+
+    # 计算月度环比增量（当月新增 = 当月余额 - 上月余额）
+    rows: list[dict[str, Any]] = []
+    sorted_months = sorted(outstanding.keys())
+    for i, (year, month) in enumerate(sorted_months):
+        if i == 0:
+            continue  # 第一个月没有上月数据
+        prev_year, prev_month = sorted_months[i - 1]
+        # 确保是相邻月份
+        expected_prev = (year - 1, 12) if month == 1 else (year, month - 1)
+        if (prev_year, prev_month) != expected_prev:
+            continue  # 月份不连续则跳过
+        cur = outstanding[(year, month)]
+        prev = outstanding[(prev_year, prev_month)]
+        period_end = f"{year}-{month:02d}-{_month_last_day(year, month)}"
+        rows.append(
+            {
+                "period_end": period_end,
+                "household_short_term": round(cur["hh_short"] - prev["hh_short"], 2),
+                "household_long_term": round(cur["hh_long"] - prev["hh_long"], 2),
+                "corporate_short_term": round(cur["corp_short"] - prev["corp_short"], 2),
+                "corporate_long_term": round(cur["corp_long"] - prev["corp_long"], 2),
+            }
+        )
+    return rows
+
+
+def _parse_credit_balance_sheet(df: "pd.DataFrame", expected_year: int) -> dict[tuple[int, int], dict[str, float]]:
+    """解析人民银行金融机构人民币信贷收支表 Excel。
+
+    通过扫描第一列的行标签识别四个目标指标所在行，再读取各月数值列。
+
+    Args:
+        df: 不带表头的原始 DataFrame。
+        expected_year: 预期年份，用于解析列标题。
+
+    Returns:
+        {(year, month): {"hh_short": ..., "hh_long": ..., "corp_short": ..., "corp_long": ...}}
+    """
+
+    import re
+
+    import pandas as pd
+
+    # 找到列标题行（含 "项目" 的行）
+    header_row = -1
+    month_columns: dict[int, int] = {}  # col_index -> month_number
+    for i in range(min(10, df.shape[0])):
+        for j in range(df.shape[1]):
+            val = str(df.iloc[i, j]) if pd.notna(df.iloc[i, j]) else ""
+            if "项目" in val:
+                header_row = i
+                break
+        if header_row >= 0:
+            break
+
+    if header_row < 0:
+        return {}
+
+    # 解析列标题，映射到月份
+    for j in range(1, df.shape[1]):
+        val = str(df.iloc[header_row, j]) if pd.notna(df.iloc[header_row, j]) else ""
+        match = re.match(r"(\d{4})\.(\d{1,2})", val)
+        if match:
+            year = int(match.group(1))
+            month = int(match.group(2))
+            if year == expected_year:
+                month_columns[j] = month
+
+    if not month_columns:
+        return {}
+
+    # 扫描行标签，跟踪当前所处的节
+    in_household = False
+    in_corporate = False
+    target_rows: dict[str, int] = {}  # key -> row_index
+
+    for i in range(header_row + 1, df.shape[0]):
+        label = str(df.iloc[i, 0]).strip() if pd.notna(df.iloc[i, 0]) else ""
+
+        if "住户贷款" in label or "Loans to Households" in label:
+            in_household = True
+            in_corporate = False
+            continue
+        if ("企（事）业单位贷款" in label
+                or "非金融企业及机关团体贷款" in label
+                or "Loans to Non-financial Enterprises" in label):
+            in_household = False
+            in_corporate = True
+            continue
+        if "非银行业金融机构贷款" in label or "Loans to Non-banking Financial" in label:
+            in_household = False
+            in_corporate = False
+            continue
+        if "境外贷款" in label or "Overseas Loans" in label:
+            in_household = False
+            in_corporate = False
+            continue
+
+        if in_household and "短期贷款" in label and "Short-term" in label:
+            target_rows["hh_short"] = i
+        elif in_household and "中长期贷款" in label and "Mid" in label:
+            target_rows["hh_long"] = i
+        elif in_corporate and "短期贷款" in label and "Short-term" in label:
+            target_rows["corp_short"] = i
+        elif in_corporate and "中长期贷款" in label and "Mid" in label:
+            target_rows["corp_long"] = i
+
+    # 提取数据
+    result: dict[tuple[int, int], dict[str, float]] = {}
+    for col_idx, month in month_columns.items():
+        values: dict[str, float] = {}
+        for key, row_idx in target_rows.items():
+            raw = df.iloc[row_idx, col_idx]
+            if pd.isna(raw) or str(raw).strip() == "":
+                break
+            try:
+                values[key] = float(raw)
+            except (ValueError, TypeError):
+                break
+        if len(values) == 4:
+            result[(expected_year, month)] = values
+
+    return result
+
+
+def _parse_cnbs_quarter_label(label: str) -> dict[str, str] | None:
+    """解析 CNBS 季度标签。
+
+    Args:
+        label: 形如 `2005-03` 或 `2024-12` 的标签。
+
+    Returns:
+        含 period_end 和 period_label 的字典，解析失败返回 None。
+    """
+
+    try:
+        year = int(label[:4])
+        month = int(label[5:7])
+    except (ValueError, IndexError):
+        return None
+    quarter = {3: 1, 6: 2, 9: 3, 12: 4}.get(month)
+    if quarter is None:
+        return None
+    month_day = {1: "03-31", 2: "06-30", 3: "09-30", 4: "12-31"}[quarter]
+    return {"period_end": f"{year}-{month_day}", "period_label": f"{year}Q{quarter}"}
+
+
+def _parse_chinese_month_label(label: str) -> str | None:
+    """解析中文月度标签为月末日期。
+
+    Args:
+        label: 形如 `2026年03月份` 的标签。
+
+    Returns:
+        形如 `2026-03-31` 的月末日期，解析失败返回 None。
+    """
+
+    import re
+
+    match = re.match(r"(\d{4})\D*(\d{1,2})\D*", label)
+    if not match:
+        return None
+    year = int(match.group(1))
+    month = int(match.group(2))
+    if month < 1 or month > 12:
+        return None
+    return f"{year}-{month:02d}-{_month_last_day(year, month)}"
+
+
+def _month_last_day(year: int, month: int) -> str:
+    """返回指定年月的最后一天。
+
+    Args:
+        year: 年份。
+        month: 月份。
+
+    Returns:
+        形如 `31` 的日期字符串。
+    """
+
+    import calendar
+
+    return str(calendar.monthrange(year, month)[1])
+
+
+# 近似的美元兑人民币年平均汇率，用于将贸易数据从千美元转换为亿元
+_USD_CNY_YEARLY: dict[int, float] = {
+    2008: 6.95,
+    2009: 6.83,
+    2010: 6.77,
+    2011: 6.46,
+    2012: 6.31,
+    2013: 6.15,
+    2014: 6.16,
+    2015: 6.28,
+    2016: 6.64,
+    2017: 6.75,
+    2018: 6.62,
+    2019: 6.91,
+    2020: 6.90,
+    2021: 6.45,
+    2022: 6.73,
+    2023: 7.08,
+    2024: 7.12,
+    2025: 7.17,
+    2026: 7.25,
+}
+
+
+def _usd_thousands_to_yi_wan(year: int, value_usd_thousands: float) -> float:
+    """将千美元转换为亿元。
+
+    Args:
+        year: 数据年份。
+        value_usd_thousands: 千美元金额。
+
+    Returns:
+        亿元金额。
+    """
+
+    rate = _USD_CNY_YEARLY.get(year, 7.0)
+    return round(value_usd_thousands * rate / 100_000, 4)
+
+
 def _load_world_bank_indicator(indicator: str) -> list[dict[str, Any]]:
     """从 World Bank API 读取中国年度 GDP 指标。
 
@@ -697,10 +1513,15 @@ def _optional_float(value: Any) -> float | None:
         转换成功时返回浮点数，否则返回 `None`。
     """
 
+    import math
+
     try:
         if value is None or str(value).strip() == "":
             return None
-        return float(value)
+        result = float(value)
+        if math.isnan(result):
+            return None
+        return result
     except (TypeError, ValueError):
         return None
 
@@ -740,6 +1561,19 @@ def _point(
         "source_url": source_url,
         "released_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
+
+
+def _month_label(period_end: str) -> str:
+    """从月末日期生成月度展示标签。
+
+    Args:
+        period_end: 形如 `2026-03-31` 的月末日期。
+
+    Returns:
+        形如 `2026-03` 的月度标签。
+    """
+
+    return period_end[:7]
 
 
 def _merge_points(*point_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:

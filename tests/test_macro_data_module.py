@@ -164,45 +164,40 @@ class MacroDataApiTests(unittest.TestCase):
         self.assertEqual(payload["frequency_options"], [{"value": "quarterly", "label": "季度"}, {"value": "yearly", "label": "年度"}])
 
     def test_frontend_macro_data_module_returns_credit_charts(self) -> None:
-        """校验模块接口按 信贷 子标签返回贷款、杠杆率和社融堆叠图定义。"""
+        """校验模块接口按 信贷 子标签返回贷款、杠杆率和社融图表定义。"""
         response = self.client.get("/api/frontend/modules/macro-data?tab=credit")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["tab"], "credit")
         chart_ids = [chart["id"] for chart in payload["charts"]]
-        self.assertIn("household_new_loans", chart_ids)
-        self.assertIn("corporate_new_loans", chart_ids)
+        self.assertIn("new_rmb_loans", chart_ids)
+        self.assertIn("social_financing", chart_ids)
         self.assertIn("household_leverage_ratio", chart_ids)
         self.assertIn("corporate_leverage_ratio", chart_ids)
-        self.assertIn("social_financing_combined", chart_ids)
-        social_financing = next(c for c in payload["charts"] if c["id"] == "social_financing_combined")
-        self.assertEqual(social_financing["chart_type"], "bar_stacked")
-        self.assertEqual(social_financing["title"], "社会融资规模增量")
+        social_financing = next(c for c in payload["charts"] if c["id"] == "social_financing")
+        self.assertEqual(social_financing["chart_type"], "line")
+        self.assertEqual(social_financing["title"], "社会融资规模")
         self.assertEqual(social_financing["unit"], "亿元")
+        new_loans = next(c for c in payload["charts"] if c["id"] == "new_rmb_loans")
+        self.assertEqual(new_loans["chart_type"], "line")
+        self.assertEqual(new_loans["title"], "新增人民币贷款")
+        self.assertEqual(new_loans["unit"], "亿元")
 
     def test_frontend_macro_data_chart_returns_social_financing_series(self) -> None:
-        """校验社融堆叠图按8个子指标返回多系列数据。"""
+        """校验社融图表返回单系列月度数据。"""
         response = self.client.get(
-            "/api/frontend/modules/macro-data/charts/social_financing_combined"
+            "/api/frontend/modules/macro-data/charts/social_financing"
             "?range=custom&start_date=2025-01-01&end_date=2026-12-31"
         )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["id"], "social_financing_combined")
-        self.assertEqual(payload["chart_type"], "bar_stacked")
+        self.assertEqual(payload["id"], "social_financing")
+        self.assertEqual(payload["chart_type"], "line")
         self.assertEqual(payload["frequency"], "monthly")
-        self.assertEqual(len(payload["series"]), 8)
-        series_names = [s["name"] for s in payload["series"]]
-        self.assertIn("人民币贷款", series_names)
-        self.assertIn("外币贷款", series_names)
-        self.assertIn("委托贷款", series_names)
-        self.assertIn("信托贷款", series_names)
-        self.assertIn("未贴现银行承兑汇票", series_names)
-        self.assertIn("企业债券融资", series_names)
-        self.assertIn("政府债券融资", series_names)
-        self.assertIn("股票融资", series_names)
+        self.assertEqual(len(payload["series"]), 1)
+        self.assertEqual(payload["series"][0]["name"], "社会融资规模")
 
     def test_frontend_macro_data_chart_returns_gdp_growth_series(self) -> None:
         """校验 GDP 增速图按名义和实际 GDP 总量派生两条同比序列。"""

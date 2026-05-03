@@ -58,13 +58,10 @@ export function MacroPage() {
       ],
     [query.data?.range_options],
   );
-  const defaultFrequency = query.data?.default_frequency ?? "quarterly";
+  const defaultFrequency = query.data?.default_frequency ?? "monthly";
   const frequencyOptions = useMemo(
-    () => (activeTab === "gdp" ? (query.data?.frequency_options ?? [
-      { value: "quarterly" as const, label: "季度" },
-      { value: "yearly" as const, label: "年度" },
-    ]) : []),
-    [activeTab, query.data?.frequency_options],
+    () => query.data?.frequency_options ?? [],
+    [query.data?.frequency_options],
   );
 
   function chartRange(chartId: string): MacroDataRangeSelection {
@@ -131,7 +128,7 @@ export function MacroPage() {
               <MacroChartCard
                 key={chart.id}
                 chart={chart}
-                className={chart.chart_type === "bar_stacked" ? "xl:col-span-2" : undefined}
+                className={chart.wide ? "xl:col-span-2" : undefined}
                 frequency={chartFrequency(chart.id, chart.frequency)}
                 frequencyOptions={frequencyOptions}
                 onFrequencyChange={(nextFrequency) => updateChartFrequency(chart.id, nextFrequency)}

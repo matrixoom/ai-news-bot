@@ -51,8 +51,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_push_job()
 
     if args.mode == "macro-sync":
-        result = MacroDataSyncService().sync_gdp_history()
-        print(f"Macro Data GDP sync complete: {result}")
+        result = MacroDataSyncService().sync_all_history()
+        print(f"Macro Data sync complete:")
+        for category, counts in result.items():
+            total = sum(counts.values())
+            detail = ", ".join(f"{k}: {v}" for k, v in counts.items())
+            print(f"  {category}: {total} points ({detail})")
         return 0
 
     run_dev_server(host=args.host, port=args.port, reload=args.reload)

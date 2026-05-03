@@ -83,6 +83,45 @@ describe("MacroDataPage", () => {
     });
   });
 
+  it("renders credit tab with restructured wide charts and loan sub-components", async () => {
+    installWorkbenchFetchMock();
+
+    renderMacroApp("/macro-data?tab=credit");
+
+    expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "信贷" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByText("新增人民币贷款")).toBeInTheDocument();
+    expect(await screen.findByText("社会融资规模")).toBeInTheDocument();
+    expect(await screen.findByText("居民部门杠杆率")).toBeInTheDocument();
+    expect(await screen.findByText("企业部门杠杆率")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "月度" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "季度" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "年度" }).length).toBeGreaterThan(0);
+  });
+
+  it("triggers a per-chart refresh via the sync API", async () => {
+    const fetchMock = installWorkbenchFetchMock();
+    const user = userEvent.setup();
+
+    renderMacroApp();
+
+    const refreshButtons = await screen.findAllByRole("button", { name: "刷新" });
+    expect(refreshButtons.length).toBeGreaterThan(0);
+    await user.click(refreshButtons[0]);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input, init]) => {
+          const url = String(input);
+          return (
+            url.includes("/api/frontend/modules/macro-data/sync/") &&
+            (init as RequestInit | undefined)?.method === "POST"
+          );
+        }),
+      ).toBe(true);
+    });
+  });
+
   it("lets a GDP chart switch between quarterly and yearly data", async () => {
     const fetchMock = installWorkbenchFetchMock();
     const user = userEvent.setup();
