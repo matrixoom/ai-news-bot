@@ -51,9 +51,24 @@ export function MacroChartCard({
   const legendNames = useMemo(() => series.map((item) => item.name), [series]);
   const chartType = query.data?.chart_type ?? "line";
   const isWide = query.data?.wide === true || chartType === "bar_stacked";
+  const isPMI = chart.id.includes("pmi");
+
+  const pmiYRange = useMemo(() => {
+    if (!isPMI) return null;
+    const allValues = series.flatMap((s) => s.points.map((p) => p.value));
+    if (allValues.length === 0) return null;
+    const dataMin = Math.min(...allValues);
+    const dataMax = Math.max(...allValues);
+    // 以 50 为中心，数据占图表高度 ~65%，上下取整避免小数刻度
+    const maxDist = Math.max(Math.abs(dataMax - 50), Math.abs(dataMin - 50), 1.5);
+    const rawHalf = maxDist / 0.70;
+    const halfRange = Math.ceil(rawHalf);
+    return { min: 50 - halfRange, max: 50 + halfRange };
+  }, [isPMI, series]);
+
   const chartSeries = useMemo(
     () =>
-      series.map((item) => {
+      series.map((item, index) => {
         if (chartType === "bar_stacked") {
           return {
             name: item.name,
@@ -62,15 +77,31 @@ export function MacroChartCard({
             data: item.points.map((point) => point.value),
           };
         }
-        return {
+        const lineSeries: Record<string, unknown> = {
           name: item.name,
           type: "line" as const,
           smooth: true,
           symbol: "circle",
           data: item.points.map((point) => point.value),
         };
+        if (isPMI && index === 0) {
+          lineSeries.markLine = {
+            silent: true,
+            symbol: "none",
+            lineStyle: { color: "#fca5a5", type: "dashed", width: 1.5 },
+            label: {
+              show: true,
+              position: "end",
+              formatter: "",
+              fontSize: 11,
+              color: "#ef4444",
+            },
+            data: [{ yAxis: 50 }],
+          };
+        }
+        return lineSeries;
       }),
-    [chartType, series],
+    [chartType, series, isPMI],
   );
 
   useEffect(() => {
@@ -94,7 +125,11 @@ export function MacroChartCard({
         },
         grid: { left: 48, right: 140, top: 24, bottom: 36 },
         xAxis: { type: "category", data: chartLabels },
-        yAxis: { type: "value", name: query.data.unit },
+        yAxis: {
+          type: "value",
+          name: query.data.unit,
+          ...(pmiYRange ? { min: pmiYRange.min, max: pmiYRange.max } : {}),
+        },
         series: chartSeries,
       });
     } else {
@@ -104,7 +139,12 @@ export function MacroChartCard({
         legend: { top: 0, data: legendNames },
         grid: { left: 48, right: 20, top: 48, bottom: 36 },
         xAxis: { type: "category", data: chartLabels },
-        yAxis: { type: "value", name: query.data.unit },
+        // yAxis: { type: "value", name: query.data.unit },
+        yAxis: {
+          type: "value",
+          name: query.data.unit,
+          ...(pmiYRange ? { min: pmiYRange.min, max: pmiYRange.max } : {}),
+        },
         series: chartSeries,
       });
     }
@@ -112,7 +152,7 @@ export function MacroChartCard({
     return () => {
       instance.dispose();
     };
-  }, [chartLabels, chartSeries, legendNames, points.length, query.data]);
+  }, [chartLabels, chartSeries, legendNames, points.length, query.data, pmiYRange]);
 
   return (
     <section className={`relative rounded-xl border border-slate-200 bg-white p-5 shadow-sm${className ? ` ${className}` : ""}`}>
