@@ -12,6 +12,7 @@ import { MacroRangeControl } from "./macro-range-control";
 
 type MacroChartCardProps = {
   chart: MacroChartDefinition;
+  className?: string;
   frequency: MacroDataFrequency;
   frequencyOptions: MacroFrequencyOption[];
   range: MacroDataRangeSelection;
@@ -22,6 +23,7 @@ type MacroChartCardProps = {
 
 export function MacroChartCard({
   chart,
+  className,
   frequency,
   frequencyOptions,
   range,
@@ -35,16 +37,28 @@ export function MacroChartCard({
   const points = series[0]?.points ?? [];
   const chartLabels = useMemo(() => points.map((point) => point.period_label || point.date), [points]);
   const legendNames = useMemo(() => series.map((item) => item.name), [series]);
+  const chartType = query.data?.chart_type ?? "line";
+  const isWide = chartType === "bar_stacked";
   const chartSeries = useMemo(
     () =>
-      series.map((item) => ({
-        name: item.name,
-        type: "line",
-        smooth: true,
-        symbol: "circle",
-        data: item.points.map((point) => point.value),
-      })),
-    [series],
+      series.map((item) => {
+        if (chartType === "bar_stacked") {
+          return {
+            name: item.name,
+            type: "bar" as const,
+            stack: "total",
+            data: item.points.map((point) => point.value),
+          };
+        }
+        return {
+          name: item.name,
+          type: "line" as const,
+          smooth: true,
+          symbol: "circle",
+          data: item.points.map((point) => point.value),
+        };
+      }),
+    [chartType, series],
   );
 
   useEffect(() => {
@@ -55,15 +69,33 @@ export function MacroChartCard({
       return;
     }
     const instance = echarts.init(chartRef.current, undefined, { renderer: "svg" });
-    instance.setOption({
-      animation: false,
-      tooltip: { trigger: "axis" },
-      legend: { top: 0, data: legendNames },
-      grid: { left: 48, right: 20, top: 48, bottom: 36 },
-      xAxis: { type: "category", data: chartLabels },
-      yAxis: { type: "value", name: query.data.unit },
-      series: chartSeries,
-    });
+    if (isWide) {
+      instance.setOption({
+        animation: false,
+        tooltip: { trigger: "axis" },
+        legend: {
+          orient: "vertical",
+          right: 0,
+          top: "middle",
+          textStyle: { fontSize: 11 },
+          data: legendNames,
+        },
+        grid: { left: 48, right: 140, top: 24, bottom: 36 },
+        xAxis: { type: "category", data: chartLabels },
+        yAxis: { type: "value", name: query.data.unit },
+        series: chartSeries,
+      });
+    } else {
+      instance.setOption({
+        animation: false,
+        tooltip: { trigger: "axis" },
+        legend: { top: 0, data: legendNames },
+        grid: { left: 48, right: 20, top: 48, bottom: 36 },
+        xAxis: { type: "category", data: chartLabels },
+        yAxis: { type: "value", name: query.data.unit },
+        series: chartSeries,
+      });
+    }
 
     return () => {
       instance.dispose();
@@ -71,12 +103,12 @@ export function MacroChartCard({
   }, [chartLabels, chartSeries, legendNames, points.length, query.data]);
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm${className ? ` ${className}` : ""}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-slate-950">{chart.title}</h3>
           <p className="mt-1 text-sm text-slate-500">
-            单位：{chart.unit} · 频率：{chart.frequency} · 图例：{legendNames.join(" / ") || chart.title}
+            单位：{chart.unit} · 频率：{chart.frequency}{isWide ? "" : ` · 图例：${legendNames.join(" / ") || chart.title}`}
           </p>
         </div>
         <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">

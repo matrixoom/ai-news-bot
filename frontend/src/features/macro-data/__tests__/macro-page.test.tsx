@@ -23,8 +23,10 @@ describe("MacroDataPage", () => {
     expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "GDP" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "信贷" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "杠杆率" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "景气指数" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "外贸" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "物价" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "货币" })).toBeInTheDocument();
     expect(await screen.findByText("名义与实际GDP总量")).toBeInTheDocument();
     expect(await screen.findByText(/名义GDP \/ 实际GDP/)).toBeInTheDocument();
     expect(await screen.findByText("GDP增速")).toBeInTheDocument();
