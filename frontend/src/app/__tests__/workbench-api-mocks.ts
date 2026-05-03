@@ -385,7 +385,7 @@ export const macroDataPayload: WorkbenchPayloads["macroData"] = {
   tabs: [
     { value: "gdp", label: "GDP" },
     { value: "credit", label: "信贷" },
-    { value: "climate", label: "景气指数" },
+    { value: "climate", label: "景气" },
     { value: "trade", label: "外贸" },
     { value: "prices", label: "物价" },
     { value: "currency", label: "货币" },
@@ -427,7 +427,7 @@ const creditMacroDataPayload: WorkbenchPayloads["macroData"] = {
   tabs: [
     { value: "gdp", label: "GDP" },
     { value: "credit", label: "信贷" },
-    { value: "climate", label: "景气指数" },
+    { value: "climate", label: "景气" },
     { value: "trade", label: "外贸" },
     { value: "prices", label: "物价" },
     { value: "currency", label: "货币" },
