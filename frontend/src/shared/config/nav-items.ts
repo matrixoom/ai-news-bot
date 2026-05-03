@@ -42,8 +42,8 @@ export const moduleDirectories: ModuleDirectory[] = [
       },
       {
         to: "/macro-data?tab=climate",
-        title: "景气指数",
-        ariaLabel: "Macro Data > 景气指数",
+        title: "景气",
+        ariaLabel: "Macro Data > 景气",
         description: "Manufacturing and non-manufacturing PMI",
       },
       {

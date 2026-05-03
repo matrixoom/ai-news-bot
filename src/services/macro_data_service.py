@@ -12,7 +12,7 @@ from .macro_data_repository import MacroDataPoint, MacroDataRepository, MacroInd
 MACRO_DATA_TABS = {
     "gdp": "GDP",
     "credit": "信贷",
-    "climate": "景气指数",
+    "climate": "景气",
     "trade": "外贸",
     "prices": "物价",
     "currency": "货币",

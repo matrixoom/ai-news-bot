@@ -215,7 +215,7 @@ class MacroDataSyncService:
         return {"cpi": len(cpi_points), "ppi": len(ppi_points)}
 
     def sync_climate_history(self) -> dict[str, int]:
-        """同步景气指数 PMI 历史数据。
+        """同步景气 PMI 历史数据。
 
         Returns:
             每个指标本次写入的点位数量。
