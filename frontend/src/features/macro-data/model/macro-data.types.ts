@@ -1,6 +1,6 @@
 import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
 
-export type MacroDataTab = "gdp" | "credit" | "leverage" | "prices";
+export type MacroDataTab = "gdp" | "credit" | "climate" | "trade" | "prices" | "currency";
 
 export type MacroDataRange = "6m" | "1y" | "3y" | "5y" | "10y" | "15y" | "20y" | "25y" | "30y" | "custom";
 
@@ -22,12 +22,15 @@ export type MacroFrequencyOption = {
   label: string;
 };
 
+export type MacroChartType = "line" | "bar_stacked";
+
 export type MacroChartDefinition = {
   id: string;
   title: string;
   unit: string;
   frequency: string;
   status: string;
+  chart_type?: MacroChartType;
 };
 
 export type MacroDataModulePayload = {
@@ -62,6 +65,7 @@ export type MacroChartPayload = {
   unit: string;
   frequency: string;
   status: string;
+  chart_type?: MacroChartType;
   range: {
     type: MacroDataRange;
     start_date: string;
@@ -81,7 +85,9 @@ export type MacroChartPayload = {
 
 export const MACRO_DATA_TABS: readonly ModuleTabDefinition<MacroDataTab>[] = [
   { value: "gdp", label: "GDP", description: "名义与实际 GDP" },
-  { value: "credit", label: "信贷", description: "居民与企业新增贷款" },
-  { value: "leverage", label: "杠杆率", description: "居民与企业杠杆率" },
+  { value: "credit", label: "信贷", description: "居民与企业新增贷款、杠杆率、社融" },
+  { value: "climate", label: "景气指数", description: "制造业与非制造业 PMI" },
+  { value: "trade", label: "外贸", description: "进口与出口" },
   { value: "prices", label: "物价", description: "PPI 与 CPI" },
+  { value: "currency", label: "货币", description: "M0、M1、M2 货币供应量" },
 ];

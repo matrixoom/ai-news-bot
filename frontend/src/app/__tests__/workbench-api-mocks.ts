@@ -378,15 +378,17 @@ export const macroDataPayload: WorkbenchPayloads["macroData"] = {
   module: {
     id: "macro-data",
     label: "Macro Data",
-    description: "GDP, credit, leverage, and inflation indicators",
+    description: "GDP, credit, climate, trade, and inflation indicators",
     status: "live",
     loading: false,
   },
   tabs: [
     { value: "gdp", label: "GDP" },
     { value: "credit", label: "信贷" },
-    { value: "leverage", label: "杠杆率" },
+    { value: "climate", label: "景气指数" },
+    { value: "trade", label: "外贸" },
     { value: "prices", label: "物价" },
+    { value: "currency", label: "货币" },
   ],
   tab: "gdp",
   default_range: "1y",
@@ -408,8 +410,9 @@ export const macroDataPayload: WorkbenchPayloads["macroData"] = {
     { value: "custom", label: "自定义" },
   ],
   charts: [
-    { id: "gdp_total_combined", title: "名义与实际GDP总量", unit: "亿元", frequency: "quarterly", status: "sample" },
-    { id: "gdp_growth", title: "GDP增速", unit: "%", frequency: "quarterly", status: "sample" },
+    { id: "gdp_total_combined", title: "名义与实际GDP总量", unit: "亿元", frequency: "quarterly", status: "sample", chart_type: "line" },
+    { id: "gdp_growth", title: "GDP增速", unit: "%", frequency: "quarterly", status: "sample", chart_type: "line" },
+    { id: "social_financing_combined", title: "社会融资规模增量", unit: "亿元", frequency: "monthly", status: "sample", chart_type: "bar_stacked" },
   ],
 };
 
@@ -520,6 +523,75 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
             type: url.searchParams.get("range") ?? "1y",
           },
           frequency: url.searchParams.get("frequency") ?? "quarterly",
+        });
+      }
+      if (chartId === "currency_supply") {
+        return jsonResponse({
+          ...payloads.macroChart,
+          id: chartId,
+          title: "货币供应量",
+          unit: "亿元",
+          frequency: "monthly",
+          series: [
+            {
+              name: "M0",
+              points: [
+                { date: "2025-11-30", period_label: "2025-11", value: 121000, unit: "亿元", released_at: "" },
+                { date: "2025-12-31", period_label: "2025-12", value: 124000, unit: "亿元", released_at: "" },
+                { date: "2026-01-31", period_label: "2026-01", value: 128000, unit: "亿元", released_at: "" },
+                { date: "2026-02-28", period_label: "2026-02", value: 125000, unit: "亿元", released_at: "" },
+                { date: "2026-03-31", period_label: "2026-03", value: 130000, unit: "亿元", released_at: "" },
+              ],
+            },
+            {
+              name: "M1",
+              points: [
+                { date: "2025-11-30", period_label: "2025-11", value: 735000, unit: "亿元", released_at: "" },
+                { date: "2025-12-31", period_label: "2025-12", value: 742000, unit: "亿元", released_at: "" },
+                { date: "2026-01-31", period_label: "2026-01", value: 751000, unit: "亿元", released_at: "" },
+                { date: "2026-02-28", period_label: "2026-02", value: 738000, unit: "亿元", released_at: "" },
+                { date: "2026-03-31", period_label: "2026-03", value: 756000, unit: "亿元", released_at: "" },
+              ],
+            },
+            {
+              name: "M2",
+              points: [
+                { date: "2025-11-30", period_label: "2025-11", value: 3110000, unit: "亿元", released_at: "" },
+                { date: "2025-12-31", period_label: "2025-12", value: 3140000, unit: "亿元", released_at: "" },
+                { date: "2026-01-31", period_label: "2026-01", value: 3180000, unit: "亿元", released_at: "" },
+                { date: "2026-02-28", period_label: "2026-02", value: 3130000, unit: "亿元", released_at: "" },
+                { date: "2026-03-31", period_label: "2026-03", value: 3220000, unit: "亿元", released_at: "" },
+              ],
+            },
+          ],
+          range: {
+            ...(payloads.macroChart.range as Record<string, unknown>),
+            type: url.searchParams.get("range") ?? "1y",
+          },
+        });
+      }
+      if (chartId === "social_financing_combined") {
+        return jsonResponse({
+          ...payloads.macroChart,
+          id: chartId,
+          title: "社会融资规模增量",
+          unit: "亿元",
+          chart_type: "bar_stacked",
+          frequency: "monthly",
+          series: [
+            { name: "人民币贷款", points: [{ date: "2026-03-31", period_label: "2026-03", value: 45000, unit: "亿元", released_at: "" }] },
+            { name: "外币贷款", points: [{ date: "2026-03-31", period_label: "2026-03", value: 400, unit: "亿元", released_at: "" }] },
+            { name: "委托贷款", points: [{ date: "2026-03-31", period_label: "2026-03", value: 250, unit: "亿元", released_at: "" }] },
+            { name: "信托贷款", points: [{ date: "2026-03-31", period_label: "2026-03", value: 50, unit: "亿元", released_at: "" }] },
+            { name: "未贴现银行承兑汇票", points: [{ date: "2026-03-31", period_label: "2026-03", value: 150, unit: "亿元", released_at: "" }] },
+            { name: "企业债券融资", points: [{ date: "2026-03-31", period_label: "2026-03", value: 4800, unit: "亿元", released_at: "" }] },
+            { name: "政府债券融资", points: [{ date: "2026-03-31", period_label: "2026-03", value: 5800, unit: "亿元", released_at: "" }] },
+            { name: "股票融资", points: [{ date: "2026-03-31", period_label: "2026-03", value: 900, unit: "亿元", released_at: "" }] },
+          ],
+          range: {
+            ...(payloads.macroChart.range as Record<string, unknown>),
+            type: url.searchParams.get("range") ?? "1y",
+          },
         });
       }
       return jsonResponse({

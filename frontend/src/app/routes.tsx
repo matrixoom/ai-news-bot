@@ -25,7 +25,7 @@ export const appRoutes: RouteObject[] = [
       {
         path: "macro-data",
         element: <MacroPage />,
-        handle: { title: "Macro Data", description: "GDP, credit, leverage, and inflation indicators" },
+        handle: { title: "Macro Data", description: "GDP, credit, and inflation indicators" },
       },
       {
         path: "push",

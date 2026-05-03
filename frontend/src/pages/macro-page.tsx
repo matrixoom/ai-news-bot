@@ -93,7 +93,7 @@ export function MacroPage() {
     return (
       <ModulePageFrame
         contentLayoutClassName="grid gap-6"
-        description="GDP, credit, leverage, and inflation indicators."
+        description="GDP, credit, and inflation indicators."
         lastUpdated={null}
         main={<LoadingPanelState title="Loading macro data" description="Fetching chart definitions and data ranges." />}
         title="Macro Data"
@@ -106,7 +106,7 @@ export function MacroPage() {
     return (
       <ModulePageFrame
         contentLayoutClassName="grid gap-6"
-        description="GDP, credit, leverage, and inflation indicators."
+        description="GDP, credit, and inflation indicators."
         lastUpdated={null}
         main={<ErrorPanelState title="Macro data unavailable" description="The macro data payload could not be loaded." />}
         title="Macro Data"
@@ -131,6 +131,7 @@ export function MacroPage() {
               <MacroChartCard
                 key={chart.id}
                 chart={chart}
+                className={chart.chart_type === "bar_stacked" ? "xl:col-span-2" : undefined}
                 frequency={chartFrequency(chart.id, chart.frequency)}
                 frequencyOptions={frequencyOptions}
                 onFrequencyChange={(nextFrequency) => updateChartFrequency(chart.id, nextFrequency)}

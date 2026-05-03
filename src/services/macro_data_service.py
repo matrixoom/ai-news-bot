@@ -12,14 +12,29 @@ from .macro_data_repository import MacroDataPoint, MacroDataRepository, MacroInd
 MACRO_DATA_TABS = {
     "gdp": "GDP",
     "credit": "信贷",
-    "leverage": "杠杆率",
+    "climate": "景气指数",
+    "trade": "外贸",
     "prices": "物价",
+    "currency": "货币",
 }
 
 MACRO_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"}
 MACRO_DATA_FREQUENCIES = {"monthly", "quarterly", "yearly"}
 GDP_GROWTH_CHART_ID = "gdp_growth"
 GDP_TOTAL_COMBINED_CHART_ID = "gdp_total_combined"
+SOCIAL_FINANCING_COMBINED_CHART_ID = "social_financing_combined"
+CURRENCY_SUPPLY_CHART_ID = "currency_supply"
+
+_SOCIAL_FINANCING_SUB_INDICATORS = {
+    "social_financing_rmb_loans",
+    "social_financing_foreign_loans",
+    "social_financing_entrusted_loans",
+    "social_financing_trust_loans",
+    "social_financing_bankers_acceptance",
+    "social_financing_corporate_bonds",
+    "social_financing_government_bonds",
+    "social_financing_equity",
+}
 
 
 @dataclass(frozen=True)
@@ -81,6 +96,12 @@ class MacroDataService:
             chart_payloads = [c for c in chart_payloads if c["id"] not in ("nominal_gdp", "real_gdp")]
             chart_payloads.append(self._gdp_total_combined_definition_payload())
             chart_payloads.append(self._gdp_growth_definition_payload())
+        if normalized_tab == "credit":
+            chart_payloads = [c for c in chart_payloads if c["id"] not in _SOCIAL_FINANCING_SUB_INDICATORS]
+            chart_payloads.append(self._social_financing_combined_definition_payload())
+        if normalized_tab == "currency":
+            chart_payloads = [c for c in chart_payloads if c["id"] not in ("m0", "m1", "m2")]
+            chart_payloads.append(self._currency_supply_definition_payload())
         return {
             "generated_at": _utc_now(),
             "module": {
@@ -149,6 +170,10 @@ class MacroDataService:
         if chart_id == GDP_TOTAL_COMBINED_CHART_ID:
             normalized_frequency = self._validate_frequency(frequency or "quarterly")
             return self._build_gdp_total_combined_payload(resolved_range, normalized_frequency)
+        if chart_id == SOCIAL_FINANCING_COMBINED_CHART_ID:
+            return self._build_social_financing_combined_payload(resolved_range)
+        if chart_id == CURRENCY_SUPPLY_CHART_ID:
+            return self._build_currency_supply_payload(resolved_range)
 
         definition = self._repository.get_indicator(chart_id)
         if definition is None:
@@ -167,6 +192,7 @@ class MacroDataService:
             "unit": definition.unit,
             "frequency": normalized_frequency,
             "status": definition.status,
+            "chart_type": "line",
             "range": {
                 "type": resolved_range.range_type,
                 "start_date": resolved_range.start_date,
@@ -298,6 +324,7 @@ class MacroDataService:
             "unit": definition.unit,
             "frequency": definition.frequency,
             "status": definition.status,
+            "chart_type": "line",
         }
 
     def _gdp_growth_definition_payload(self) -> dict[str, Any]:
@@ -313,6 +340,7 @@ class MacroDataService:
             "unit": "%",
             "frequency": "quarterly",
             "status": "sample",
+            "chart_type": "line",
         }
 
     def _gdp_total_combined_definition_payload(self) -> dict[str, Any]:
@@ -328,6 +356,7 @@ class MacroDataService:
             "unit": "亿元",
             "frequency": "quarterly",
             "status": "sample",
+            "chart_type": "line",
         }
 
     def _build_gdp_total_combined_payload(
@@ -461,6 +490,105 @@ class MacroDataService:
             ],
         }
 
+    def _social_financing_combined_definition_payload(self) -> dict[str, Any]:
+        """构造社融堆叠柱状图定义。
+
+        Returns:
+            前端可直接使用的社融复合图表定义。
+        """
+
+        return {
+            "id": SOCIAL_FINANCING_COMBINED_CHART_ID,
+            "title": "社会融资规模增量",
+            "unit": "亿元",
+            "frequency": "monthly",
+            "status": "sample",
+            "chart_type": "bar_stacked",
+        }
+
+    def _build_social_financing_combined_payload(self, resolved_range: ResolvedDateRange) -> dict[str, Any]:
+        """加载社融各组成部分并组装为堆叠柱状图 payload。
+
+        Args:
+            resolved_range: 已解析的目标展示范围。
+
+        Returns:
+            包含社融各组成部分的堆叠柱状图 payload。
+        """
+
+        sub_indicators = [
+            ("social_financing_rmb_loans", "人民币贷款"),
+            ("social_financing_foreign_loans", "外币贷款"),
+            ("social_financing_entrusted_loans", "委托贷款"),
+            ("social_financing_trust_loans", "信托贷款"),
+            ("social_financing_bankers_acceptance", "未贴现银行承兑汇票"),
+            ("social_financing_corporate_bonds", "企业债券融资"),
+            ("social_financing_government_bonds", "政府债券融资"),
+            ("social_financing_equity", "股票融资"),
+        ]
+        all_series: list[dict[str, Any]] = []
+        for indicator_id, display_name in sub_indicators:
+            points = self._repository.load_points(
+                indicator_id=indicator_id,
+                start_date=resolved_range.start_date,
+                end_date=resolved_range.end_date,
+                frequency="monthly",
+            )
+            all_series.append(
+                {
+                    "name": display_name,
+                    "points": [
+                        {
+                            "date": point.period_end,
+                            "period_label": point.period_label,
+                            "value": point.value,
+                            "unit": point.unit,
+                            "released_at": point.released_at,
+                        }
+                        for point in points
+                    ],
+                }
+            )
+        sync_state = self._combined_social_financing_sync_state()
+        return {
+            **self._social_financing_combined_definition_payload(),
+            "frequency": "monthly",
+            "range": {
+                "type": resolved_range.range_type,
+                "start_date": resolved_range.start_date,
+                "end_date": resolved_range.end_date,
+            },
+            "sync_state": sync_state,
+            "series": all_series,
+        }
+
+    def _combined_social_financing_sync_state(self) -> dict[str, Any]:
+        """合并社融各子指标的同步状态。
+
+        Returns:
+            前端展示用同步状态。
+        """
+
+        sub_ids = [
+            "social_financing_rmb_loans",
+            "social_financing_foreign_loans",
+            "social_financing_entrusted_loans",
+            "social_financing_trust_loans",
+            "social_financing_bankers_acceptance",
+            "social_financing_corporate_bonds",
+            "social_financing_government_bonds",
+            "social_financing_equity",
+        ]
+        states = [self._repository.get_sync_state(indicator_id) for indicator_id in sub_ids]
+        states = [state for state in states if state is not None]
+        warning_messages = [state.warning_message for state in states if state.warning_message]
+        return {
+            "status": states[0].status if states else "unavailable",
+            "synced_at": max((state.synced_at for state in states), default=""),
+            "warning_message": "；".join(warning_messages),
+            "point_count": sum(state.point_count for state in states),
+        }
+
     def _points_payload(
         self,
         points: list[MacroDataPoint],
@@ -553,6 +681,103 @@ class MacroDataService:
             "synced_at": max((state.synced_at for state in states), default=""),
             "warning_message": "；".join(warning_messages),
             "point_count": len(nominal_growth_points) + len(real_growth_points),
+        }
+
+    def _currency_supply_definition_payload(self) -> dict[str, Any]:
+        """构造货币供应量派生图表定义。
+
+        Returns:
+            前端可直接使用的货币供应量图表定义。
+        """
+
+        return {
+            "id": CURRENCY_SUPPLY_CHART_ID,
+            "title": "货币供应量",
+            "unit": "亿元",
+            "frequency": "monthly",
+            "status": "sample",
+        }
+
+    def _build_currency_supply_payload(
+        self, resolved_range: ResolvedDateRange
+    ) -> dict[str, Any]:
+        """合并 M0、M1、M2 为单张图表。
+
+        Args:
+            resolved_range: 已解析的目标展示范围。
+
+        Returns:
+            包含 M0、M1、M2 三条序列的图表 payload。
+        """
+
+        m0_points = self._repository.load_points(
+            indicator_id="m0",
+            start_date=resolved_range.start_date,
+            end_date=resolved_range.end_date,
+            frequency="monthly",
+        )
+        m1_points = self._repository.load_points(
+            indicator_id="m1",
+            start_date=resolved_range.start_date,
+            end_date=resolved_range.end_date,
+            frequency="monthly",
+        )
+        m2_points = self._repository.load_points(
+            indicator_id="m2",
+            start_date=resolved_range.start_date,
+            end_date=resolved_range.end_date,
+            frequency="monthly",
+        )
+        m0_payload_points = self._points_payload(m0_points, resolved_range)
+        m1_payload_points = self._points_payload(m1_points, resolved_range)
+        m2_payload_points = self._points_payload(m2_points, resolved_range)
+        sync_state = self._combined_currency_sync_state(
+            m0_payload_points, m1_payload_points, m2_payload_points
+        )
+
+        return {
+            **self._currency_supply_definition_payload(),
+            "frequency": "monthly",
+            "range": {
+                "type": resolved_range.range_type,
+                "start_date": resolved_range.start_date,
+                "end_date": resolved_range.end_date,
+            },
+            "sync_state": sync_state,
+            "series": [
+                {"name": "M0", "points": m0_payload_points},
+                {"name": "M1", "points": m1_payload_points},
+                {"name": "M2", "points": m2_payload_points},
+            ],
+        }
+
+    def _combined_currency_sync_state(
+        self,
+        m0_points: list[dict[str, Any]],
+        m1_points: list[dict[str, Any]],
+        m2_points: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """合并货币供应量图表的源数据同步状态。
+
+        Args:
+            m0_points: M0 点位。
+            m1_points: M1 点位。
+            m2_points: M2 点位。
+
+        Returns:
+            前端展示用同步状态。
+        """
+
+        m0_state = self._repository.get_sync_state("m0")
+        m1_state = self._repository.get_sync_state("m1")
+        m2_state = self._repository.get_sync_state("m2")
+        states = [state for state in [m0_state, m1_state, m2_state] if state is not None]
+        warning_messages = [state.warning_message for state in states if state.warning_message]
+        return {
+            "status": states[0].status if states else "unavailable",
+            "synced_at": max((state.synced_at for state in states), default=""),
+            "warning_message": "；".join(warning_messages),
+            "point_count": len(m0_points) + len(m1_points) + len(m2_points),
         }
 
 
