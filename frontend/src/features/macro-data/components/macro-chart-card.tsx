@@ -1,6 +1,7 @@
 import * as echarts from "echarts";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMacroDataChartQuery } from "../hooks/use-macro-data-chart-query";
+import { useMacroDataRefreshMutation } from "../hooks/use-macro-data-refresh-mutation";
 import type {
   MacroChartDefinition,
   MacroDataFrequency,
@@ -33,12 +34,23 @@ export function MacroChartCard({
 }: MacroChartCardProps) {
   const chartRef = useRef<HTMLDivElement | null>(null);
   const query = useMacroDataChartQuery(chart.id, range, frequency);
+  const refreshMutation = useMacroDataRefreshMutation(chart.id);
+  const [refreshLabel, setRefreshLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (refreshMutation.isSuccess) {
+      setRefreshLabel("已刷新");
+      const timer = setTimeout(() => setRefreshLabel(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [refreshMutation.isSuccess]);
+
   const series = query.data?.series ?? [];
   const points = series[0]?.points ?? [];
   const chartLabels = useMemo(() => points.map((point) => point.period_label || point.date), [points]);
   const legendNames = useMemo(() => series.map((item) => item.name), [series]);
   const chartType = query.data?.chart_type ?? "line";
-  const isWide = chartType === "bar_stacked";
+  const isWide = query.data?.wide === true || chartType === "bar_stacked";
   const chartSeries = useMemo(
     () =>
       series.map((item) => {
@@ -103,7 +115,7 @@ export function MacroChartCard({
   }, [chartLabels, chartSeries, legendNames, points.length, query.data]);
 
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm${className ? ` ${className}` : ""}`}>
+    <section className={`relative rounded-xl border border-slate-200 bg-white p-5 shadow-sm${className ? ` ${className}` : ""}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-slate-950">{chart.title}</h3>
@@ -143,6 +155,14 @@ export function MacroChartCard({
           </div>
         </div>
       )}
+      <button
+        type="button"
+        className="absolute bottom-3 right-3 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+        disabled={refreshMutation.isPending}
+        onClick={() => refreshMutation.mutate()}
+      >
+        {refreshMutation.isPending ? "刷新中..." : refreshLabel ?? "刷新"}
+      </button>
     </section>
   );
 }

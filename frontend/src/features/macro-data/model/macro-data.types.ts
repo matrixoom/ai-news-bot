@@ -31,6 +31,7 @@ export type MacroChartDefinition = {
   frequency: string;
   status: string;
   chart_type?: MacroChartType;
+  wide?: boolean;
 };
 
 export type MacroDataModulePayload = {
@@ -66,6 +67,7 @@ export type MacroChartPayload = {
   frequency: string;
   status: string;
   chart_type?: MacroChartType;
+  wide?: boolean;
   range: {
     type: MacroDataRange;
     start_date: string;

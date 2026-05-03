@@ -160,6 +160,25 @@ def create_fastapi_app(
             logger.exception("frontend macro data chart failed", extra={"chart_id": chart_id})
             return JSONResponse({"error": "frontend_macro_data_chart_unavailable"}, status_code=503)
 
+    @app.post("/api/frontend/modules/macro-data/sync/{chart_id}")
+    def frontend_macro_data_sync(chart_id: str) -> JSONResponse:
+        """触发单张图表的底层数据同步。
+
+        Args:
+            chart_id: 图表指标 ID。
+
+        Returns:
+            包含同步点位数量的 JSON 响应。
+        """
+        try:
+            result = macro_service.sync_chart(chart_id)
+            return JSONResponse(result)
+        except MacroDataValidationError:
+            return JSONResponse({"error": "invalid_macro_data_chart_id"}, status_code=400)
+        except Exception:
+            logger.exception("frontend macro data sync failed", extra={"chart_id": chart_id})
+            return JSONResponse({"error": "frontend_macro_data_sync_failed"}, status_code=503)
+
     @app.put("/api/push/config")
     def update_push_config(payload: dict | None = None) -> JSONResponse:
         try:

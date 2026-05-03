@@ -22,18 +22,38 @@ MACRO_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", 
 MACRO_DATA_FREQUENCIES = {"monthly", "quarterly", "yearly"}
 GDP_GROWTH_CHART_ID = "gdp_growth"
 GDP_TOTAL_COMBINED_CHART_ID = "gdp_total_combined"
-SOCIAL_FINANCING_COMBINED_CHART_ID = "social_financing_combined"
 CURRENCY_SUPPLY_CHART_ID = "currency_supply"
+NEW_RMB_LOANS_COMBINED_CHART_ID = "new_rmb_loans"
+SOCIAL_FINANCING_CHART_ID = "social_financing"
 
-_SOCIAL_FINANCING_SUB_INDICATORS = {
-    "social_financing_rmb_loans",
-    "social_financing_foreign_loans",
-    "social_financing_entrusted_loans",
-    "social_financing_trust_loans",
-    "social_financing_bankers_acceptance",
-    "social_financing_corporate_bonds",
-    "social_financing_government_bonds",
-    "social_financing_equity",
+_NEW_RMB_LOANS_SERIES = [
+    {"indicator_id": "household_short_term_loans", "name": "居民新增短期贷款"},
+    {"indicator_id": "household_long_term_loans", "name": "居民新增长期贷款"},
+    {"indicator_id": "corporate_short_term_loans", "name": "企业新增短期贷款"},
+    {"indicator_id": "corporate_long_term_loans", "name": "企业新增长期贷款"},
+]
+
+_CREDIT_CHART_ORDER = {
+    "new_rmb_loans": 1,
+    "social_financing": 2,
+    "household_leverage_ratio": 3,
+    "corporate_leverage_ratio": 4,
+}
+
+_CHART_SYNC_GROUPS: dict[str, str] = {
+    "gdp_total_combined": "gdp",
+    "gdp_growth": "gdp",
+    "currency_supply": "currency",
+    "cpi": "prices",
+    "ppi": "prices",
+    "manufacturing_pmi": "climate",
+    "non_manufacturing_pmi": "climate",
+    "exports": "trade",
+    "imports": "trade",
+    "new_rmb_loans": "credit_breakdown",
+    "social_financing": "credit",
+    "household_leverage_ratio": "credit",
+    "corporate_leverage_ratio": "credit",
 }
 
 
@@ -79,6 +99,34 @@ class MacroDataService:
     def __init__(self, repository: MacroDataRepository | None = None) -> None:
         self._repository = repository or MacroDataRepository()
 
+    def sync_chart(self, chart_id: str) -> dict[str, Any]:
+        """触发图表对应的数据同步，返回同步结果。
+
+        Args:
+            chart_id: 图表指标 ID。
+
+        Returns:
+            含 ok 和 point_counts 的同步结果字典。
+        """
+
+        group = _CHART_SYNC_GROUPS.get(chart_id)
+        if group is None:
+            raise MacroDataValidationError("unknown chart id for sync")
+        from .macro_data_sync_service import MacroDataSyncService
+
+        syncer = MacroDataSyncService(repository=self._repository)
+        sync_methods: dict[str, Any] = {
+            "gdp": syncer.sync_gdp_history,
+            "currency": syncer.sync_currency_history,
+            "prices": syncer.sync_prices_history,
+            "climate": syncer.sync_climate_history,
+            "trade": syncer.sync_trade_history,
+            "credit": syncer.sync_credit_history,
+            "credit_breakdown": syncer.sync_credit_breakdown_history,
+        }
+        point_counts = sync_methods[group]()
+        return {"ok": True, "point_counts": point_counts}
+
     def build_module_payload(self, tab: str = "gdp") -> dict[str, Any]:
         """构造模块元数据 payload。
 
@@ -96,12 +144,19 @@ class MacroDataService:
             chart_payloads = [c for c in chart_payloads if c["id"] not in ("nominal_gdp", "real_gdp")]
             chart_payloads.append(self._gdp_total_combined_definition_payload())
             chart_payloads.append(self._gdp_growth_definition_payload())
-        if normalized_tab == "credit":
-            chart_payloads = [c for c in chart_payloads if c["id"] not in _SOCIAL_FINANCING_SUB_INDICATORS]
-            chart_payloads.append(self._social_financing_combined_definition_payload())
         if normalized_tab == "currency":
             chart_payloads = [c for c in chart_payloads if c["id"] not in ("m0", "m1", "m2")]
             chart_payloads.append(self._currency_supply_definition_payload())
+        if normalized_tab == "credit":
+            chart_payloads = [
+                c for c in chart_payloads
+                if c["id"] not in ("new_rmb_loans", "household_short_term_loans", "household_long_term_loans",
+                                   "corporate_short_term_loans", "corporate_long_term_loans")
+            ]
+            chart_payloads = [c for c in chart_payloads if c["id"] != "social_financing"]
+            chart_payloads.insert(0, self._new_rmb_loans_combined_definition_payload())
+            chart_payloads.insert(1, self._social_financing_wide_definition_payload())
+            chart_payloads.sort(key=lambda c: _CREDIT_CHART_ORDER.get(c["id"], 99))
         return {
             "generated_at": _utc_now(),
             "module": {
@@ -117,11 +172,8 @@ class MacroDataService:
             ],
             "tab": normalized_tab,
             "default_range": "1y",
-            "default_frequency": "quarterly",
-            "frequency_options": [
-                {"value": "quarterly", "label": "季度"},
-                {"value": "yearly", "label": "年度"},
-            ],
+            "default_frequency": self._default_frequency_for_tab(normalized_tab),
+            "frequency_options": self._frequency_options_for_tab(normalized_tab),
             "range_options": [
                 {"value": "6m", "label": "半年"},
                 {"value": "1y", "label": "1年"},
@@ -170,10 +222,14 @@ class MacroDataService:
         if chart_id == GDP_TOTAL_COMBINED_CHART_ID:
             normalized_frequency = self._validate_frequency(frequency or "quarterly")
             return self._build_gdp_total_combined_payload(resolved_range, normalized_frequency)
-        if chart_id == SOCIAL_FINANCING_COMBINED_CHART_ID:
-            return self._build_social_financing_combined_payload(resolved_range)
         if chart_id == CURRENCY_SUPPLY_CHART_ID:
             return self._build_currency_supply_payload(resolved_range)
+        if chart_id == NEW_RMB_LOANS_COMBINED_CHART_ID:
+            normalized_frequency = self._validate_frequency(frequency or "monthly")
+            return self._build_new_rmb_loans_combined_payload(resolved_range, normalized_frequency)
+        if chart_id == SOCIAL_FINANCING_CHART_ID and frequency in (None, "monthly"):
+            normalized_frequency = self._validate_frequency(frequency or "monthly")
+            return self._build_social_financing_wide_payload(resolved_range, normalized_frequency)
 
         definition = self._repository.get_indicator(chart_id)
         if definition is None:
@@ -248,6 +304,41 @@ class MacroDataService:
         if frequency not in MACRO_DATA_FREQUENCIES:
             raise MacroDataValidationError("invalid macro data frequency")
         return frequency
+
+    def _default_frequency_for_tab(self, tab: str) -> str:
+        """返回标签页默认数据频率。
+
+        Args:
+            tab: 分类标签。
+
+        Returns:
+            默认频率字符串。
+        """
+
+        if tab == "gdp":
+            return "quarterly"
+        return "monthly"
+
+    def _frequency_options_for_tab(self, tab: str) -> list[dict[str, str]]:
+        """返回标签页可用的频率选项。
+
+        Args:
+            tab: 分类标签。
+
+        Returns:
+            频率选项列表，含 value 和 label。
+        """
+
+        if tab == "gdp":
+            return [
+                {"value": "quarterly", "label": "季度"},
+                {"value": "yearly", "label": "年度"},
+            ]
+        return [
+            {"value": "monthly", "label": "月度"},
+            {"value": "quarterly", "label": "季度"},
+            {"value": "yearly", "label": "年度"},
+        ]
 
     def _resolve_range(
         self,
@@ -490,105 +581,6 @@ class MacroDataService:
             ],
         }
 
-    def _social_financing_combined_definition_payload(self) -> dict[str, Any]:
-        """构造社融堆叠柱状图定义。
-
-        Returns:
-            前端可直接使用的社融复合图表定义。
-        """
-
-        return {
-            "id": SOCIAL_FINANCING_COMBINED_CHART_ID,
-            "title": "社会融资规模增量",
-            "unit": "亿元",
-            "frequency": "monthly",
-            "status": "sample",
-            "chart_type": "bar_stacked",
-        }
-
-    def _build_social_financing_combined_payload(self, resolved_range: ResolvedDateRange) -> dict[str, Any]:
-        """加载社融各组成部分并组装为堆叠柱状图 payload。
-
-        Args:
-            resolved_range: 已解析的目标展示范围。
-
-        Returns:
-            包含社融各组成部分的堆叠柱状图 payload。
-        """
-
-        sub_indicators = [
-            ("social_financing_rmb_loans", "人民币贷款"),
-            ("social_financing_foreign_loans", "外币贷款"),
-            ("social_financing_entrusted_loans", "委托贷款"),
-            ("social_financing_trust_loans", "信托贷款"),
-            ("social_financing_bankers_acceptance", "未贴现银行承兑汇票"),
-            ("social_financing_corporate_bonds", "企业债券融资"),
-            ("social_financing_government_bonds", "政府债券融资"),
-            ("social_financing_equity", "股票融资"),
-        ]
-        all_series: list[dict[str, Any]] = []
-        for indicator_id, display_name in sub_indicators:
-            points = self._repository.load_points(
-                indicator_id=indicator_id,
-                start_date=resolved_range.start_date,
-                end_date=resolved_range.end_date,
-                frequency="monthly",
-            )
-            all_series.append(
-                {
-                    "name": display_name,
-                    "points": [
-                        {
-                            "date": point.period_end,
-                            "period_label": point.period_label,
-                            "value": point.value,
-                            "unit": point.unit,
-                            "released_at": point.released_at,
-                        }
-                        for point in points
-                    ],
-                }
-            )
-        sync_state = self._combined_social_financing_sync_state()
-        return {
-            **self._social_financing_combined_definition_payload(),
-            "frequency": "monthly",
-            "range": {
-                "type": resolved_range.range_type,
-                "start_date": resolved_range.start_date,
-                "end_date": resolved_range.end_date,
-            },
-            "sync_state": sync_state,
-            "series": all_series,
-        }
-
-    def _combined_social_financing_sync_state(self) -> dict[str, Any]:
-        """合并社融各子指标的同步状态。
-
-        Returns:
-            前端展示用同步状态。
-        """
-
-        sub_ids = [
-            "social_financing_rmb_loans",
-            "social_financing_foreign_loans",
-            "social_financing_entrusted_loans",
-            "social_financing_trust_loans",
-            "social_financing_bankers_acceptance",
-            "social_financing_corporate_bonds",
-            "social_financing_government_bonds",
-            "social_financing_equity",
-        ]
-        states = [self._repository.get_sync_state(indicator_id) for indicator_id in sub_ids]
-        states = [state for state in states if state is not None]
-        warning_messages = [state.warning_message for state in states if state.warning_message]
-        return {
-            "status": states[0].status if states else "unavailable",
-            "synced_at": max((state.synced_at for state in states), default=""),
-            "warning_message": "；".join(warning_messages),
-            "point_count": sum(state.point_count for state in states),
-        }
-
     def _points_payload(
         self,
         points: list[MacroDataPoint],
@@ -778,6 +770,140 @@ class MacroDataService:
             "synced_at": max((state.synced_at for state in states), default=""),
             "warning_message": "；".join(warning_messages),
             "point_count": len(m0_points) + len(m1_points) + len(m2_points),
+        }
+
+    def _new_rmb_loans_combined_definition_payload(self) -> dict[str, Any]:
+        """构造新增人民币贷款合并图表定义（4条细分序列）。
+
+        Returns:
+            前端可直接使用的图表定义，含 wide 布局标记。
+        """
+
+        return {
+            "id": NEW_RMB_LOANS_COMBINED_CHART_ID,
+            "title": "新增人民币贷款",
+            "unit": "亿元",
+            "frequency": "monthly",
+            "status": "sample",
+            "chart_type": "line",
+            "wide": True,
+        }
+
+    def _social_financing_wide_definition_payload(self) -> dict[str, Any]:
+        """构造社会融资规模宽图表定义。
+
+        Returns:
+            前端可直接使用的图表定义，含 wide 布局标记。
+        """
+
+        return {
+            "id": SOCIAL_FINANCING_CHART_ID,
+            "title": "社会融资规模",
+            "unit": "亿元",
+            "frequency": "monthly",
+            "status": "sample",
+            "chart_type": "line",
+            "wide": True,
+        }
+
+    def _build_new_rmb_loans_combined_payload(
+        self, resolved_range: ResolvedDateRange, frequency: str
+    ) -> dict[str, Any]:
+        """合并居民/企业短期/长期新增贷款 4 条序列为单张图表。
+
+        Args:
+            resolved_range: 已解析的目标展示范围。
+            frequency: 数据频率。
+
+        Returns:
+            包含 4 条序列的图表 payload。
+        """
+
+        series: list[dict[str, Any]] = []
+        all_points: list[dict[str, Any]] = []
+        for series_def in _NEW_RMB_LOANS_SERIES:
+            points = self._repository.load_points(
+                indicator_id=series_def["indicator_id"],
+                start_date=resolved_range.start_date,
+                end_date=resolved_range.end_date,
+                frequency=frequency,
+            )
+            payload_points = self._points_payload(points, resolved_range)
+            series.append({"name": series_def["name"], "points": payload_points})
+            all_points.extend(payload_points)
+
+        sync_state = self._combined_credit_breakdown_sync_state()
+        return {
+            **self._new_rmb_loans_combined_definition_payload(),
+            "frequency": frequency,
+            "range": {
+                "type": resolved_range.range_type,
+                "start_date": resolved_range.start_date,
+                "end_date": resolved_range.end_date,
+            },
+            "sync_state": sync_state,
+            "series": series,
+        }
+
+    def _build_social_financing_wide_payload(
+        self, resolved_range: ResolvedDateRange, frequency: str
+    ) -> dict[str, Any]:
+        """构造社会融资规模宽图表数据。
+
+        Args:
+            resolved_range: 已解析的目标展示范围。
+            frequency: 数据频率。
+
+        Returns:
+            单系列宽图表 payload。
+        """
+
+        points = self._repository.load_points(
+            indicator_id="social_financing",
+            start_date=resolved_range.start_date,
+            end_date=resolved_range.end_date,
+            frequency=frequency,
+        )
+        payload_points = self._points_payload(points, resolved_range)
+        sync_state = self._repository.get_sync_state("social_financing")
+        return {
+            **self._social_financing_wide_definition_payload(),
+            "frequency": frequency,
+            "range": {
+                "type": resolved_range.range_type,
+                "start_date": resolved_range.start_date,
+                "end_date": resolved_range.end_date,
+            },
+            "sync_state": {
+                "status": sync_state.status if sync_state else "unavailable",
+                "synced_at": sync_state.synced_at if sync_state else "",
+                "warning_message": sync_state.warning_message if sync_state else "",
+                "point_count": sync_state.point_count if sync_state else 0,
+            },
+            "series": [
+                {"name": "社会融资规模", "points": payload_points},
+            ],
+        }
+
+    def _combined_credit_breakdown_sync_state(self) -> dict[str, Any]:
+        """合并贷款细分指标四表的同步状态。
+
+        Returns:
+            前端展示用同步状态。
+        """
+
+        indicator_ids = [s["indicator_id"] for s in _NEW_RMB_LOANS_SERIES]
+        states = [
+            state
+            for iid in indicator_ids
+            if (state := self._repository.get_sync_state(iid)) is not None
+        ]
+        warning_messages = [s.warning_message for s in states if s.warning_message]
+        return {
+            "status": states[0].status if states else "unavailable",
+            "synced_at": max((s.synced_at for s in states), default=""),
+            "warning_message": "；".join(warning_messages),
+            "point_count": sum(s.point_count for s in states),
         }
 
 
