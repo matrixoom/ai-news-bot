@@ -1,4 +1,5 @@
 import * as echarts from "echarts";
+import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMacroDataChartQuery } from "../hooks/use-macro-data-chart-query";
 import { useMacroDataRefreshMutation } from "../hooks/use-macro-data-refresh-mutation";
@@ -10,6 +11,7 @@ import type {
   MacroRangeOption,
 } from "../model/macro-data.types";
 import { RangeControl } from "../../../shared/ui/range-control";
+import { ChartFullscreen } from "../../../shared/ui/chart-fullscreen";
 
 type MacroChartCardProps = {
   chart: MacroChartDefinition;
@@ -36,6 +38,7 @@ export function MacroChartCard({
   const query = useMacroDataChartQuery(chart.id, range, frequency);
   const refreshMutation = useMacroDataRefreshMutation(chart.id);
   const [refreshLabel, setRefreshLabel] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (refreshMutation.isSuccess) {
@@ -59,7 +62,6 @@ export function MacroChartCard({
     if (allValues.length === 0) return null;
     const dataMin = Math.min(...allValues);
     const dataMax = Math.max(...allValues);
-    // 以 50 为中心，数据占图表高度 ~65%，上下取整避免小数刻度
     const maxDist = Math.max(Math.abs(dataMax - 50), Math.abs(dataMin - 50), 1.5);
     const rawHalf = maxDist / 0.70;
     const halfRange = Math.ceil(rawHalf);
@@ -104,16 +106,10 @@ export function MacroChartCard({
     [chartType, series, isPMI],
   );
 
-  useEffect(() => {
-    if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
-      return;
-    }
-    if (!chartRef.current || !query.data || points.length === 0) {
-      return;
-    }
-    const instance = echarts.init(chartRef.current, undefined, { renderer: "svg" });
+  const chartOption = useMemo((): echarts.EChartsOption | null => {
+    if (!query.data || points.length === 0) return null;
     if (isWide) {
-      instance.setOption({
+      return {
         animation: false,
         tooltip: { trigger: "axis" },
         legend: {
@@ -131,28 +127,37 @@ export function MacroChartCard({
           ...(pmiYRange ? { min: pmiYRange.min, max: pmiYRange.max } : {}),
         },
         series: chartSeries,
-      });
-    } else {
-      instance.setOption({
-        animation: false,
-        tooltip: { trigger: "axis" },
-        legend: { top: 0, data: legendNames },
-        grid: { left: 48, right: 20, top: 48, bottom: 36 },
-        xAxis: { type: "category", data: chartLabels },
-        // yAxis: { type: "value", name: query.data.unit },
-        yAxis: {
-          type: "value",
-          name: query.data.unit,
-          ...(pmiYRange ? { min: pmiYRange.min, max: pmiYRange.max } : {}),
-        },
-        series: chartSeries,
-      });
+      };
     }
+    return {
+      animation: false,
+      tooltip: { trigger: "axis" },
+      legend: { top: 0, data: legendNames },
+      grid: { left: 48, right: 20, top: 48, bottom: 36 },
+      xAxis: { type: "category", data: chartLabels },
+      yAxis: {
+        type: "value",
+        name: query.data.unit,
+        ...(pmiYRange ? { min: pmiYRange.min, max: pmiYRange.max } : {}),
+      },
+      series: chartSeries,
+    };
+  }, [query.data, points.length, isWide, legendNames, chartLabels, chartSeries, pmiYRange]);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
+      return;
+    }
+    if (!chartRef.current || !chartOption) {
+      return;
+    }
+    const instance = echarts.init(chartRef.current, undefined, { renderer: "svg" });
+    instance.setOption(chartOption);
 
     return () => {
       instance.dispose();
     };
-  }, [chartLabels, chartSeries, legendNames, points.length, query.data, pmiYRange]);
+  }, [chartOption]);
 
   return (
     <section className={`relative rounded-xl border border-slate-200 bg-white p-5 shadow-sm${className ? ` ${className}` : ""}`}>
@@ -195,14 +200,32 @@ export function MacroChartCard({
           </div>
         </div>
       )}
-      <button
-        type="button"
-        className="absolute bottom-3 right-3 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
-        disabled={refreshMutation.isPending}
-        onClick={() => refreshMutation.mutate()}
-      >
-        {refreshMutation.isPending ? "刷新中..." : refreshLabel ?? "刷新"}
-      </button>
+      <div className="absolute bottom-3 right-3 flex gap-1">
+        <button
+          type="button"
+          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+          disabled={!chartOption}
+          onClick={() => setIsFullscreen(true)}
+          aria-label="全屏查看图表"
+        >
+          <ArrowsPointingOutIcon aria-hidden="true" className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+          disabled={refreshMutation.isPending}
+          onClick={() => refreshMutation.mutate()}
+        >
+          {refreshMutation.isPending ? "刷新中..." : refreshLabel ?? "刷新"}
+        </button>
+      </div>
+
+      <ChartFullscreen
+        open={isFullscreen}
+        onClose={() => setIsFullscreen(false)}
+        title={chart.title}
+        option={chartOption}
+      />
     </section>
   );
 }

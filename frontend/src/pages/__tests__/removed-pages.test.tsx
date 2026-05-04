@@ -2,13 +2,11 @@ import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "../dashboard-page";
 import { EventsPage } from "../events-page";
-import { MarketPage } from "../market-page";
 import { NewsPage } from "../news-page";
 
 const removedPages = [
   ["DashboardPage", DashboardPage],
   ["NewsPage", NewsPage],
-  ["MarketPage", MarketPage],
   ["EventsPage", EventsPage],
 ] as const;
 

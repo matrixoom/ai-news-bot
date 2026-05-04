@@ -1,4 +1,5 @@
 import * as echarts from "echarts";
+import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMarketDataChartQuery } from "../hooks/use-market-data-chart-query";
 import { useMarketDataRefreshMutation } from "../hooks/use-market-data-refresh-mutation";
@@ -10,6 +11,8 @@ import type {
   MarketRangeOption,
 } from "../model/market-data.types";
 import { RangeControl } from "../../../shared/ui/range-control";
+import { ChartFullscreen } from "../../../shared/ui/chart-fullscreen";
+import { calculateSMA, MA_CONFIGS } from "../../../shared/lib/moving-average";
 
 type MarketChartCardProps = {
   chart: MarketChartDefinition;
@@ -36,6 +39,7 @@ export function MarketChartCard({
   const query = useMarketDataChartQuery(chart.id, range, frequency);
   const refreshMutation = useMarketDataRefreshMutation(chart.id);
   const [refreshLabel, setRefreshLabel] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (refreshMutation.isSuccess) {
@@ -62,31 +66,81 @@ export function MarketChartCard({
     [series],
   );
 
-  useEffect(() => {
-    if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
-      return;
+  const maSeries = useMemo(() => {
+    if (frequency !== "daily" || points.length === 0) return [];
+    const result: Array<{
+      name: string;
+      type: "line";
+      smooth: boolean;
+      symbol: "none";
+      lineStyle: { type: "dashed"; width: number; opacity: number };
+      itemStyle: { color: string };
+      data: (number | null)[];
+    }> = [];
+    for (const item of series) {
+      const values = item.points.map((p) => p.value);
+      for (const cfg of MA_CONFIGS) {
+        const sma = calculateSMA(values, cfg.period);
+        result.push({
+          name: `${item.name} ${cfg.label}`,
+          type: "line",
+          smooth: true,
+          symbol: "none",
+          lineStyle: { type: "dashed", width: 1, opacity: 0.6 },
+          itemStyle: { color: cfg.color },
+          data: sma,
+        });
+      }
     }
-    if (!chartRef.current || !query.data || points.length === 0) {
-      return;
+    return result;
+  }, [frequency, series, points.length]);
+
+  const allSeries = useMemo(() => [...chartSeries, ...maSeries], [chartSeries, maSeries]);
+
+  const allLegendNames = useMemo(() => {
+    const names = [...legendNames];
+    for (const ms of maSeries) {
+      names.push(ms.name);
     }
-    const instance = echarts.init(chartRef.current, undefined, { renderer: "svg" });
-    instance.setOption({
+    return names;
+  }, [legendNames, maSeries]);
+
+  const chartOption = useMemo((): echarts.EChartsOption | null => {
+    if (!query.data || points.length === 0) return null;
+    return {
       animation: false,
       tooltip: { trigger: "axis" },
-      legend: { top: 0, data: legendNames },
-      grid: { left: 48, right: 20, top: 48, bottom: 36 },
+      legend: {
+        orient: "vertical",
+        right: 0,
+        top: "middle",
+        textStyle: { fontSize: 11 },
+        data: allLegendNames,
+      },
+      grid: { left: 48, right: 140, top: 24, bottom: 36 },
       xAxis: { type: "category", data: chartLabels },
       yAxis: {
         type: "value",
         name: query.data.unit,
       },
-      series: chartSeries,
-    });
+      series: allSeries,
+    };
+  }, [query.data, points.length, allLegendNames, chartLabels, allSeries]);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
+      return;
+    }
+    if (!chartRef.current || !chartOption) {
+      return;
+    }
+    const instance = echarts.init(chartRef.current, undefined, { renderer: "svg" });
+    instance.setOption(chartOption);
 
     return () => {
       instance.dispose();
     };
-  }, [chartLabels, chartSeries, legendNames, points.length, query.data]);
+  }, [chartOption]);
 
   return (
     <section className={`relative rounded-xl border border-slate-200 bg-white p-5 shadow-sm${className ? ` ${className}` : ""}`}>
@@ -129,14 +183,32 @@ export function MarketChartCard({
           </div>
         </div>
       )}
-      <button
-        type="button"
-        className="absolute bottom-3 right-3 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
-        disabled={refreshMutation.isPending}
-        onClick={() => refreshMutation.mutate()}
-      >
-        {refreshMutation.isPending ? "刷新中..." : refreshLabel ?? "刷新"}
-      </button>
+      <div className="absolute bottom-3 right-3 flex gap-1">
+        <button
+          type="button"
+          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+          disabled={!chartOption}
+          onClick={() => setIsFullscreen(true)}
+          aria-label="全屏查看图表"
+        >
+          <ArrowsPointingOutIcon aria-hidden="true" className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+          disabled={refreshMutation.isPending}
+          onClick={() => refreshMutation.mutate()}
+        >
+          {refreshMutation.isPending ? "刷新中..." : refreshLabel ?? "刷新"}
+        </button>
+      </div>
+
+      <ChartFullscreen
+        open={isFullscreen}
+        onClose={() => setIsFullscreen(false)}
+        title={chart.title}
+        option={chartOption}
+      />
     </section>
   );
 }
