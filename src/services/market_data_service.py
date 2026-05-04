@@ -1,0 +1,226 @@
+"""Service layer for frontend Market Data payloads."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from typing import Any
+
+from .market_data_repository import (
+    MarketDataPoint,
+    MarketDataRepository,
+    MarketDataValidationError,
+    MarketIndicatorDefinition,
+)
+
+MARKET_DATA_TABS = {
+    "commodities": "商品",
+    "precious_metals": "贵金属",
+    "stock_market": "股票市场",
+}
+
+MARKET_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "custom"}
+MARKET_DATA_FREQUENCIES = {"daily", "monthly", "yearly"}
+
+_CHART_SYNC_GROUPS: dict[str, str] = {
+    "wti_crude_oil": "commodities",
+    "brent_crude_oil": "commodities",
+    "gold_spot": "precious_metals",
+    "silver_spot": "precious_metals",
+    "copper": "precious_metals",
+}
+
+
+@dataclass(frozen=True)
+class ResolvedDateRange:
+    range_type: str
+    start_date: str
+    end_date: str
+
+
+class MarketDataService:
+    """组织 Market Data 前端接口 payload。"""
+
+    def __init__(self, repository: MarketDataRepository | None = None) -> None:
+        self._repository = repository or MarketDataRepository()
+
+    def sync_chart(self, chart_id: str) -> dict[str, Any]:
+        group = _CHART_SYNC_GROUPS.get(chart_id)
+        if group is None:
+            raise MarketDataValidationError("unknown chart id for sync")
+        return {"ok": True, "point_counts": {}}
+
+    def build_module_payload(self, tab: str = "commodities") -> dict[str, Any]:
+        normalized_tab = self._validate_tab(tab)
+        charts = self._repository.list_indicators(normalized_tab)
+        chart_payloads = [self._chart_definition_payload(chart) for chart in charts]
+        return {
+            "generated_at": _utc_now(),
+            "module": {
+                "id": "market-data",
+                "label": "Market Data",
+                "description": "Commodities, precious metals, and stock indices",
+                "status": "live",
+                "loading": False,
+            },
+            "tabs": [
+                {"value": value, "label": label}
+                for value, label in MARKET_DATA_TABS.items()
+            ],
+            "tab": normalized_tab,
+            "default_range": "1y",
+            "default_frequency": self._default_frequency_for_tab(normalized_tab),
+            "frequency_options": self._frequency_options_for_tab(normalized_tab),
+            "range_options": [
+                {"value": "6m", "label": "半年"},
+                {"value": "1y", "label": "1年"},
+                {"value": "3y", "label": "3年"},
+                {"value": "5y", "label": "5年"},
+                {"value": "10y", "label": "10年"},
+                {"value": "custom", "label": "自定义"},
+            ],
+            "charts": chart_payloads,
+        }
+
+    def build_chart_payload(
+        self,
+        chart_id: str,
+        *,
+        range_type: str = "1y",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        frequency: str | None = None,
+    ) -> dict[str, Any]:
+        resolved_range = self._resolve_range(
+            range_type=range_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        definition = self._repository.get_indicator(chart_id)
+        if definition is None:
+            raise MarketDataValidationError("unknown chart id")
+        normalized_frequency = self._validate_frequency(frequency or definition.frequency)
+        points = self._repository.load_points(
+            indicator_id=chart_id,
+            start_date=resolved_range.start_date,
+            end_date=resolved_range.end_date,
+            frequency=normalized_frequency,
+        )
+        sync_state = self._repository.get_sync_state(chart_id)
+        return {
+            "id": definition.indicator_id,
+            "title": definition.title,
+            "unit": definition.unit,
+            "frequency": normalized_frequency,
+            "status": definition.status,
+            "chart_type": "line",
+            "range": {
+                "type": resolved_range.range_type,
+                "start_date": resolved_range.start_date,
+                "end_date": resolved_range.end_date,
+            },
+            "sync_state": {
+                "status": sync_state.status if sync_state else "unavailable",
+                "synced_at": sync_state.synced_at if sync_state else "",
+                "warning_message": sync_state.warning_message if sync_state else "",
+                "point_count": sync_state.point_count if sync_state else 0,
+            },
+            "series": [
+                {
+                    "name": definition.title,
+                    "points": [
+                        {
+                            "date": point.period_end,
+                            "period_label": point.period_label,
+                            "value": point.value,
+                            "unit": point.unit,
+                            "released_at": point.released_at,
+                        }
+                        for point in points
+                    ],
+                }
+            ],
+        }
+
+    def _validate_tab(self, tab: str) -> str:
+        if tab not in MARKET_DATA_TABS:
+            raise MarketDataValidationError("invalid market data tab")
+        return tab
+
+    def _validate_frequency(self, frequency: str) -> str:
+        if frequency not in MARKET_DATA_FREQUENCIES:
+            raise MarketDataValidationError("invalid market data frequency")
+        return frequency
+
+    def _default_frequency_for_tab(self, tab: str) -> str:
+        if tab == "stock_market":
+            return "monthly"
+        return "daily"
+
+    def _frequency_options_for_tab(self, tab: str) -> list[dict[str, str]]:
+        return [
+            {"value": "daily", "label": "日度"},
+            {"value": "monthly", "label": "月度"},
+            {"value": "yearly", "label": "年度"},
+        ]
+
+    def _resolve_range(
+        self,
+        *,
+        range_type: str,
+        start_date: str | None,
+        end_date: str | None,
+    ) -> ResolvedDateRange:
+        if range_type not in MARKET_DATA_RANGES:
+            raise MarketDataValidationError("invalid market data range")
+        today = date.today()
+        if range_type == "custom":
+            if not start_date or not end_date:
+                raise MarketDataValidationError("custom range requires start_date and end_date")
+            start = self._parse_date(start_date)
+            end = self._parse_date(end_date)
+        else:
+            end = today
+            months_by_range = {
+                "6m": 6,
+                "1y": 12,
+                "3y": 36,
+                "5y": 60,
+                "10y": 120,
+            }
+            start = _shift_months(end, -months_by_range[range_type])
+        if start > end:
+            raise MarketDataValidationError("start date must be before end date")
+        return ResolvedDateRange(range_type=range_type, start_date=start.isoformat(), end_date=end.isoformat())
+
+    def _parse_date(self, raw_value: str) -> date:
+        try:
+            return date.fromisoformat(raw_value)
+        except ValueError as error:
+            raise MarketDataValidationError("invalid market data date") from error
+
+    def _chart_definition_payload(self, definition: MarketIndicatorDefinition) -> dict[str, Any]:
+        return {
+            "id": definition.indicator_id,
+            "title": definition.title,
+            "unit": definition.unit,
+            "frequency": definition.frequency,
+            "status": definition.status,
+            "chart_type": "line",
+        }
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _shift_months(value: date, months: int) -> date:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    days_in_month = [31, 29 if _is_leap_year(year) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return date(year, month, min(value.day, days_in_month[month - 1]))
+
+
+def _is_leap_year(year: int) -> bool:
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
