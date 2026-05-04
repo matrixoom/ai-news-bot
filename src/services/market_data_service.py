@@ -19,7 +19,7 @@ MARKET_DATA_TABS = {
     "stock_market": "股票市场",
 }
 
-MARKET_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "custom"}
+MARKET_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"}
 MARKET_DATA_FREQUENCIES = {"daily", "monthly", "yearly"}
 
 _CHART_SYNC_GROUPS: dict[str, str] = {
@@ -48,7 +48,15 @@ class MarketDataService:
         group = _CHART_SYNC_GROUPS.get(chart_id)
         if group is None:
             raise MarketDataValidationError("unknown chart id for sync")
-        return {"ok": True, "point_counts": {}}
+        from .market_data_sync_service import MarketDataSyncService
+
+        syncer = MarketDataSyncService(repository=self._repository)
+        sync_methods: dict[str, Any] = {
+            "commodities": syncer.sync_commodities_history,
+            "precious_metals": syncer.sync_precious_metals_history,
+        }
+        point_counts = sync_methods[group]()
+        return {"ok": True, "point_counts": point_counts}
 
     def build_module_payload(self, tab: str = "commodities") -> dict[str, Any]:
         normalized_tab = self._validate_tab(tab)
@@ -77,6 +85,10 @@ class MarketDataService:
                 {"value": "3y", "label": "3年"},
                 {"value": "5y", "label": "5年"},
                 {"value": "10y", "label": "10年"},
+                {"value": "15y", "label": "15年"},
+                {"value": "20y", "label": "20年"},
+                {"value": "25y", "label": "25年"},
+                {"value": "30y", "label": "30年"},
                 {"value": "custom", "label": "自定义"},
             ],
             "charts": chart_payloads,
@@ -187,6 +199,10 @@ class MarketDataService:
                 "3y": 36,
                 "5y": 60,
                 "10y": 120,
+                "15y": 180,
+                "20y": 240,
+                "25y": 300,
+                "30y": 360,
             }
             start = _shift_months(end, -months_by_range[range_type])
         if start > end:
