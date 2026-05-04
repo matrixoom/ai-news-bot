@@ -42,6 +42,10 @@ MACRO_DATA_TABLES: dict[str, str] = {
     "household_long_term_loans": "macro_household_long_term_loans",
     "corporate_short_term_loans": "macro_corporate_short_term_loans",
     "corporate_long_term_loans": "macro_corporate_long_term_loans",
+    "china_10y_bond_yield": "macro_china_10y_bond_yield",
+    "us_10y_bond_yield": "macro_us_10y_bond_yield",
+    "usd_cny": "macro_usd_cny",
+    "us_credit_spread": "macro_us_credit_spread",
 }
 
 
@@ -965,6 +969,54 @@ def _default_indicator_rows(timestamp: str) -> list[tuple[str, str, str, str, st
             timestamp,
             timestamp,
         ),
+        (
+            "china_10y_bond_yield",
+            "macro_china_10y_bond_yield",
+            "expectations",
+            "中国10年期国债收益率",
+            "%",
+            "monthly",
+            1,
+            "sample",
+            timestamp,
+            timestamp,
+        ),
+        (
+            "us_10y_bond_yield",
+            "macro_us_10y_bond_yield",
+            "expectations",
+            "美国10年期国债收益率",
+            "%",
+            "monthly",
+            2,
+            "sample",
+            timestamp,
+            timestamp,
+        ),
+        (
+            "usd_cny",
+            "macro_usd_cny",
+            "expectations",
+            "人民币汇率（兑美元）",
+            "元",
+            "monthly",
+            3,
+            "sample",
+            timestamp,
+            timestamp,
+        ),
+        (
+            "us_credit_spread",
+            "macro_us_credit_spread",
+            "expectations",
+            "美国信用利差",
+            "%",
+            "monthly",
+            4,
+            "sample",
+            timestamp,
+            timestamp,
+        ),
     ]
 
 
@@ -1019,6 +1071,10 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
         "household_long_term_loans": monthly([9800, 8500, 14300, 9100, 11800], "亿元"),
         "corporate_short_term_loans": monthly([7600, 8500, 14300, 9100, 11800], "亿元"),
         "corporate_long_term_loans": monthly([14200, 12800, 19500, 11500, 18600], "亿元"),
+        "china_10y_bond_yield": monthly([1.72, 1.68, 1.75, 1.80, 1.78], "%"),
+        "us_10y_bond_yield": monthly([4.25, 4.32, 4.28, 4.41, 4.38], "%"),
+        "usd_cny": monthly([7.28, 7.25, 7.31, 7.27, 7.24], "元"),
+        "us_credit_spread": monthly([1.05, 1.12, 1.08, 1.15, 1.10], "%"),
     }
 
 

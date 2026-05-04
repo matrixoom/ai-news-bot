@@ -1,6 +1,6 @@
 import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
 
-export type MacroDataTab = "gdp" | "credit" | "climate" | "trade" | "prices" | "currency";
+export type MacroDataTab = "gdp" | "credit" | "climate" | "trade" | "prices" | "currency" | "expectations";
 
 export type MacroDataRange = "6m" | "1y" | "3y" | "5y" | "10y" | "15y" | "20y" | "25y" | "30y" | "custom";
 
@@ -92,4 +92,5 @@ export const MACRO_DATA_TABS: readonly ModuleTabDefinition<MacroDataTab>[] = [
   { value: "trade", label: "外贸", description: "进口与出口" },
   { value: "prices", label: "物价", description: "PPI 与 CPI" },
   { value: "currency", label: "货币", description: "M0、M1、M2 货币供应量" },
+  { value: "expectations", label: "预期", description: "国债收益率、汇率与信用利差" },
 ];
