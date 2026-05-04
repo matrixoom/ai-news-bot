@@ -28,6 +28,10 @@ CnbsLoader = Callable[[], list[dict[str, Any]]]
 NewLoansLoader = Callable[[], list[dict[str, Any]]]
 SocialFinancingLoader = Callable[[], list[dict[str, Any]]]
 PbocCreditBreakdownLoader = Callable[[], list[dict[str, Any]]]
+ChinaBondYieldLoader = Callable[[], list[dict[str, Any]]]
+ZhUsRateLoader = Callable[[], list[dict[str, Any]]]
+UsdCnyLoader = Callable[[], list[dict[str, Any]]]
+HqmLoader = Callable[[], list[dict[str, Any]]]
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,9 @@ class MacroDataSyncService:
         new_loans_loader: NewLoansLoader | None = None,
         social_financing_loader: SocialFinancingLoader | None = None,
         pboc_credit_breakdown_loader: PbocCreditBreakdownLoader | None = None,
+        china_bond_yield_loader: ChinaBondYieldLoader | None = None,
+        zh_us_rate_loader: ZhUsRateLoader | None = None,
+        usd_cny_loader: UsdCnyLoader | None = None,
     ) -> None:
         self._repository = repository or MacroDataRepository()
         self._world_bank_loader = world_bank_loader or _load_world_bank_indicator
@@ -97,6 +104,9 @@ class MacroDataSyncService:
         self._new_loans_loader = new_loans_loader or _load_new_loans_rows
         self._social_financing_loader = social_financing_loader or _load_social_financing_rows
         self._pboc_credit_breakdown_loader = pboc_credit_breakdown_loader or _load_pboc_credit_breakdown_rows
+        self._china_bond_yield_loader = china_bond_yield_loader or _load_china_bond_yield_rows
+        self._zh_us_rate_loader = zh_us_rate_loader or _load_zh_us_rate_rows
+        self._usd_cny_loader = usd_cny_loader or _load_usd_cny_rows
 
     def sync_gdp_history(self) -> dict[str, int]:
         """同步 GDP 总量和增速历史数据。
@@ -182,6 +192,7 @@ class MacroDataSyncService:
         result["trade"] = self.sync_trade_history()
         result["credit"] = self.sync_credit_history()
         result["credit_breakdown"] = self.sync_credit_breakdown_history()
+        result["expectations"] = self.sync_expectations_history()
         return result
 
     def sync_currency_history(self) -> dict[str, int]:
@@ -367,6 +378,142 @@ class MacroDataSyncService:
         for indicator_id, points in indicator_points.items():
             self._repository.replace_points(indicator_id, points, status="live", warning_message="")
         return {k: len(v) for k, v in indicator_points.items()}
+
+    def sync_expectations_history(self) -> dict[str, int]:
+        """同步预期类指标历史数据（国债收益率、汇率、信用利差）。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        # 中美利差数据来自 bond_zh_us_rate，含中国10Y、美国10Y
+        zh_us_rows = self._zh_us_rate_loader()
+        china_10y_points = self._extract_zh_us_column(zh_us_rows, "china_10y")
+        us_10y_points = self._extract_zh_us_column(zh_us_rows, "us_10y")
+
+        # 信用利差 = HQM 企业债 10Y - 美国国债 10Y
+        us_spread_points = self._us_credit_spread_points(us_10y_points)
+
+        # 人民币汇率来自 BOC SAFE
+        usd_cny_points = self._usd_cny_points()
+
+        for indicator_id, points in [
+            ("china_10y_bond_yield", china_10y_points),
+            ("us_10y_bond_yield", us_10y_points),
+            ("usd_cny", usd_cny_points),
+            ("us_credit_spread", us_spread_points),
+        ]:
+            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {
+            "china_10y_bond_yield": len(china_10y_points),
+            "us_10y_bond_yield": len(us_10y_points),
+            "usd_cny": len(usd_cny_points),
+            "us_credit_spread": len(us_spread_points),
+        }
+
+    def _extract_zh_us_column(
+        self, rows: list[dict[str, Any]], column: str
+    ) -> list[dict[str, Any]]:
+        """从 bond_zh_us_rate 行中提取指定列，转为月度点位。
+
+        Args:
+            rows: bond_zh_us_rate 返回的标准化行列表。
+            column: 取值 `china_10y`、`us_10y`。
+
+        Returns:
+            月度点位列表。
+        """
+
+        col_key = {
+            "china_10y": "china_10y",
+            "us_10y": "us_10y",
+        }[column]
+        points: list[dict[str, Any]] = []
+        for row in rows:
+            value = _optional_float(row.get(col_key))
+            if value is None:
+                continue
+            period_end = str(row["period_end"])
+            points.append(
+                _point(
+                    period_end=period_end,
+                    period_label=_month_label(period_end),
+                    value=value,
+                    unit="%",
+                    frequency="monthly",
+                    provider_key="akshare_zh_us_rate",
+                    source_url="https://data.eastmoney.com/cjsj/globalbond.html",
+                )
+            )
+        return points
+
+    def _us_credit_spread_points(
+        self, us_10y_points: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """计算美国信用利差 = HQM 企业债 10Y 收益率 - 美国国债 10Y 收益率。
+
+        Args:
+            us_10y_points: 美国 10 年期国债月度点位。
+
+        Returns:
+            信用利差点位列表。
+        """
+
+        hqm_rows = _load_hqm_10y_rows()
+        # 建立 US 10Y 查询字典
+        us_10y_by_period = {str(p["period_end"]): p for p in us_10y_points}
+        points: list[dict[str, Any]] = []
+        for row in hqm_rows:
+            period_end = str(row["period_end"])
+            hqm_value = _optional_float(row.get("hqm_10y"))
+            if hqm_value is None:
+                continue
+            us_point = us_10y_by_period.get(period_end)
+            if us_point is None:
+                continue
+            us_value = _optional_float(us_point.get("value"))
+            if us_value is None:
+                continue
+            spread = round(hqm_value - us_value, 4)
+            points.append(
+                _point(
+                    period_end=period_end,
+                    period_label=_month_label(period_end),
+                    value=spread,
+                    unit="%",
+                    frequency="monthly",
+                    provider_key="us_treasury_hqm",
+                    source_url="https://home.treasury.gov/",
+                )
+            )
+        return points
+
+    def _usd_cny_points(self) -> list[dict[str, Any]]:
+        """从 BOC SAFE 汇率数据中提取美元兑人民币月度点位。
+
+        Returns:
+            月度点位列表。
+        """
+
+        rows = self._usd_cny_loader()
+        points: list[dict[str, Any]] = []
+        for row in rows:
+            value = _optional_float(row.get("usd_cny"))
+            if value is None:
+                continue
+            period_end = str(row["period_end"])
+            points.append(
+                _point(
+                    period_end=period_end,
+                    period_label=_month_label(period_end),
+                    value=value,
+                    unit="元",
+                    frequency="monthly",
+                    provider_key="akshare_boc_safe",
+                    source_url="https://www.safe.gov.cn/",
+                )
+            )
+        return points
 
     def _money_supply_points(self, rows: list[dict[str, Any]], series_key: str) -> list[dict[str, Any]]:
         """从货币供应量行中提取单条序列的点位。
@@ -1591,3 +1738,169 @@ def _merge_points(*point_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for point in points:
             merged[(str(point["period_end"]), str(point["frequency"]))] = point
     return [merged[key] for key in sorted(merged)]
+
+
+def _load_china_bond_yield_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国国债收益率曲线日度数据。
+
+    Returns:
+        含 10 年期国债收益率的标准化行列表。
+    """
+
+    import calendar
+
+    import akshare as ak
+
+    frame = ak.bond_china_yield()
+    col0 = frame.columns[0]
+    date_col = frame.columns[1]
+    govt = frame[frame[col0].astype(str).str.contains("国债", na=False)]
+    # 按月聚合，每月取最后一条
+    monthly: dict[str, float] = {}
+    for _, row in govt.iterrows():
+        raw_date = row[date_col]
+        if not hasattr(raw_date, "year"):
+            continue
+        value = _optional_float(row.iloc[8])  # 10年 列
+        if value is None:
+            continue
+        year = raw_date.year
+        month = raw_date.month
+        last_day = calendar.monthrange(year, month)[1]
+        period_end = f"{year}-{month:02d}-{last_day}"
+        monthly[period_end] = value
+    return [
+        {"period_end": pe, "china_10y": v}
+        for pe, v in sorted(monthly.items())
+    ]
+
+
+def _load_zh_us_rate_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中美利差日度数据（东方财富）。
+
+    一次性获取中国10Y、美国10Y、美国期限利差(10Y-2Y)。
+
+    Returns:
+        含 china_10y / us_10y / us_spread 的标准化行列表。
+    """
+
+    import calendar
+
+    import akshare as ak
+
+    frame = ak.bond_zh_us_rate()
+    date_col = frame.columns[0]
+    china_col = 3   # 中国国债收益率10年
+    us_col = 9      # 美国国债收益率10年
+    spread_col = 11  # 美国国债收益率10年-2年
+
+    # 按月聚合，每月取最后一条
+    monthly: dict[str, dict[str, float]] = {}
+    for _, row in frame.iterrows():
+        raw_date = row[date_col]
+        if not hasattr(raw_date, "year"):
+            continue
+        china_val = _optional_float(row.iloc[china_col])
+        us_val = _optional_float(row.iloc[us_col])
+        spread_val = _optional_float(row.iloc[spread_col])
+        year = raw_date.year
+        month = raw_date.month
+        last_day = calendar.monthrange(year, month)[1]
+        period_end = f"{year}-{month:02d}-{last_day}"
+        entry = monthly.setdefault(period_end, {})
+        if china_val is not None:
+            entry["china_10y"] = china_val
+        if us_val is not None:
+            entry["us_10y"] = us_val
+        if spread_val is not None:
+            entry["us_spread"] = spread_val
+
+    rows: list[dict[str, Any]] = []
+    for pe in sorted(monthly):
+        entry = monthly[pe]
+        rows.append({
+            "period_end": pe,
+            "china_10y": entry.get("china_10y"),
+            "us_10y": entry.get("us_10y"),
+            "us_spread": entry.get("us_spread"),
+        })
+    return rows
+
+
+def _load_usd_cny_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取 BOC SAFE 美元兑人民币中间价历史数据。
+
+    BOC SAFE 公布的人民币汇率以 100 外币为单位，需要除以 100。
+
+    Returns:
+        含 usd_cny 的标准化行列表。
+    """
+
+    import calendar
+
+    import akshare as ak
+
+    frame = ak.currency_boc_safe()
+    date_col = frame.columns[0]
+    usd_col = 1  # 美元
+
+    # 按月聚合，每月取最后一条
+    monthly: dict[str, float] = {}
+    for _, row in frame.iterrows():
+        raw_date = row[date_col]
+        raw_value = _optional_float(row.iloc[usd_col])
+        if raw_value is None:
+            continue
+        if not hasattr(raw_date, "year"):
+            continue
+        year = raw_date.year
+        month = raw_date.month
+        last_day = calendar.monthrange(year, month)[1]
+        period_end = f"{year}-{month:02d}-{last_day}"
+        # BOC SAFE 以 100 外币为单位，除以 100 得到 1 美元兑人民币
+        monthly[period_end] = round(raw_value / 100, 4)
+
+    return [
+        {"period_end": pe, "usd_cny": v}
+        for pe, v in sorted(monthly.items())
+    ]
+
+
+def _load_hqm_10y_rows() -> list[dict[str, Any]]:
+    """从美国财政部 HQM (High Quality Market) 企业债收益率曲线读取 10 年期月度数据。
+
+    HQM 代表高评级企业债收益率。与同期限国债的差值即为信用利差。
+
+    Returns:
+        含 hqm_10y 的标准化行列表。
+    """
+
+    import calendar
+
+    import pandas as pd
+
+    url = "https://home.treasury.gov/system/files/226/hqm_qh_pars.xls"
+    frame = pd.read_excel(url, sheet_name="Sheet1", header=3)
+    columns = list(frame.columns)
+    ten_year_column = columns[4]  # 10 年期 HQM 收益率
+
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        raw_period = str(row["Date"]).strip()
+        raw_value = _optional_float(row[ten_year_column])
+        if not raw_period or raw_period.lower() == "nan" or raw_value is None:
+            continue
+        try:
+            anchor = datetime.strptime(raw_period, "%b %Y")
+        except (ValueError, KeyError):
+            continue
+        year = anchor.year
+        month = anchor.month
+        last_day = calendar.monthrange(year, month)[1]
+        period_end = f"{year}-{month:02d}-{last_day}"
+        rows.append({
+            "period_end": period_end,
+            "hqm_10y": round(raw_value, 4),
+        })
+    rows.sort(key=lambda r: r["period_end"])
+    return rows

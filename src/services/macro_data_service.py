@@ -128,6 +128,7 @@ class MacroDataService:
             "trade": syncer.sync_trade_history,
             "credit": syncer.sync_credit_history,
             "credit_breakdown": syncer.sync_credit_breakdown_history,
+            "expectations": syncer.sync_expectations_history,
         }
         point_counts = sync_methods[group]()
         return {"ok": True, "point_counts": point_counts}
