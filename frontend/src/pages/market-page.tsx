@@ -9,6 +9,12 @@ import {
   type MarketDataTab,
 } from "../features/market-data/model/market-data.types";
 import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
+import {
+  MARKET_CHART_FREQUENCIES_KEY,
+  MARKET_CHART_RANGES_KEY,
+  readJSONPreference,
+  writeJSONPreference,
+} from "../shared/lib/workbench-preferences";
 import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
 import { ModuleTabBar } from "../shared/ui/module-tab-bar";
@@ -19,8 +25,20 @@ export function MarketPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveModuleTab(searchParams.get("tab"), MARKET_DATA_TABS, "commodities");
   const query = useMarketDataModuleQuery(activeTab);
-  const [rangesByChartId, setRangesByChartId] = useState<Record<string, MarketDataRangeSelection>>({});
-  const [frequenciesByChartId, setFrequenciesByChartId] = useState<Record<string, MarketDataFrequency>>({});
+  const [rangesByChartId, setRangesByChartId] = useState<Record<string, MarketDataRangeSelection>>(
+    () => readJSONPreference(MARKET_CHART_RANGES_KEY, {} as Record<string, MarketDataRangeSelection>),
+  );
+  const [frequenciesByChartId, setFrequenciesByChartId] = useState<Record<string, MarketDataFrequency>>(
+    () => readJSONPreference(MARKET_CHART_FREQUENCIES_KEY, {} as Record<string, MarketDataFrequency>),
+  );
+
+  useEffect(() => {
+    writeJSONPreference(MARKET_CHART_RANGES_KEY, rangesByChartId);
+  }, [rangesByChartId]);
+
+  useEffect(() => {
+    writeJSONPreference(MARKET_CHART_FREQUENCIES_KEY, frequenciesByChartId);
+  }, [frequenciesByChartId]);
 
   useEffect(() => {
     if (searchParams.get("tab") === activeTab) {

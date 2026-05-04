@@ -108,6 +108,21 @@ export function MacroChartCard({
 
   const chartOption = useMemo((): echarts.EChartsOption | null => {
     if (!query.data || points.length === 0) return null;
+    const zoom: echarts.EChartsOption = {
+      dataZoom: [
+        { type: "inside", zoomOnMouseWheel: true, moveOnMouseMove: true },
+        { type: "slider", bottom: 8, height: 20 },
+      ],
+      toolbox: {
+        right: 10,
+        top: 4,
+        feature: {
+          dataZoom: { title: { zoom: "框选缩放", back: "还原" } },
+          restore: { title: "重置" },
+        },
+      },
+    };
+
     if (isWide) {
       return {
         animation: false,
@@ -119,7 +134,7 @@ export function MacroChartCard({
           textStyle: { fontSize: 11 },
           data: legendNames,
         },
-        grid: { left: 48, right: 140, top: 24, bottom: 36 },
+        grid: { left: 48, right: 140, top: 24, bottom: 48 },
         xAxis: { type: "category", data: chartLabels },
         yAxis: {
           type: "value",
@@ -127,13 +142,14 @@ export function MacroChartCard({
           ...(pmiYRange ? { min: pmiYRange.min, max: pmiYRange.max } : {}),
         },
         series: chartSeries,
+        ...zoom,
       };
     }
     return {
       animation: false,
       tooltip: { trigger: "axis" },
       legend: { top: 0, data: legendNames },
-      grid: { left: 48, right: 20, top: 48, bottom: 36 },
+      grid: { left: 48, right: 20, top: 48, bottom: 48 },
       xAxis: { type: "category", data: chartLabels },
       yAxis: {
         type: "value",
@@ -141,6 +157,7 @@ export function MacroChartCard({
         ...(pmiYRange ? { min: pmiYRange.min, max: pmiYRange.max } : {}),
       },
       series: chartSeries,
+      ...zoom,
     };
   }, [query.data, points.length, isWide, legendNames, chartLabels, chartSeries, pmiYRange]);
 
