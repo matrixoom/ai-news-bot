@@ -119,11 +119,12 @@ export function MarketPage() {
         charts.length === 0 ? (
           <EmptyPanelState title="No market charts" description="The selected category has no chart definitions yet." />
         ) : (
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className="flex flex-col items-stretch gap-6">
             {charts.map((chart) => (
               <MarketChartCard
                 key={chart.id}
                 chart={chart}
+                className="w-full"
                 frequency={chartFrequency(chart.id, chart.frequency)}
                 frequencyOptions={frequencyOptions}
                 onFrequencyChange={(nextFrequency) => updateChartFrequency(chart.id, nextFrequency)}
