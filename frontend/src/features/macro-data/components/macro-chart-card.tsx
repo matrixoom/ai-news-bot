@@ -9,7 +9,7 @@ import type {
   MacroFrequencyOption,
   MacroRangeOption,
 } from "../model/macro-data.types";
-import { MacroRangeControl } from "./macro-range-control";
+import { RangeControl } from "../../../shared/ui/range-control";
 
 type MacroChartCardProps = {
   chart: MacroChartDefinition;
@@ -169,13 +169,13 @@ export function MacroChartCard({
       </div>
 
       <div className="mt-4">
-        <MacroRangeControl
+        <RangeControl
           options={rangeOptions}
           value={range}
-          onChange={onRangeChange}
+          onChange={(nextRange) => onRangeChange(nextRange as MacroDataRangeSelection)}
           frequencyOptions={frequencyOptions}
           frequency={frequency}
-          onFrequencyChange={onFrequencyChange}
+          onFrequencyChange={(next) => onFrequencyChange(next as MacroDataFrequency)}
         />
       </div>
 

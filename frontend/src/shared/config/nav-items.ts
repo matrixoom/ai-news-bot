@@ -15,6 +15,7 @@ export type ModuleDirectory = {
 export const moduleRootNavItems: NavItem[] = [
   { to: "/macro-data", title: "Macro Data", description: "GDP, credit, leverage, and prices" },
   { to: "/push", title: "Push Center", description: "Templates and schedules" },
+  { to: "/market-data", title: "Market Data", description: "Commodities, precious metals, and stock indices" },
 ];
 
 export const primaryNavItems: NavItem[] = [...moduleRootNavItems];
@@ -64,6 +65,12 @@ export const moduleDirectories: ModuleDirectory[] = [
         ariaLabel: "Macro Data > 货币",
         description: "M0, M1, M2 money supply",
       },
+      {
+        to: "/macro-data?tab=expectations",
+        title: "预期",
+        ariaLabel: "Macro Data > 预期",
+        description: "Bond yields, exchange rate, and credit spread",
+      },
     ],
     defaultExpanded: true,
   },
@@ -85,5 +92,30 @@ export const moduleDirectories: ModuleDirectory[] = [
       },
     ],
     defaultExpanded: false,
+  },
+  {
+    id: "market-data",
+    item: moduleRootNavItems[2],
+    children: [
+      {
+        to: "/market-data?tab=commodities",
+        title: "商品",
+        ariaLabel: "Market Data > 商品",
+        description: "WTI原油、布伦特原油",
+      },
+      {
+        to: "/market-data?tab=precious_metals",
+        title: "贵金属",
+        ariaLabel: "Market Data > 贵金属",
+        description: "黄金、白银、铜",
+      },
+      {
+        to: "/market-data?tab=stock_market",
+        title: "股票市场",
+        ariaLabel: "Market Data > 股票市场",
+        description: "股指数据（待补充）",
+      },
+    ],
+    defaultExpanded: true,
   },
 ];

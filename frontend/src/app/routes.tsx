@@ -1,13 +1,14 @@
 import { Navigate, type RouteObject } from "react-router-dom";
 import { AppShell } from "../layouts/app-shell";
 import { MacroPage } from "../pages/macro-page";
+import { MarketPage } from "../pages/market-page";
 import { PushPage } from "../pages/push-page";
 import { SettingsPage } from "../pages/settings-page";
 import { DEFAULT_ROUTE_STORAGE_KEY, readStringPreference } from "../shared/lib/workbench-preferences";
 
 function AppIndexRedirect() {
   const defaultRoute = readStringPreference(DEFAULT_ROUTE_STORAGE_KEY, "/push");
-  const allowedRoutes = new Set(["/macro-data", "/push", "/settings"]);
+  const allowedRoutes = new Set(["/macro-data", "/market-data", "/push", "/settings"]);
   const nextRoute = allowedRoutes.has(defaultRoute) ? defaultRoute : "/push";
 
   return <Navigate to={nextRoute} replace />;
@@ -26,6 +27,11 @@ export const appRoutes: RouteObject[] = [
         path: "macro-data",
         element: <MacroPage />,
         handle: { title: "Macro Data", description: "GDP, credit, and inflation indicators" },
+      },
+      {
+        path: "market-data",
+        element: <MarketPage />,
+        handle: { title: "Market Data", description: "Commodities, precious metals, and stock indices" },
       },
       {
         path: "push",

@@ -16,6 +16,7 @@ MACRO_DATA_TABS = {
     "trade": "外贸",
     "prices": "物价",
     "currency": "货币",
+    "expectations": "预期",
 }
 
 MACRO_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"}
@@ -54,6 +55,10 @@ _CHART_SYNC_GROUPS: dict[str, str] = {
     "social_financing": "credit",
     "household_leverage_ratio": "credit",
     "corporate_leverage_ratio": "credit",
+    "china_10y_bond_yield": "expectations",
+    "us_10y_bond_yield": "expectations",
+    "usd_cny": "expectations",
+    "us_credit_spread": "expectations",
 }
 
 

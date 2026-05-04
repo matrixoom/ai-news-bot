@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 
 from ...services.dashboard_service import DashboardService
 from ...services.macro_data_service import MacroDataService, MacroDataValidationError
+from ...services.market_data_service import MarketDataService
+from ...services.market_data_repository import MarketDataValidationError
 from ...services.push_center_service import PushCenterService
 from .spa_assets import WORKBENCH_ROUTES, build_spa_unavailable_response, load_spa_assets
 
@@ -38,6 +40,7 @@ def create_fastapi_app(
     dashboard_service: DashboardService | None = None,
     push_center_service: PushCenterService | None = None,
     macro_data_service: MacroDataService | None = None,
+    market_data_service: MarketDataService | None = None,
 ) -> FastAPI:
     """创建开发 Web 服务使用的 FastAPI 应用。
 
@@ -55,6 +58,7 @@ def create_fastapi_app(
         enable_scheduler=True,
     )
     macro_service = macro_data_service or MacroDataService()
+    market_service = market_data_service or MarketDataService()
     app = FastAPI(
         title="Finance And Policy Intelligence Dashboard",
         docs_url=None,
@@ -178,6 +182,54 @@ def create_fastapi_app(
         except Exception:
             logger.exception("frontend macro data sync failed", extra={"chart_id": chart_id})
             return JSONResponse({"error": "frontend_macro_data_sync_failed"}, status_code=503)
+
+    @app.get("/api/frontend/modules/market-data")
+    def frontend_market_data_module(tab: str = "commodities") -> JSONResponse:
+        """返回 Market Data 模块元数据。"""
+        try:
+            return JSONResponse(market_service.build_module_payload(tab=tab))
+        except MarketDataValidationError:
+            return JSONResponse({"error": "invalid_market_data_tab"}, status_code=400)
+        except Exception:
+            logger.exception("frontend market data module failed")
+            return JSONResponse({"error": "frontend_market_data_module_unavailable"}, status_code=503)
+
+    @app.get("/api/frontend/modules/market-data/charts/{chart_id}")
+    def frontend_market_data_chart(
+        chart_id: str,
+        range: str = "1y",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        frequency: str | None = None,
+    ) -> JSONResponse:
+        """返回 Market Data 单张图表序列。"""
+        try:
+            return JSONResponse(
+                market_service.build_chart_payload(
+                    chart_id,
+                    range_type=range,
+                    start_date=start_date,
+                    end_date=end_date,
+                    frequency=frequency,
+                )
+            )
+        except MarketDataValidationError:
+            return JSONResponse({"error": "invalid_market_data_range"}, status_code=400)
+        except Exception:
+            logger.exception("frontend market data chart failed", extra={"chart_id": chart_id})
+            return JSONResponse({"error": "frontend_market_data_chart_unavailable"}, status_code=503)
+
+    @app.post("/api/frontend/modules/market-data/sync/{chart_id}")
+    def frontend_market_data_sync(chart_id: str) -> JSONResponse:
+        """触发单张图表的底层数据同步。"""
+        try:
+            result = market_service.sync_chart(chart_id)
+            return JSONResponse(result)
+        except MarketDataValidationError:
+            return JSONResponse({"error": "invalid_market_data_chart_id"}, status_code=400)
+        except Exception:
+            logger.exception("frontend market data sync failed", extra={"chart_id": chart_id})
+            return JSONResponse({"error": "frontend_market_data_sync_failed"}, status_code=503)
 
     @app.put("/api/push/config")
     def update_push_config(payload: dict | None = None) -> JSONResponse:
