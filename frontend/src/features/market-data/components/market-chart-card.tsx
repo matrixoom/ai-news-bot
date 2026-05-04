@@ -117,13 +117,25 @@ export function MarketChartCard({
         textStyle: { fontSize: 11 },
         data: allLegendNames,
       },
-      grid: { left: 48, right: 140, top: 24, bottom: 36 },
+      grid: { left: 48, right: 140, top: 24, bottom: 48 },
       xAxis: { type: "category", data: chartLabels },
       yAxis: {
         type: "value",
         name: query.data.unit,
       },
       series: allSeries,
+      dataZoom: [
+        { type: "inside", zoomOnMouseWheel: true, moveOnMouseMove: true },
+        { type: "slider", bottom: 8, height: 20 },
+      ],
+      toolbox: {
+        right: 10,
+        top: 4,
+        feature: {
+          dataZoom: { title: { zoom: "框选缩放", back: "还原" } },
+          restore: { title: "重置" },
+        },
+      },
     };
   }, [query.data, points.length, allLegendNames, chartLabels, allSeries]);
 

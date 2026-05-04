@@ -9,6 +9,12 @@ import {
   type MacroDataTab,
 } from "../features/macro-data/model/macro-data.types";
 import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
+import {
+  MACRO_CHART_FREQUENCIES_KEY,
+  MACRO_CHART_RANGES_KEY,
+  readJSONPreference,
+  writeJSONPreference,
+} from "../shared/lib/workbench-preferences";
 import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
 import { ModuleTabBar } from "../shared/ui/module-tab-bar";
@@ -19,8 +25,20 @@ export function MacroPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveModuleTab(searchParams.get("tab"), MACRO_DATA_TABS, "gdp");
   const query = useMacroDataModuleQuery(activeTab);
-  const [rangesByChartId, setRangesByChartId] = useState<Record<string, MacroDataRangeSelection>>({});
-  const [frequenciesByChartId, setFrequenciesByChartId] = useState<Record<string, MacroDataFrequency>>({});
+  const [rangesByChartId, setRangesByChartId] = useState<Record<string, MacroDataRangeSelection>>(
+    () => readJSONPreference(MACRO_CHART_RANGES_KEY, {} as Record<string, MacroDataRangeSelection>),
+  );
+  const [frequenciesByChartId, setFrequenciesByChartId] = useState<Record<string, MacroDataFrequency>>(
+    () => readJSONPreference(MACRO_CHART_FREQUENCIES_KEY, {} as Record<string, MacroDataFrequency>),
+  );
+
+  useEffect(() => {
+    writeJSONPreference(MACRO_CHART_RANGES_KEY, rangesByChartId);
+  }, [rangesByChartId]);
+
+  useEffect(() => {
+    writeJSONPreference(MACRO_CHART_FREQUENCIES_KEY, frequenciesByChartId);
+  }, [frequenciesByChartId]);
 
   useEffect(() => {
     if (searchParams.get("tab") === activeTab) {
