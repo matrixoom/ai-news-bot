@@ -128,4 +128,32 @@ describe("Workbench shell", () => {
     expect(within(primaryNavigation).queryByText("PC")).not.toBeInTheDocument();
     expect(within(primaryNavigation).queryByText("SE")).not.toBeInTheDocument();
   });
+
+  it("uses distinct collapsed icons for Market Data, Trend Models, and Push Center", async () => {
+    installWorkbenchFetchMock({ push: pushPayload });
+    const user = userEvent.setup();
+
+    renderApp("/push");
+
+    await user.click(await screen.findByRole("button", { name: /collapse sidebar/i }));
+
+    const primaryNavigation = screen.getByRole("navigation", { name: "Primary" });
+    const marketIcon = within(primaryNavigation).getByRole("link", { name: "Market Data" }).querySelector("svg");
+    const trendIcon = within(primaryNavigation).getByRole("link", { name: "Trend Models" }).querySelector("svg");
+    const pushIcon = within(primaryNavigation).getByRole("link", { name: "Push Center" }).querySelector("svg");
+
+    expect(marketIcon?.innerHTML).toBeTruthy();
+    expect(trendIcon?.innerHTML).toBeTruthy();
+    expect(pushIcon?.innerHTML).toBeTruthy();
+    expect(new Set([marketIcon?.innerHTML, trendIcon?.innerHTML, pushIcon?.innerHTML]).size).toBe(3);
+  });
+
+  it("does not render first-level module description copy in the shell chrome", async () => {
+    installWorkbenchFetchMock({ push: pushPayload });
+
+    renderApp("/market-data");
+
+    expect((await screen.findAllByRole("heading", { name: "Market Data" })).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Commodities, precious metals, and stock indices")).toHaveLength(0);
+  });
 });

@@ -22,7 +22,7 @@ export type MacroFrequencyOption = {
   label: string;
 };
 
-export type MacroChartType = "line" | "bar_stacked";
+export type MacroChartType = "line" | "bar_stacked" | "bar_stacked_line";
 
 export type MacroChartDefinition = {
   id: string;

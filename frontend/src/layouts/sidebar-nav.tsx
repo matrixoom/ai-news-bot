@@ -1,10 +1,12 @@
 import {
   Bars3Icon,
   ChartBarSquareIcon,
+  ChartPieIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   Cog6ToothIcon,
-  RocketLaunchIcon,
+  PaperAirplaneIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import {
   DndContext,
@@ -146,7 +148,15 @@ function CompactNavIcon({ item }: { item: NavItem }) {
     return <ChartBarSquareIcon aria-hidden="true" className={iconClassName} />;
   }
 
-  return <RocketLaunchIcon aria-hidden="true" className={iconClassName} />;
+  if (pathname === "/market-data") {
+    return <ChartPieIcon aria-hidden="true" className={iconClassName} />;
+  }
+
+  if (pathname === "/trend-models") {
+    return <SparklesIcon aria-hidden="true" className={iconClassName} />;
+  }
+
+  return <PaperAirplaneIcon aria-hidden="true" className={iconClassName} />;
 }
 
 // ── sortable primitives ──
@@ -224,9 +234,6 @@ function SortableDirectorySection({
           to={buildNavHref(directory.item.to, searchParams)}
         >
           <div className="font-semibold">{directory.item.title}</div>
-          <div aria-hidden="true" className="mt-1 text-xs opacity-80">
-            {directory.item.description}
-          </div>
         </Link>
         {hasChildren ? (
           <button
@@ -434,9 +441,6 @@ function ExpandedSingleNavItem({
       to={buildNavHref(item.to, searchParams)}
     >
       <div className="font-semibold">{item.title}</div>
-      <div aria-hidden="true" className="mt-1 text-xs opacity-80">
-        {item.description}
-      </div>
     </Link>
   );
 }
@@ -533,9 +537,6 @@ function ExpandedSystemLinks({
             to={buildNavHref(item.to, searchParams)}
           >
             <div className="font-medium">{item.title}</div>
-            <div aria-hidden="true" className="mt-1 text-xs opacity-75">
-              {item.description}
-            </div>
           </Link>
         );
       })}

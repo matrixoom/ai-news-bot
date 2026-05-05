@@ -23,6 +23,7 @@ MACRO_DATA_TABLES: dict[str, str] = {
     "real_gdp_growth": "macro_real_gdp_growth",
     "manufacturing_pmi": "macro_manufacturing_pmi",
     "non_manufacturing_pmi": "macro_non_manufacturing_pmi",
+    "comprehensive_pmi": "macro_comprehensive_pmi",
     "exports": "macro_exports",
     "imports": "macro_imports",
     "social_financing_rmb_loans": "macro_social_financing_rmb_loans",
@@ -309,6 +310,14 @@ class MacroDataRepository:
                     timestamp,
                 ),
             )
+            connection.execute(
+                """
+                UPDATE macro_data_indicator_registry
+                SET status = ?, updated_at = ?
+                WHERE indicator_id = ?
+                """,
+                (status, timestamp, indicator_id),
+            )
 
     def replace_points(
         self,
@@ -569,10 +578,37 @@ class MacroDataRepository:
                     unit=excluded.unit,
                     frequency=excluded.frequency,
                     display_order=excluded.display_order,
-                    status=excluded.status,
-                    updated_at=excluded.updated_at
+                    status=CASE
+                        WHEN macro_data_indicator_registry.status = 'sample' THEN excluded.status
+                        ELSE macro_data_indicator_registry.status
+                    END,
+                    updated_at=CASE
+                        WHEN macro_data_indicator_registry.status = 'sample' THEN excluded.updated_at
+                        ELSE macro_data_indicator_registry.updated_at
+                    END
                 """,
                 definitions,
+            )
+            # 真实同步状态是运行时事实，初始化默认注册表时不能把它回写成 sample。
+            connection.execute(
+                """
+                UPDATE macro_data_indicator_registry
+                SET status = (
+                        SELECT macro_data_sync_state.status
+                        FROM macro_data_sync_state
+                        WHERE macro_data_sync_state.indicator_id = macro_data_indicator_registry.indicator_id
+                    ),
+                    updated_at = (
+                        SELECT macro_data_sync_state.synced_at
+                        FROM macro_data_sync_state
+                        WHERE macro_data_sync_state.indicator_id = macro_data_indicator_registry.indicator_id
+                    )
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM macro_data_sync_state
+                    WHERE macro_data_sync_state.indicator_id = macro_data_indicator_registry.indicator_id
+                )
+                """
             )
         for indicator_id, points in _default_sample_points().items():
             if not self.load_points(indicator_id=indicator_id, start_date="1900-01-01", end_date="2999-12-31"):
@@ -809,6 +845,18 @@ def _default_indicator_rows(timestamp: str) -> list[tuple[str, str, str, str, st
             "%",
             "monthly",
             2,
+            "sample",
+            timestamp,
+            timestamp,
+        ),
+        (
+            "comprehensive_pmi",
+            "macro_comprehensive_pmi",
+            "climate",
+            "综合PMI",
+            "%",
+            "monthly",
+            3,
             "sample",
             timestamp,
             timestamp,
@@ -1052,6 +1100,7 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
         "cpi": monthly([0.2, 0.1, 0.5, 0.7, 0.8], "%"),
         "manufacturing_pmi": monthly([50.1, 50.2, 49.8, 50.3, 50.5], "%"),
         "non_manufacturing_pmi": monthly([52.3, 52.7, 51.9, 53.1, 53.4], "%"),
+        "comprehensive_pmi": monthly([51.4, 51.7, 50.8, 52.1, 52.4], "%"),
         "exports": monthly([16200, 16800, 17100, 15500, 17400], "亿元"),
         "imports": monthly([11800, 12300, 13200, 12100, 14600], "亿元"),
         "social_financing_rmb_loans": monthly([32000, 28000, 41000, 36000, 45000], "亿元"),

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from src.app.web import create_fastapi_app
 from src.services.macro_data_repository import MacroDataRepository
 from src.services.macro_data_service import MacroDataService
-from src.services.macro_data_sync_service import MacroDataSyncService
+from src.services.macro_data_sync_service import MacroDataSyncService, _parse_credit_balance_sheet
 
 
 class MacroDataRepositoryTests(unittest.TestCase):
@@ -34,6 +34,7 @@ class MacroDataRepositoryTests(unittest.TestCase):
         self.assertIn("macro_cpi", table_names)
         self.assertIn("macro_nominal_gdp_growth", table_names)
         self.assertIn("macro_real_gdp_growth", table_names)
+        self.assertIn("macro_comprehensive_pmi", table_names)
         self.assertIn("macro_data_indicator_registry", table_names)
         self.assertIn("macro_data_sync_state", table_names)
 
@@ -86,6 +87,38 @@ class MacroDataRepositoryTests(unittest.TestCase):
         values = [point.value for point in points]
         self.assertIn(100.0, values)
         self.assertNotIn(999.0, values)
+
+    def test_replace_points_updates_indicator_status_after_live_sync(self) -> None:
+        """校验真实同步写入后指标定义状态不再停留在样例状态。"""
+        repository = MacroDataRepository(self.db_path)
+
+        repository.replace_points(
+            "comprehensive_pmi",
+            [
+                {
+                    "period_end": "2026-03-31",
+                    "period_label": "2026-03",
+                    "value": 51.5,
+                    "unit": "%",
+                    "frequency": "monthly",
+                    "provider_key": "akshare_comprehensive_pmi",
+                    "source_url": "https://akshare.akfamily.xyz/",
+                    "released_at": "",
+                }
+            ],
+            status="live",
+            warning_message="",
+        )
+
+        indicator = repository.get_indicator("comprehensive_pmi")
+
+        self.assertIsNotNone(indicator)
+        self.assertEqual(indicator.status, "live")
+
+        reopened = MacroDataRepository(self.db_path)
+        reopened_indicator = reopened.get_indicator("comprehensive_pmi")
+        self.assertIsNotNone(reopened_indicator)
+        self.assertEqual(reopened_indicator.status, "live")
 
     def test_repository_keeps_yearly_and_quarterly_points_for_same_period_end(self) -> None:
         """校验同一日期的年度与季度点位不会互相覆盖。"""
@@ -180,9 +213,48 @@ class MacroDataApiTests(unittest.TestCase):
         self.assertEqual(social_financing["title"], "社会融资规模")
         self.assertEqual(social_financing["unit"], "亿元")
         new_loans = next(c for c in payload["charts"] if c["id"] == "new_rmb_loans")
-        self.assertEqual(new_loans["chart_type"], "line")
+        self.assertEqual(new_loans["chart_type"], "bar_stacked_line")
         self.assertEqual(new_loans["title"], "新增人民币贷款")
         self.assertEqual(new_loans["unit"], "亿元")
+
+    def test_frontend_macro_data_module_returns_comprehensive_pmi_chart(self) -> None:
+        """校验景气标签包含综合 PMI，且保持 PMI 折线图契约。"""
+        response = self.client.get("/api/frontend/modules/macro-data?tab=climate")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        chart_ids = [chart["id"] for chart in payload["charts"]]
+        self.assertEqual(chart_ids, ["manufacturing_pmi", "non_manufacturing_pmi", "comprehensive_pmi"])
+        comprehensive = payload["charts"][2]
+        self.assertEqual(comprehensive["title"], "综合PMI")
+        self.assertEqual(comprehensive["chart_type"], "line")
+
+    def test_frontend_comprehensive_pmi_chart_uses_live_sync_status(self) -> None:
+        """校验综合 PMI 图表同步后对外状态为真实数据状态。"""
+        self.repository.replace_points(
+            "comprehensive_pmi",
+            [
+                {
+                    "period_end": "2026-03-31",
+                    "period_label": "2026-03",
+                    "value": 51.5,
+                    "unit": "%",
+                    "frequency": "monthly",
+                    "provider_key": "akshare_comprehensive_pmi",
+                    "source_url": "https://akshare.akfamily.xyz/",
+                    "released_at": "",
+                }
+            ],
+            status="live",
+            warning_message="",
+        )
+
+        response = self.client.get("/api/frontend/modules/macro-data/charts/comprehensive_pmi?frequency=monthly")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "live")
+        self.assertEqual(payload["sync_state"]["status"], "live")
 
     def test_frontend_macro_data_chart_returns_social_financing_series(self) -> None:
         """校验社融图表返回单系列月度数据。"""
@@ -376,6 +448,53 @@ class MacroDataSyncServiceTests(unittest.TestCase):
 
         self.assertEqual([point.value for point in quarterly_points], [100.0, 150.0, 200.0, 250.0])
         self.assertEqual(yearly_points[0].value, sum(point.value for point in quarterly_points))
+
+    def test_sync_climate_history_persists_comprehensive_pmi(self) -> None:
+        """校验景气同步会同时写入制造业、非制造业和综合 PMI。"""
+        repository = MacroDataRepository(self.db_path)
+        service = MacroDataSyncService(
+            repository=repository,
+            pmi_loader=lambda: [{"period_end": "2026-03-31", "value": 50.4}],
+            non_man_pmi_loader=lambda: [{"period_end": "2026-03-31", "value": 50.1}],
+            comprehensive_pmi_loader=lambda: [{"period_end": "2026-03-31", "value": 51.5}],
+        )
+
+        result = service.sync_climate_history()
+
+        self.assertEqual(result["comprehensive_pmi"], 1)
+        points = repository.load_points(
+            indicator_id="comprehensive_pmi",
+            start_date="2026-01-01",
+            end_date="2026-12-31",
+            frequency="monthly",
+        )
+        self.assertEqual(points[0].value, 51.5)
+
+    def test_parse_credit_balance_sheet_keeps_october_month_from_truncated_excel_header(self) -> None:
+        """校验 Excel 将 10 月显示为 2025.1 时仍能按列序解析为 10 月。"""
+        import pandas as pd
+
+        rows = [[""] * 13 for _ in range(40)]
+        rows[5][0] = "项目 Item"
+        for month in range(1, 13):
+            rows[5][month] = f"2025.{month:02d}" if month != 10 else "2025.1"
+        rows[28][0] = "1.住户贷款 Loans to Households"
+        rows[29][0] = "（1）短期贷款 Short-term Loans"
+        rows[32][0] = "（2）中长期贷款 Mid & Long-term Loans"
+        rows[35][0] = "2.非金融企业及机关团体贷款 Loans to Non-financial Enterprises"
+        rows[36][0] = "（1）短期贷款 Short-term Loans"
+        rows[37][0] = "（2）中长期贷款 Mid & Long-term Loans"
+        for column in range(1, 13):
+            rows[29][column] = 1000 + column
+            rows[32][column] = 2000 + column
+            rows[36][column] = 3000 + column
+            rows[37][column] = 4000 + column
+
+        result = _parse_credit_balance_sheet(pd.DataFrame(rows), 2025)
+
+        self.assertIn((2025, 10), result)
+        self.assertEqual(result[(2025, 10)]["hh_short"], 1010.0)
+        self.assertNotEqual(result[(2025, 10)]["hh_short"], result[(2025, 1)]["hh_short"])
 
 
 if __name__ == "__main__":

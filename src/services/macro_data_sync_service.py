@@ -23,6 +23,7 @@ CpiMonthlyLoader = Callable[[], list[dict[str, Any]]]
 PpiLoader = Callable[[], list[dict[str, Any]]]
 PmiLoader = Callable[[], list[dict[str, Any]]]
 NonManPmiLoader = Callable[[], list[dict[str, Any]]]
+ComprehensivePmiLoader = Callable[[], list[dict[str, Any]]]
 TradeLoader = Callable[[], list[dict[str, Any]]]
 CnbsLoader = Callable[[], list[dict[str, Any]]]
 NewLoansLoader = Callable[[], list[dict[str, Any]]]
@@ -80,6 +81,7 @@ class MacroDataSyncService:
         ppi_loader: PpiLoader | None = None,
         pmi_loader: PmiLoader | None = None,
         non_man_pmi_loader: NonManPmiLoader | None = None,
+        comprehensive_pmi_loader: ComprehensivePmiLoader | None = None,
         trade_loader: TradeLoader | None = None,
         cnbs_loader: CnbsLoader | None = None,
         new_loans_loader: NewLoansLoader | None = None,
@@ -99,6 +101,7 @@ class MacroDataSyncService:
         self._ppi_loader = ppi_loader or _load_ppi_rows
         self._pmi_loader = pmi_loader or _load_pmi_rows
         self._non_man_pmi_loader = non_man_pmi_loader or _load_non_man_pmi_rows
+        self._comprehensive_pmi_loader = comprehensive_pmi_loader or _load_comprehensive_pmi_rows
         self._trade_loader = trade_loader or _load_trade_rows
         self._cnbs_loader = cnbs_loader or _load_cnbs_rows
         self._new_loans_loader = new_loans_loader or _load_new_loans_rows
@@ -234,11 +237,26 @@ class MacroDataSyncService:
 
         pmi_rows = self._pmi_loader()
         non_man_rows = self._non_man_pmi_loader()
+        comprehensive_rows = self._comprehensive_pmi_loader()
         pmi_points = self._monthly_points(pmi_rows, "manufacturing_pmi", "%", "akshare_pmi")
         non_man_points = self._monthly_points(non_man_rows, "non_manufacturing_pmi", "%", "akshare_non_man_pmi")
-        for indicator_id, points in [("manufacturing_pmi", pmi_points), ("non_manufacturing_pmi", non_man_points)]:
+        comprehensive_points = self._monthly_points(
+            comprehensive_rows,
+            "comprehensive_pmi",
+            "%",
+            "akshare_comprehensive_pmi",
+        )
+        for indicator_id, points in [
+            ("manufacturing_pmi", pmi_points),
+            ("non_manufacturing_pmi", non_man_points),
+            ("comprehensive_pmi", comprehensive_points),
+        ]:
             self._repository.replace_points(indicator_id, points, status="live", warning_message="")
-        return {"manufacturing_pmi": len(pmi_points), "non_manufacturing_pmi": len(non_man_points)}
+        return {
+            "manufacturing_pmi": len(pmi_points),
+            "non_manufacturing_pmi": len(non_man_points),
+            "comprehensive_pmi": len(comprehensive_points),
+        }
 
     def sync_trade_history(self) -> dict[str, int]:
         """同步外贸进出口历史数据。
@@ -1114,6 +1132,32 @@ def _load_non_man_pmi_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def _load_comprehensive_pmi_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取中国综合 PMI 月度数据。
+
+    Returns:
+        含综合 PMI 指数值的标准化行列表。
+    """
+
+    import pandas as pd
+    import akshare as ak
+
+    frame = ak.index_pmi_com_cx()
+    rows: list[dict[str, Any]] = []
+    for _, row in frame.iterrows():
+        raw_date = row.get("日期") if "日期" in frame.columns else row.iloc[0]
+        parsed_date = pd.to_datetime(raw_date, errors="coerce")
+        if pd.isna(parsed_date):
+            continue
+        value = _optional_float(row.get("综合PMI") if "综合PMI" in frame.columns else row.iloc[1])
+        if value is None:
+            continue
+        year = int(parsed_date.year)
+        month = int(parsed_date.month)
+        rows.append({"period_end": f"{year}-{month:02d}-{_month_last_day(year, month)}", "value": value})
+    return rows
+
+
 def _load_trade_rows() -> list[dict[str, Any]]:
     """通过 AkShare 读取中国进出口月度数据（美元计价）。
 
@@ -1352,7 +1396,8 @@ def _parse_credit_balance_sheet(df: "pd.DataFrame", expected_year: int) -> dict[
     if header_row < 0:
         return {}
 
-    # 解析列标题，映射到月份
+    # 解析列标题，映射到月份。PBOC Excel 中 10 月常被 pandas 读成 2025.1，
+    # 因此 1-12 月的标准列位优先用列序修正，避免 10 月被覆盖成 1 月。
     for j in range(1, df.shape[1]):
         val = str(df.iloc[header_row, j]) if pd.notna(df.iloc[header_row, j]) else ""
         match = re.match(r"(\d{4})\.(\d{1,2})", val)
@@ -1360,6 +1405,8 @@ def _parse_credit_balance_sheet(df: "pd.DataFrame", expected_year: int) -> dict[
             year = int(match.group(1))
             month = int(match.group(2))
             if year == expected_year:
+                if 1 <= j <= 12 and month != j:
+                    month = j
                 month_columns[j] = month
 
     if not month_columns:

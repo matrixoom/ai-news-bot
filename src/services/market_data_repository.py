@@ -49,6 +49,20 @@ class MarketDataPoint:
 
 
 @dataclass(frozen=True)
+class MarketHousingPoint:
+    """房地产指标单个城市、单个口径的历史点。"""
+
+    period_end: str
+    period_label: str
+    city: str
+    metric: str
+    value: float
+    unit: str
+    frequency: str
+    released_at: str
+
+
+@dataclass(frozen=True)
 class MarketSyncState:
     indicator_id: str
     provider_key: str
@@ -266,27 +280,29 @@ class MarketDataRepository:
         cities: list[str],
         start_date: str,
         end_date: str,
-    ) -> dict[str, list[MarketDataPoint]]:
+    ) -> dict[str, list[MarketHousingPoint]]:
         definition = self.get_indicator(indicator_id)
         if definition is None:
             raise ValueError(f"unknown market indicator: {indicator_id}")
         table_name = self._safe_table_name(definition.table_name)
-        result: dict[str, list[MarketDataPoint]] = {}
+        result: dict[str, list[MarketHousingPoint]] = {}
         with self._session() as connection:
             for city in cities:
                 rows = connection.execute(
                     f"""
-                    SELECT period_end, period_label, value, unit, frequency, released_at
+                    SELECT period_end, period_label, city, metric, value, unit, frequency, released_at
                     FROM {table_name}
                     WHERE city = ? AND period_end >= ? AND period_end <= ?
-                    ORDER BY period_end ASC
+                    ORDER BY period_end ASC, metric ASC
                     """,
                     (city, start_date, end_date),
                 ).fetchall()
                 result[city] = [
-                    MarketDataPoint(
+                    MarketHousingPoint(
                         period_end=str(row["period_end"]),
                         period_label=str(row["period_label"]),
+                        city=str(row["city"]),
+                        metric=str(row["metric"]),
                         value=float(row["value"]),
                         unit=str(row["unit"]),
                         frequency=str(row["frequency"]),
@@ -314,6 +330,7 @@ class MarketDataRepository:
                 str(point["period_end"]),
                 str(point["period_label"]),
                 str(point["city"]),
+                str(point.get("metric", "yoy")),
                 float(point["value"]),
                 str(point["unit"]),
                 str(point["frequency"]),
@@ -329,9 +346,9 @@ class MarketDataRepository:
                 connection.executemany(
                     f"""
                     INSERT INTO {table_name} (
-                        period_end, period_label, city, value, unit, frequency, provider_key, source_url, released_at, last_seen_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(period_end, frequency, city) DO UPDATE SET
+                        period_end, period_label, city, metric, value, unit, frequency, provider_key, source_url, released_at, last_seen_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(period_end, frequency, city, metric) DO UPDATE SET
                         period_label=excluded.period_label,
                         value=excluded.value,
                         unit=excluded.unit,
@@ -366,7 +383,7 @@ class MarketDataRepository:
                 """,
                 (
                     indicator_id,
-                    rows[-1][6] if rows else "manual_seed",
+                    rows[-1][7] if rows else "manual_seed",
                     aggregate["latest_period_end"] if aggregate else None,
                     aggregate["earliest_period_end"] if aggregate else None,
                     int(aggregate["point_count"]) if aggregate else 0,
@@ -374,6 +391,14 @@ class MarketDataRepository:
                     warning_message,
                     timestamp,
                 ),
+            )
+            connection.execute(
+                """
+                UPDATE market_data_indicator_registry
+                SET status = ?, updated_at = ?
+                WHERE indicator_id = ?
+                """,
+                (status, timestamp, indicator_id),
             )
 
     def replace_housing_points(
@@ -427,6 +452,7 @@ class MarketDataRepository:
                             period_end TEXT NOT NULL,
                             period_label TEXT NOT NULL,
                             city TEXT NOT NULL,
+                            metric TEXT NOT NULL DEFAULT 'yoy',
                             value REAL NOT NULL,
                             unit TEXT NOT NULL,
                             frequency TEXT NOT NULL,
@@ -434,10 +460,11 @@ class MarketDataRepository:
                             source_url TEXT NOT NULL,
                             released_at TEXT NOT NULL,
                             last_seen_at TEXT NOT NULL,
-                            PRIMARY KEY (period_end, frequency, city)
+                            PRIMARY KEY (period_end, frequency, city, metric)
                         )
                         """
                     )
+                    self._migrate_housing_table_metric(connection, table_name)
                 else:
                     connection.execute(
                         f"""
@@ -515,10 +542,37 @@ class MarketDataRepository:
                     unit=excluded.unit,
                     frequency=excluded.frequency,
                     display_order=excluded.display_order,
-                    status=excluded.status,
-                    updated_at=excluded.updated_at
+                    status=CASE
+                        WHEN market_data_indicator_registry.status = 'sample' THEN excluded.status
+                        ELSE market_data_indicator_registry.status
+                    END,
+                    updated_at=CASE
+                        WHEN market_data_indicator_registry.status = 'sample' THEN excluded.updated_at
+                        ELSE market_data_indicator_registry.updated_at
+                    END
                 """,
                 definitions,
+            )
+            # 真实同步状态是运行时事实，初始化默认注册表时不能把它回写成 sample。
+            connection.execute(
+                """
+                UPDATE market_data_indicator_registry
+                SET status = (
+                        SELECT market_data_sync_state.status
+                        FROM market_data_sync_state
+                        WHERE market_data_sync_state.indicator_id = market_data_indicator_registry.indicator_id
+                    ),
+                    updated_at = (
+                        SELECT market_data_sync_state.synced_at
+                        FROM market_data_sync_state
+                        WHERE market_data_sync_state.indicator_id = market_data_indicator_registry.indicator_id
+                    )
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM market_data_sync_state
+                    WHERE market_data_sync_state.indicator_id = market_data_indicator_registry.indicator_id
+                )
+                """
             )
         for indicator_id, points in _default_sample_points().items():
             definition = self.get_indicator(indicator_id)
@@ -535,6 +589,74 @@ class MarketDataRepository:
         if table_name not in MARKET_DATA_TABLES.values():
             raise ValueError(f"unsafe market data table: {table_name}")
         return table_name
+
+    def _migrate_housing_table_metric(self, connection: sqlite3.Connection, table_name: str) -> None:
+        """将旧版房价表迁移为含 metric 维度的联合主键。
+
+        Args:
+            connection: 当前 SQLite 连接。
+            table_name: 房价事实表名。
+
+        Returns:
+            无返回值；已是新结构时保持幂等。
+        """
+
+        columns = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+        column_names = [str(column["name"]) for column in columns]
+        index_rows = connection.execute(f"PRAGMA index_list({table_name})").fetchall()
+        primary_key_columns: list[str] = []
+        for index_row in index_rows:
+            if str(index_row["origin"]) != "pk":
+                continue
+            index_columns = connection.execute(f"PRAGMA index_info({index_row['name']})").fetchall()
+            primary_key_columns = [str(column["name"]) for column in index_columns]
+            break
+        if "metric" in column_names and primary_key_columns == ["period_end", "frequency", "city", "metric"]:
+            return
+
+        temporary_table_name = f"{table_name}_v2"
+        connection.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {temporary_table_name} (
+                period_end TEXT NOT NULL,
+                period_label TEXT NOT NULL,
+                city TEXT NOT NULL,
+                metric TEXT NOT NULL DEFAULT 'yoy',
+                value REAL NOT NULL,
+                unit TEXT NOT NULL,
+                frequency TEXT NOT NULL,
+                provider_key TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                released_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                PRIMARY KEY (period_end, frequency, city, metric)
+            )
+            """
+        )
+        if "metric" in column_names:
+            connection.execute(
+                f"""
+                INSERT OR REPLACE INTO {temporary_table_name} (
+                    period_end, period_label, city, metric, value, unit, frequency, provider_key, source_url, released_at, last_seen_at
+                )
+                SELECT period_end, period_label, city, metric, value, unit, frequency, provider_key, source_url, released_at, last_seen_at
+                FROM {table_name}
+                """
+            )
+        else:
+            connection.execute(
+                f"""
+                INSERT OR REPLACE INTO {temporary_table_name} (
+                    period_end, period_label, city, metric, value, unit, frequency, provider_key, source_url, released_at, last_seen_at
+                )
+                SELECT period_end, period_label, city, 'yoy',
+                       CASE WHEN value > 50 THEN value - 100 ELSE value END,
+                       '%', frequency, provider_key, source_url, released_at, last_seen_at
+                FROM {table_name}
+                """
+            )
+        connection.execute(f"DROP TABLE {table_name}")
+        connection.execute(f"ALTER TABLE {temporary_table_name} RENAME TO {table_name}")
 
     def _build_definition(self, row: sqlite3.Row) -> MarketIndicatorDefinition:
         return MarketIndicatorDefinition(
@@ -626,7 +748,7 @@ def _default_indicator_rows(timestamp: str) -> list[tuple[str, str, str, str, st
             "market_second_hand_housing",
             "real_estate",
             "全国70城二手房价格指数",
-            "%",
+            "% / 指数",
             "monthly",
             1,
             "sample",
@@ -649,13 +771,14 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
     housing_periods = ["2025-11-01", "2025-12-01", "2026-01-01", "2026-02-01", "2026-03-01"]
     housing_labels = ["2025-11", "2025-12", "2026-01", "2026-02", "2026-03"]
 
-    def housing_point(period: str, label: str, city: str, value: float) -> dict[str, object]:
+    def housing_point(period: str, label: str, city: str, metric: str, value: float, unit: str) -> dict[str, object]:
         return {
             "period_end": period,
             "period_label": label,
             "city": city,
+            "metric": metric,
             "value": value,
-            "unit": "%",
+            "unit": unit,
             "frequency": "monthly",
             "provider_key": "manual_seed",
             "source_url": "",
@@ -669,12 +792,29 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
         "silver_spot": daily([28.5, 29.1, 28.3, 29.6, 28.9], "美元/盎司"),
         "copper": daily([4.22, 4.35, 4.18, 4.42, 4.28], "美元/磅"),
         "second_hand_housing": [
-            housing_point(p, l, c, v)
+            housing_point(p, l, c, metric, v, unit)
             for p, l in zip(housing_periods, housing_labels)
             for c, v in [
-                ("北京", 91.6), ("上海", 93.8), ("广州", 91.2), ("深圳", 93.5),
-                ("杭州", 95.1), ("成都", 94.3),
+                ("北京", -8.4), ("上海", -6.2), ("广州", -8.8), ("深圳", -6.5),
+                ("杭州", -4.9), ("成都", -5.7),
             ]
+            for metric, unit in [("yoy", "%")]
+        ] + [
+            housing_point(p, l, c, metric, v, unit)
+            for p, l in zip(housing_periods, housing_labels)
+            for c, v in [
+                ("北京", 0.2), ("上海", 0.1), ("广州", -0.1), ("深圳", 0.0),
+                ("杭州", 0.1), ("成都", -0.2),
+            ]
+            for metric, unit in [("mom", "%")]
+        ] + [
+            housing_point(p, l, c, metric, v, unit)
+            for p, l in zip(housing_periods, housing_labels)
+            for c, v in [
+                ("北京", 94.2), ("上海", 96.1), ("广州", 92.8), ("深圳", 95.3),
+                ("杭州", 97.4), ("成都", 96.8),
+            ]
+            for metric, unit in [("global_index", "指数")]
         ],
     }
 

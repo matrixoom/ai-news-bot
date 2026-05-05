@@ -154,6 +154,51 @@ class PushWorkflowTests(unittest.TestCase):
         self.assertEqual(trend["chart_points"][-1]["ma20_price"], 3850.0)
         self.assertEqual(trend["chart_points"][-1]["deviation_pct"], 1.3)
 
+    def test_report_service_renders_mobile_scalable_svg_charts(self):
+        """校验邮件图表不用固定像素宽度，避免手机邮箱裁切 SVG。"""
+        snapshot = DashboardSnapshot(
+            generated_at="2026-03-26T08:00:00Z",
+            news_mode="hybrid",
+            title="日报",
+            summary="概览",
+            sections=[DashboardSection("market", "市场模型", "live", "desc")],
+            dashboard_summary=SummaryBlock(
+                title="日报",
+                subtitle="概览",
+                as_of_label="2026-03-26",
+                coverage_note="",
+                highlights=[],
+            ),
+            news_sections=[],
+            macro_sections=[],
+            market_sections=[
+                MarketCard(
+                    key="csi300",
+                    label="沪深300",
+                    close_value="3900",
+                    ma20_value="3850",
+                    signal="neutral",
+                    status="live",
+                    trade_date="2026-03-26",
+                    deviation_pct="+1.3%",
+                    source_label="akshare",
+                    explanation="说明",
+                    chart_points=[
+                        {"trade_date": "2026-03-24", "close_price": 3810.0, "ma20_price": 3790.0, "deviation_pct": 0.5},
+                        {"trade_date": "2026-03-25", "close_price": 3825.0, "ma20_price": 3801.0, "deviation_pct": 0.6},
+                    ],
+                )
+            ],
+            event_sections=[],
+            data_status=[DataStatusItem("market", "市场模型", "live", "ok")],
+        )
+
+        html = PushReportService().build_email_html(snapshot, module_ids=["market"])
+
+        self.assertIn('width="100%"', html)
+        self.assertIn("max-width:100%", html)
+        self.assertNotIn('width="344" height="126"', html)
+
     def test_push_job_survives_partial_notifier_failure(self):
         result = run_push_job(
             config=FakeConfig(),

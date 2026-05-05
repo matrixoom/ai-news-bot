@@ -50,6 +50,7 @@ _CHART_SYNC_GROUPS: dict[str, str] = {
     "ppi": "prices",
     "manufacturing_pmi": "climate",
     "non_manufacturing_pmi": "climate",
+    "comprehensive_pmi": "climate",
     "exports": "trade",
     "imports": "trade",
     "new_rmb_loans": "credit_breakdown",
@@ -780,7 +781,7 @@ class MacroDataService:
         }
 
     def _new_rmb_loans_combined_definition_payload(self) -> dict[str, Any]:
-        """构造新增人民币贷款合并图表定义（4条细分序列）。
+        """构造新增人民币贷款合并图表定义（总量虚线 + 4 条堆叠柱）。
 
         Returns:
             前端可直接使用的图表定义，含 wide 布局标记。
@@ -792,7 +793,7 @@ class MacroDataService:
             "unit": "亿元",
             "frequency": "monthly",
             "status": "sample",
-            "chart_type": "line",
+            "chart_type": "bar_stacked_line",
             "wide": True,
         }
 
