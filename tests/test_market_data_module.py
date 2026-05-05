@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.providers.live_data import AkshareMarketDataProvider
+from src.services.market_history_store import MarketHistoryStore
 from src.services.market_data_repository import MarketDataRepository
 from src.services.market_data_service import MarketDataService
 from src.services.market_data_sync_service import _housing_points_from_frame
@@ -107,6 +109,52 @@ class MarketDataHousingTests(unittest.TestCase):
         self.assertIn("北京 全局走势", series_by_name)
         self.assertEqual(series_by_name["北京 同比"]["points"][0]["value"], 10.0)
         self.assertEqual(series_by_name["北京 全局走势"]["points"][0]["unit"], "指数")
+
+
+class MarketIndexVolumeTests(unittest.TestCase):
+    """校验市场指数成交量会进入日报图表数据链路。"""
+
+    def setUp(self) -> None:
+        self.db_path = Path(".tmp-events-tests") / "market-index" / f"{self.id().split('.')[-1]}.db"
+        if self.db_path.exists():
+            self.db_path.unlink()
+
+    def test_live_provider_extracts_daily_volume_from_index_frame(self) -> None:
+        """校验 AKShare 日线表中的成交量会被解析为数值字段。"""
+        frame = pd.DataFrame(
+            [
+                {"日期": "2026-03-24", "收盘": 3810.0, "成交量": "1,234,500"},
+                {"日期": "2026-03-25", "收盘": 3825.0, "成交量": 2234500},
+            ]
+        )
+
+        records = AkshareMarketDataProvider()._extract_market_records(frame)
+
+        self.assertEqual(records[0]["volume"], 1234500.0)
+        self.assertEqual(records[1]["volume"], 2234500.0)
+
+    def test_market_history_store_round_trips_daily_volume(self) -> None:
+        """校验本地市场历史库会持久化并读取每日成交量。"""
+        store = MarketHistoryStore(self.db_path)
+
+        store.upsert_symbol_history(
+            symbol="CSI300",
+            display_name="沪深300",
+            currency="CNY",
+            provider_key="unit-test",
+            source_url="https://example.com",
+            points=[
+                type("Point", (), {"trade_date": pd.Timestamp("2026-03-24").date(), "close_price": 3810.0, "volume": 1000.0})(),
+                type("Point", (), {"trade_date": pd.Timestamp("2026-03-25").date(), "close_price": 3825.0, "volume": 2000.0})(),
+            ],
+            status="live",
+            window_label="近3个月",
+            warning_message="",
+        )
+
+        points = store.load_points(symbol="CSI300", end_date=pd.Timestamp("2026-03-25").date(), window_days=10)
+
+        self.assertEqual([point.volume for point in points], [1000.0, 2000.0])
 
 
 if __name__ == "__main__":

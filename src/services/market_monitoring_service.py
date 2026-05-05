@@ -246,6 +246,7 @@ class MarketMonitoringService:
                     close_price=round(point.close_price, 4),
                     ma20_price=round(ma20_price, 4) if ma20_price is not None else None,
                     deviation_pct=round(deviation_pct, 4) if deviation_pct is not None else None,
+                    volume=round(point.volume, 4) if isinstance(point.volume, (int, float)) else None,
                 )
             )
         return chart_points
@@ -258,10 +259,16 @@ class MarketMonitoringService:
             history_points = self._infer_history_points(snapshot)
             warning = "历史日期由旧版回看窗口反推，精度有限，请复核。"
 
+        current_volume = getattr(snapshot, "volume", None)
+        existing_current = next((point for point in history_points if point.trade_date == snapshot.trade_date), None)
+        if current_volume is None and existing_current is not None:
+            current_volume = getattr(existing_current, "volume", None)
+
         history_points.append(
             MarketIndexHistoryPoint(
                 trade_date=snapshot.trade_date,
                 close_price=float(snapshot.close_price),
+                volume=float(current_volume) if isinstance(current_volume, (int, float)) else None,
             )
         )
 
@@ -270,6 +277,7 @@ class MarketMonitoringService:
             points_by_date[point.trade_date] = MarketIndexHistoryPoint(
                 trade_date=point.trade_date,
                 close_price=float(point.close_price),
+                volume=float(point.volume) if isinstance(point.volume, (int, float)) else None,
             )
         ordered = sorted(points_by_date.values(), key=lambda item: item.trade_date)
         return ordered, warning
@@ -285,6 +293,7 @@ class MarketMonitoringService:
                 MarketIndexHistoryPoint(
                     trade_date=cursor,
                     close_price=float(close),
+                    volume=None,
                 )
             )
         inferred.reverse()

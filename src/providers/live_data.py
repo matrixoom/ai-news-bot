@@ -94,6 +94,19 @@ def _pick_first(mapping: dict[str, Any], names: Iterable[str]) -> Any | None:
     return None
 
 
+def _parse_optional_float(value: Any) -> float | None:
+    """把外部表格里的可选数值字段统一转成 float。"""
+    if value is None:
+        return None
+    text = str(value).strip().replace(",", "")
+    if not text or text.lower() in {"nan", "none", "null", "--"}:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
 def _month_end(year: int, month: int) -> date:
     if month == 12:
         return date(year, 12, 31)
@@ -519,6 +532,7 @@ class AkshareMarketDataProvider:
                 MarketIndexHistoryPoint(
                     trade_date=item["trade_date"],
                     close_price=item["close_price"],
+                    volume=item.get("volume"),
                 )
                 for item in eligible
             )
@@ -531,6 +545,7 @@ class AkshareMarketDataProvider:
                     close_price=current_record["close_price"],
                     currency="HKD" if symbol == "HSTECH" else "CNY",
                     source_url="https://akshare.akfamily.xyz/data/index/index.html",
+                    volume=current_record.get("volume"),
                     lookback_closes=lookback,
                     history_points=history_points,
                 )
@@ -596,6 +611,7 @@ class AkshareMarketDataProvider:
         for row in frame.to_dict(orient="records"):
             trade_date_value = _pick_first(row, ("date", "日期", "时间", "trade_date"))
             close_value = _pick_first(row, ("close", "latest", "收盘", "收盘价", "Close", "Latest", "最新价"))
+            volume_value = _pick_first(row, ("volume", "vol", "成交量", "成交量(手)", "Volume", "VOL"))
             if trade_date_value is None or close_value is None:
                 continue
 
@@ -606,6 +622,7 @@ class AkshareMarketDataProvider:
                         if "T" in str(trade_date_value)
                         else datetime.strptime(str(trade_date_value)[:10], "%Y-%m-%d").date(),
                         "close_price": float(close_value),
+                        "volume": _parse_optional_float(volume_value),
                     }
                 )
             except ValueError:
@@ -614,6 +631,7 @@ class AkshareMarketDataProvider:
                         {
                             "trade_date": datetime.strptime(str(trade_date_value), "%Y%m%d").date(),
                             "close_price": float(close_value),
+                            "volume": _parse_optional_float(volume_value),
                         }
                     )
                 except ValueError:

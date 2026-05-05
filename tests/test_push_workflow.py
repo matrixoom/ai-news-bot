@@ -199,6 +199,22 @@ class PushWorkflowTests(unittest.TestCase):
         self.assertIn("max-width:100%", html)
         self.assertIn('width="344"', html)
 
+    def test_report_service_renders_market_volume_bars(self):
+        """校验市场日报组合图下方柱体展示成交量，而不是继续依赖乖离率。"""
+        points = [
+            {"trade_date": "2026-03-24", "close_price": 3810.0, "ma20_price": 3790.0, "volume": 1000.0},
+            {"trade_date": "2026-03-25", "close_price": 3825.0, "ma20_price": 3801.0, "volume": 3000.0},
+            {"trade_date": "2026-03-26", "close_price": 3790.0, "ma20_price": 3805.0, "volume": 1500.0},
+        ]
+
+        html = PushReportService()._render_market_combo_chart(points, label="沪深300")
+
+        self.assertIn("Volume", html)
+        self.assertNotIn("Deviation</td>", html)
+        self.assertIn('fill="#ff5f72"', html)
+        self.assertIn('fill="#37c48d"', html)
+        self.assertGreaterEqual(html.count("<rect "), 3)
+
     def test_report_service_shrinks_market_summary_table_on_mobile(self):
         """校验手机端市场日报指数表格使用更小字号，降低横向拥挤感。"""
         snapshot = DashboardSnapshot(

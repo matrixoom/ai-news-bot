@@ -702,6 +702,7 @@ class DashboardService:
                         "close_price": point.close_price,
                         "ma20_price": point.ma20_price,
                         "deviation_pct": point.deviation_pct,
+                        "volume": point.volume,
                     }
                     for point in getattr(item, "chart_points", [])
                 ],
