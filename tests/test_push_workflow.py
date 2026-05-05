@@ -199,6 +199,48 @@ class PushWorkflowTests(unittest.TestCase):
         self.assertIn("max-width:100%", html)
         self.assertIn('width="344"', html)
 
+    def test_report_service_shrinks_market_summary_table_on_mobile(self):
+        """校验手机端市场日报指数表格使用更小字号，降低横向拥挤感。"""
+        snapshot = DashboardSnapshot(
+            generated_at="2026-03-26T08:00:00Z",
+            news_mode="hybrid",
+            title="日报",
+            summary="概览",
+            sections=[DashboardSection("market", "市场模型", "live", "desc")],
+            dashboard_summary=SummaryBlock(
+                title="日报",
+                subtitle="概览",
+                as_of_label="2026-03-26",
+                coverage_note="",
+                highlights=[],
+            ),
+            news_sections=[],
+            macro_sections=[],
+            market_sections=[
+                MarketCard(
+                    key="csi300",
+                    label="沪深300",
+                    close_value="3900",
+                    ma20_value="3850",
+                    signal="neutral",
+                    status="live",
+                    trade_date="2026-03-26",
+                    deviation_pct="+1.3%",
+                    source_label="akshare",
+                    explanation="说明",
+                    chart_points=[],
+                )
+            ],
+            event_sections=[],
+            data_status=[DataStatusItem("market", "市场模型", "live", "ok")],
+        )
+
+        html = PushReportService().build_email_html(snapshot, module_ids=["market"])
+
+        self.assertIn('class="email-market-summary-table"', html)
+        self.assertIn(".email-market-summary-table", html)
+        self.assertIn("font-size: 12px !important", html)
+
     def test_push_job_survives_partial_notifier_failure(self):
         result = run_push_job(
             config=FakeConfig(),

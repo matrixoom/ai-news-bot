@@ -153,6 +153,10 @@ class PushReportService:
           padding-left: 0 !important;
           padding-right: 0 !important;
         }}
+
+        .email-market-summary-table {{
+          font-size: 12px !important;
+        }}
       }}
     </style>
   </head>
@@ -252,7 +256,7 @@ class PushReportService:
   </div>
   <div style="padding-top:14px;">
     <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#7a6b4d;">Fishbowl Summary</div>
-    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:10px;">
+    <table class="email-market-summary-table" style="width:100%;border-collapse:collapse;font-size:14px;margin-top:10px;">
       <thead>
         <tr>
           <th style="padding:0 0 10px;text-align:left;border-bottom:1px solid #171717;">指数</th>
