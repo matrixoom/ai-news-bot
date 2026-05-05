@@ -16,6 +16,7 @@ export const moduleRootNavItems: NavItem[] = [
   { to: "/macro-data", title: "Macro Data", description: "GDP, credit, leverage, and prices" },
   { to: "/push", title: "Push Center", description: "Templates and schedules" },
   { to: "/market-data", title: "Market Data", description: "Commodities, precious metals, and stock indices" },
+  { to: "/trend-models", title: "Trend Models", description: "AI trend analysis and forecasting" },
 ];
 
 export const primaryNavItems: NavItem[] = [...moduleRootNavItems];
@@ -115,7 +116,19 @@ export const moduleDirectories: ModuleDirectory[] = [
         ariaLabel: "Market Data > 股票市场",
         description: "股指数据（待补充）",
       },
+      {
+        to: "/market-data?tab=real_estate",
+        title: "房地产",
+        ariaLabel: "Market Data > 房地产",
+        description: "70城二手房价格指数",
+      },
     ],
     defaultExpanded: true,
+  },
+  {
+    id: "trend-models",
+    item: moduleRootNavItems[3],
+    children: [],
+    defaultExpanded: false,
   },
 ];

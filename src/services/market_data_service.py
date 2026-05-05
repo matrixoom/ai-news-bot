@@ -17,6 +17,7 @@ MARKET_DATA_TABS = {
     "commodities": "商品",
     "precious_metals": "贵金属",
     "stock_market": "股票市场",
+    "real_estate": "房地产",
 }
 
 MARKET_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"}
@@ -28,6 +29,7 @@ _CHART_SYNC_GROUPS: dict[str, str] = {
     "gold_spot": "precious_metals",
     "silver_spot": "precious_metals",
     "copper": "precious_metals",
+    "second_hand_housing": "real_estate",
 }
 
 
@@ -54,6 +56,7 @@ class MarketDataService:
         sync_methods: dict[str, Any] = {
             "commodities": syncer.sync_commodities_history,
             "precious_metals": syncer.sync_precious_metals_history,
+            "real_estate": syncer.sync_real_estate_history,
         }
         point_counts = sync_methods[group]()
         return {"ok": True, "point_counts": point_counts}
@@ -62,7 +65,7 @@ class MarketDataService:
         normalized_tab = self._validate_tab(tab)
         charts = self._repository.list_indicators(normalized_tab)
         chart_payloads = [self._chart_definition_payload(chart) for chart in charts]
-        return {
+        payload: dict[str, Any] = {
             "generated_at": _utc_now(),
             "module": {
                 "id": "market-data",
@@ -93,6 +96,12 @@ class MarketDataService:
             ],
             "charts": chart_payloads,
         }
+        if normalized_tab == "real_estate":
+            try:
+                payload["housing_cities"] = self._repository.list_housing_cities("second_hand_housing")
+            except Exception:
+                payload["housing_cities"] = []
+        return payload
 
     def build_chart_payload(
         self,
@@ -102,6 +111,7 @@ class MarketDataService:
         start_date: str | None = None,
         end_date: str | None = None,
         frequency: str | None = None,
+        cities: list[str] | None = None,
     ) -> dict[str, Any]:
         resolved_range = self._resolve_range(
             range_type=range_type,
@@ -112,14 +122,8 @@ class MarketDataService:
         if definition is None:
             raise MarketDataValidationError("unknown chart id")
         normalized_frequency = self._validate_frequency(frequency or definition.frequency)
-        points = self._repository.load_points(
-            indicator_id=chart_id,
-            start_date=resolved_range.start_date,
-            end_date=resolved_range.end_date,
-            frequency=normalized_frequency,
-        )
-        sync_state = self._repository.get_sync_state(chart_id)
-        return {
+
+        payload: dict[str, Any] = {
             "id": definition.indicator_id,
             "title": definition.title,
             "unit": definition.unit,
@@ -131,15 +135,22 @@ class MarketDataService:
                 "start_date": resolved_range.start_date,
                 "end_date": resolved_range.end_date,
             },
-            "sync_state": {
-                "status": sync_state.status if sync_state else "unavailable",
-                "synced_at": sync_state.synced_at if sync_state else "",
-                "warning_message": sync_state.warning_message if sync_state else "",
-                "point_count": sync_state.point_count if sync_state else 0,
-            },
-            "series": [
+        }
+
+        # 房地产图表：按城市返回多个 series
+        if chart_id == "second_hand_housing":
+            available_cities = self._repository.list_housing_cities(chart_id)
+            payload["housing_cities"] = available_cities
+            selected_cities = cities or available_cities[:2]
+            raw_series = self._repository.load_housing_points(
+                indicator_id=chart_id,
+                cities=selected_cities,
+                start_date=resolved_range.start_date,
+                end_date=resolved_range.end_date,
+            )
+            payload["series"] = [
                 {
-                    "name": definition.title,
+                    "name": city,
                     "points": [
                         {
                             "date": point.period_end,
@@ -148,11 +159,50 @@ class MarketDataService:
                             "unit": point.unit,
                             "released_at": point.released_at,
                         }
-                        for point in points
+                        for point in city_points
                     ],
                 }
-            ],
+                for city, city_points in raw_series.items()
+                if city_points
+            ]
+            sync_state = self._repository.get_sync_state(chart_id)
+            payload["sync_state"] = {
+                "status": sync_state.status if sync_state else "unavailable",
+                "synced_at": sync_state.synced_at if sync_state else "",
+                "warning_message": sync_state.warning_message if sync_state else "",
+                "point_count": sync_state.point_count if sync_state else 0,
+            }
+            return payload
+
+        points = self._repository.load_points(
+            indicator_id=chart_id,
+            start_date=resolved_range.start_date,
+            end_date=resolved_range.end_date,
+            frequency=normalized_frequency,
+        )
+        sync_state = self._repository.get_sync_state(chart_id)
+        payload["sync_state"] = {
+            "status": sync_state.status if sync_state else "unavailable",
+            "synced_at": sync_state.synced_at if sync_state else "",
+            "warning_message": sync_state.warning_message if sync_state else "",
+            "point_count": sync_state.point_count if sync_state else 0,
         }
+        payload["series"] = [
+            {
+                "name": definition.title,
+                "points": [
+                    {
+                        "date": point.period_end,
+                        "period_label": point.period_label,
+                        "value": point.value,
+                        "unit": point.unit,
+                        "released_at": point.released_at,
+                    }
+                    for point in points
+                ],
+            }
+        ]
+        return payload
 
     def _validate_tab(self, tab: str) -> str:
         if tab not in MARKET_DATA_TABS:

@@ -30,6 +30,7 @@ class MarketDataSyncService:
         gold_loader: CommodityLoader | None = None,
         silver_loader: CommodityLoader | None = None,
         copper_loader: CommodityLoader | None = None,
+        housing_loader: CommodityLoader | None = None,
     ) -> None:
         self._repository = repository or MarketDataRepository()
         self._wti_loader = wti_loader or _load_wti_rows
@@ -37,6 +38,7 @@ class MarketDataSyncService:
         self._gold_loader = gold_loader or _load_gold_rows
         self._silver_loader = silver_loader or _load_silver_rows
         self._copper_loader = copper_loader or _load_copper_rows
+        self._housing_loader = housing_loader or _load_housing_rows
 
     def sync_commodities_history(self) -> dict[str, int]:
         """同步商品类（WTI 原油、布伦特原油）历史数据。
@@ -76,6 +78,19 @@ class MarketDataSyncService:
             "copper": len(copper_points),
         }
 
+    def sync_real_estate_history(self) -> dict[str, int]:
+        """同步房地产类（70 城二手房价格指数）历史数据。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        housing_points = self._housing_loader()
+        self._repository.replace_housing_points(
+            "second_hand_housing", housing_points, status="live", warning_message=""
+        )
+        return {"second_hand_housing": len(housing_points)}
+
     def sync_all_history(self) -> dict[str, dict[str, int]]:
         """同步所有市场数据历史。
 
@@ -86,6 +101,7 @@ class MarketDataSyncService:
         result: dict[str, dict[str, int]] = {}
         result["commodities"] = self.sync_commodities_history()
         result["precious_metals"] = self.sync_precious_metals_history()
+        result["real_estate"] = self.sync_real_estate_history()
         return result
 
 
@@ -327,6 +343,92 @@ def _world_bank_commodity_points(
             "released_at": "",
         })
     return points
+
+
+# 国家统计局每月发布的 70 个大中城市名单
+# 一线城市 (4) + 二线城市 (31) + 三线城市 (35)
+_HOUSING_CITIES: list[str] = [
+    # 一线城市
+    "北京", "上海", "广州", "深圳",
+    # 二线城市
+    "天津", "石家庄", "太原", "呼和浩特", "沈阳", "大连", "长春", "哈尔滨",
+    "南京", "杭州", "宁波", "合肥", "福州", "厦门", "南昌", "济南", "青岛",
+    "郑州", "武汉", "长沙", "南宁", "海口", "重庆", "成都", "贵阳", "昆明",
+    "西安", "兰州", "西宁", "银川", "乌鲁木齐",
+    # 三线城市
+    "唐山", "秦皇岛", "包头", "丹东", "锦州", "吉林", "牡丹江",
+    "无锡", "徐州", "扬州", "温州", "金华", "蚌埠", "安庆", "泉州", "九江",
+    "赣州", "烟台", "济宁", "洛阳", "平顶山", "宜昌", "襄阳", "岳阳", "常德",
+    "惠州", "湛江", "韶关", "桂林", "北海", "三亚", "泸州", "南充", "遵义",
+    "大理",
+]
+
+
+def _load_housing_rows() -> list[dict[str, Any]]:
+    """通过 AkShare 读取 70 城二手房价格指数并合并。
+
+    每次调用 macro_china_new_house_price 返回两个城市的数据，
+    使用 ThreadPoolExecutor 并发拉取以加速。
+
+    Returns:
+        标准化点位列表（含 city 字段）。
+    """
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    import akshare as ak
+
+    all_points: list[dict[str, Any]] = []
+
+    city_pairs: list[tuple[str, str]] = []
+    for i in range(0, len(_HOUSING_CITIES), 2):
+        city1 = _HOUSING_CITIES[i]
+        city2 = _HOUSING_CITIES[i + 1] if i + 1 < len(_HOUSING_CITIES) else _HOUSING_CITIES[i]
+        city_pairs.append((city1, city2))
+
+    def _fetch_pair(c1: str, c2: str) -> list[dict[str, Any]]:
+        try:
+            frame = ak.macro_china_new_house_price(c1, c2)
+        except Exception:
+            return []
+        points: list[dict[str, Any]] = []
+        for _, row in frame.iterrows():
+            try:
+                date_val = row["日期"]
+                if hasattr(date_val, "strftime"):
+                    date_str = date_val.strftime("%Y-%m-%d")
+                else:
+                    date_str = str(date_val)[:10]
+            except (TypeError, ValueError):
+                continue
+            city = str(row["城市"]).strip()
+            value = _optional_float(row.get("二手住宅价格指数-同比"))
+            if value is None:
+                continue
+            points.append({
+                "period_end": date_str,
+                "period_label": date_str[:7],
+                "city": city,
+                "value": value,
+                "unit": "%",
+                "frequency": "monthly",
+                "provider_key": "akshare_housing",
+                "source_url": "https://www.stats.gov.cn/sj/zxfb/",
+                "released_at": "",
+            })
+        return points
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(_fetch_pair, c1, c2): (c1, c2) for c1, c2 in city_pairs}
+        for future in as_completed(futures):
+            try:
+                points = future.result()
+                all_points.extend(points)
+            except Exception as e:
+                c1, c2 = futures[future]
+                print(f"[housing_sync] 获取 {c1}/{c2} 失败: {e}")
+
+    return all_points
 
 
 def _optional_float(value: Any) -> float | None:

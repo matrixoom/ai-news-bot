@@ -1,6 +1,6 @@
 import type { ModuleTabDefinition } from "../../../shared/lib/module-tabs";
 
-export type MarketDataTab = "commodities" | "precious_metals" | "stock_market";
+export type MarketDataTab = "commodities" | "precious_metals" | "stock_market" | "real_estate";
 
 export type MarketDataRange = "6m" | "1y" | "3y" | "5y" | "10y" | "custom";
 
@@ -47,6 +47,7 @@ export type MarketDataModulePayload = {
   frequency_options: MarketFrequencyOption[];
   range_options: MarketRangeOption[];
   charts: MarketChartDefinition[];
+  housing_cities?: string[];
 };
 
 export type MarketChartPoint = {
@@ -79,10 +80,12 @@ export type MarketChartPayload = {
     name: string;
     points: MarketChartPoint[];
   }>;
+  housing_cities?: string[];
 };
 
 export const MARKET_DATA_TABS: readonly ModuleTabDefinition<MarketDataTab>[] = [
   { value: "commodities", label: "商品", description: "WTI原油、布伦特原油" },
   { value: "precious_metals", label: "贵金属", description: "黄金、白银、铜" },
   { value: "stock_market", label: "股票市场", description: "股指数据（待补充）" },
+  { value: "real_estate", label: "房地产", description: "70城二手房价格指数" },
 ];

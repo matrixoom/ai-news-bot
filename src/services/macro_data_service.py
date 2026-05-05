@@ -28,6 +28,7 @@ NEW_RMB_LOANS_COMBINED_CHART_ID = "new_rmb_loans"
 SOCIAL_FINANCING_CHART_ID = "social_financing"
 
 _NEW_RMB_LOANS_SERIES = [
+    {"indicator_id": "new_rmb_loans", "name": "新增人民币贷款总计"},
     {"indicator_id": "household_short_term_loans", "name": "居民新增短期贷款"},
     {"indicator_id": "household_long_term_loans", "name": "居民新增长期贷款"},
     {"indicator_id": "corporate_short_term_loans", "name": "企业新增短期贷款"},
@@ -815,14 +816,14 @@ class MacroDataService:
     def _build_new_rmb_loans_combined_payload(
         self, resolved_range: ResolvedDateRange, frequency: str
     ) -> dict[str, Any]:
-        """合并居民/企业短期/长期新增贷款 4 条序列为单张图表。
+        """合并新增人民币贷款总计及居民/企业短期/长期贷款为单张图表。
 
         Args:
             resolved_range: 已解析的目标展示范围。
             frequency: 数据频率。
 
         Returns:
-            包含 4 条序列的图表 payload。
+            包含 5 条序列的图表 payload。
         """
 
         series: list[dict[str, Any]] = []
