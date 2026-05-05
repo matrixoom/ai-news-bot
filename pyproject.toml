@@ -28,3 +28,7 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["to_delete", ".git", ".venv", ".uv-python", "frontend", ".third_part_newsnow"]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from contextlib import contextmanager
 import re
@@ -25,6 +25,38 @@ class StoredOutlookFinding:
     source_title: str
     source_url: str
     provider: str
+
+
+@dataclass(frozen=True)
+class TimelineEventRecord:
+    """时间轴事件记录。
+
+    Args:
+        id: SQLite 自增主键。
+        region: 事件区域，取值为 domestic 或 international。
+        event_date: 事件日期，使用 YYYY-MM-DD。
+        title: 事件标题。
+        summary: 事件摘要。
+        category: 事件分类，当前为 technology、politics 或 finance。
+        source_url: 来源链接。
+        source_name: 来源名称。
+        created_at: 首次创建时间。
+        updated_at: 最近更新时间。
+
+    Returns:
+        不可变的本地持久化事件视图。
+    """
+
+    id: int
+    region: str
+    event_date: str
+    title: str
+    summary: str
+    category: str
+    source_url: str
+    source_name: str
+    created_at: str
+    updated_at: str
 
 
 class EventsOutlookStore:
@@ -128,6 +160,218 @@ class EventsOutlookStore:
             for row in rows
         ]
 
+    def create_timeline_event(
+        self,
+        *,
+        region: str,
+        event_date: str,
+        title: str,
+        summary: str,
+        category: str,
+        source_url: str = "",
+        source_name: str = "",
+        event_key: str | None = None,
+        now: str | None = None,
+    ) -> TimelineEventRecord:
+        """新增一条时间轴事件。
+
+        Args:
+            region: 事件区域。
+            event_date: 事件日期。
+            title: 事件标题。
+            summary: 事件摘要。
+            category: 事件分类。
+            source_url: 来源链接。
+            source_name: 来源名称。
+            event_key: 可选去重键；手工事件为空。
+            now: 当前写入时间，便于测试固定。
+
+        Returns:
+            新增后的事件记录。
+        """
+        timestamp = now or self._utc_timestamp()
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO timeline_events (
+                    event_key,
+                    region,
+                    event_date,
+                    title,
+                    summary,
+                    category,
+                    source_url,
+                    source_name,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_key,
+                    region.strip(),
+                    event_date.strip(),
+                    title.strip(),
+                    summary.strip(),
+                    category.strip(),
+                    source_url.strip(),
+                    source_name.strip(),
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            event_id = int(cursor.lastrowid)
+
+        event = self.get_timeline_event(event_id)
+        if event is None:
+            raise RuntimeError("timeline event insert failed")
+        return event
+
+    def upsert_timeline_events(self, events: Iterable[dict[str, str]], *, now: str) -> int:
+        """按去重键写入默认时间轴事件。
+
+        Args:
+            events: 事件字典列表，必须包含 event_key。
+            now: 当前写入时间。
+
+        Returns:
+            写入或更新的记录数量。
+        """
+        written = 0
+        with self._session() as connection:
+            for event in events:
+                connection.execute(
+                    """
+                    INSERT INTO timeline_events (
+                        event_key,
+                        region,
+                        event_date,
+                        title,
+                        summary,
+                        category,
+                        source_url,
+                        source_name,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(event_key) DO UPDATE SET
+                        event_date = excluded.event_date,
+                        title = excluded.title,
+                        summary = excluded.summary,
+                        category = excluded.category,
+                        source_url = excluded.source_url,
+                        source_name = excluded.source_name,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        event["event_key"],
+                        event["region"],
+                        event["event_date"],
+                        event["title"],
+                        event["summary"],
+                        event["category"],
+                        event.get("source_url", ""),
+                        event.get("source_name", ""),
+                        now,
+                        now,
+                    ),
+                )
+                written += 1
+        return written
+
+    def list_timeline_events(self, *, region: str, start_date: str, end_date: str) -> list[TimelineEventRecord]:
+        """按区域和日期范围读取时间轴事件。
+
+        Args:
+            region: 事件区域。
+            start_date: 起始日期。
+            end_date: 结束日期。
+
+        Returns:
+            按日期、标题排序的事件列表。
+        """
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    region,
+                    event_date,
+                    title,
+                    summary,
+                    category,
+                    source_url,
+                    source_name,
+                    created_at,
+                    updated_at
+                FROM timeline_events
+                WHERE region = ? AND event_date >= ? AND event_date <= ?
+                ORDER BY event_date ASC, title ASC, id ASC
+                """,
+                (region, start_date, end_date),
+            ).fetchall()
+
+        return [self._timeline_event_from_row(row) for row in rows]
+
+    def get_timeline_event(self, event_id: int) -> TimelineEventRecord | None:
+        """按主键读取一条时间轴事件。
+
+        Args:
+            event_id: 事件主键。
+
+        Returns:
+            存在时返回事件记录，否则返回 None。
+        """
+        with self._session() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    id,
+                    region,
+                    event_date,
+                    title,
+                    summary,
+                    category,
+                    source_url,
+                    source_name,
+                    created_at,
+                    updated_at
+                FROM timeline_events
+                WHERE id = ?
+                """,
+                (event_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+        return self._timeline_event_from_row(row)
+
+    def update_timeline_event(self, *, event_id: int, title: str, summary: str, now: str | None = None) -> TimelineEventRecord | None:
+        """更新时间轴事件标题和摘要。
+
+        Args:
+            event_id: 事件主键。
+            title: 新标题。
+            summary: 新摘要。
+            now: 当前写入时间，便于测试固定。
+
+        Returns:
+            更新后的事件记录；事件不存在时返回 None。
+        """
+        timestamp = now or self._utc_timestamp()
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE timeline_events
+                SET title = ?, summary = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (title.strip(), summary.strip(), timestamp, event_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+
+        return self.get_timeline_event(event_id)
+
     def _ensure_schema(self) -> None:
         with self._session() as connection:
             connection.execute(
@@ -154,6 +398,99 @@ class EventsOutlookStore:
                 ON outlook_findings(expected_date)
                 """
             )
+            self._ensure_timeline_events_schema(connection)
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_region_date
+                ON timeline_events(region, event_date)
+                """
+            )
+
+    def _ensure_timeline_events_schema(self, connection: sqlite3.Connection) -> None:
+        """确保时间轴事件表支持当前分类约束。
+
+        Args:
+            connection: 当前 SQLite 连接。
+
+        Returns:
+            无返回值；必要时会把旧的两分类 CHECK 表迁移为三分类表。
+        """
+        row = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'timeline_events'"
+        ).fetchone()
+        if row is None:
+            connection.execute(self._timeline_events_table_sql("timeline_events", include_if_not_exists=True))
+            return
+        table_sql = str(row[0] or "")
+        if "'finance'" in table_sql:
+            return
+
+        connection.execute(self._timeline_events_table_sql("timeline_events_next", include_if_not_exists=False))
+        connection.execute(
+            """
+            INSERT INTO timeline_events_next (
+                id,
+                event_key,
+                region,
+                event_date,
+                title,
+                summary,
+                category,
+                source_url,
+                source_name,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                event_key,
+                region,
+                event_date,
+                title,
+                summary,
+                category,
+                source_url,
+                source_name,
+                created_at,
+                updated_at
+            FROM timeline_events
+            """
+        )
+        connection.execute("DROP TABLE timeline_events")
+        connection.execute("ALTER TABLE timeline_events_next RENAME TO timeline_events")
+
+    def _timeline_events_table_sql(self, table_name: str, *, include_if_not_exists: bool) -> str:
+        """生成时间轴事件表建表 SQL。
+
+        Args:
+            table_name: 要创建的表名。
+            include_if_not_exists: 是否带 IF NOT EXISTS。
+
+        Returns:
+            可直接执行的建表 SQL。
+        """
+        if_not_exists = "IF NOT EXISTS " if include_if_not_exists else ""
+        return f"""
+                CREATE TABLE {if_not_exists}{table_name} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_key TEXT UNIQUE,
+                    region TEXT NOT NULL,
+                    event_date TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    source_url TEXT NOT NULL DEFAULT '',
+                    source_name TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    CHECK (region IN ('domestic', 'international')),
+                    CHECK (category IN ('technology', 'politics', 'finance'))
+                )
+                """
+
+    def _utc_timestamp(self) -> str:
+        """返回用于 SQLite 审计字段的 UTC 时间戳。"""
+        return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._db_path)
@@ -174,3 +511,18 @@ class EventsOutlookStore:
         normalized_region = region.strip().lower()
         normalized_date = expected_date.strip()
         return f"{normalized_region}|{normalized_date}|{normalized_title}"
+
+    def _timeline_event_from_row(self, row) -> TimelineEventRecord:
+        """把 SQLite 行转换为时间轴事件记录。"""
+        return TimelineEventRecord(
+            id=int(row[0]),
+            region=row[1],
+            event_date=row[2],
+            title=row[3],
+            summary=row[4],
+            category=row[5],
+            source_url=row[6],
+            source_name=row[7],
+            created_at=row[8],
+            updated_at=row[9],
+        )

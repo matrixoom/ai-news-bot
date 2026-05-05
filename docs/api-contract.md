@@ -17,6 +17,8 @@
 | --- | --- | --- |
 | `/` | GET | SPA 可用时重定向到 `/push`；否则返回 workbench unavailable |
 | `/macro-data` | GET | Macro Data SPA 入口 |
+| `/event-outlook` | GET | Event Outlook SPA 入口，国内/国际时间轴 |
+| `/notes` | GET | Notes SPA 入口，当前为空目录页 |
 | `/market-data` | GET | Market Data SPA 入口 |
 | `/push` | GET | Push Center SPA 入口 |
 | `/settings` | GET | Settings SPA 入口 |
@@ -209,7 +211,104 @@ uv run python main.py macro-sync
 - `{city} 环比`：`二手住宅价格指数-环比 - 100`，单位 `%`
 - `{city} 全局走势`：从历史首期前值 `100` 起，用环比百分比逐月复合得到的全局房价走势指数，单位 `指数`
 
-### 4.5 `GET /api/frontend/modules/push`
+### 4.5 Event Outlook 时间轴接口
+
+#### 4.5.1 `GET /api/frontend/modules/event-outlook`
+
+查询参数：
+
+- `region`：`domestic | international`，默认 `domestic`
+- `start_date`：可选，`YYYY-MM-DD`；默认浏览器/服务端当前日期
+- `end_date`：可选，`YYYY-MM-DD`；默认起始日期后一年
+- `refresh`：可选，传 `1` 时刷新内置科技、时政、财经未来事件种子
+
+用途：返回 Event Outlook 一级模块的国内/国际时间轴数据。事件持久化在 `.data/events_outlook.db` 的 `timeline_events` 表中，`category` 取值为 `technology | politics | finance`，前端分别以三种颜色展示。
+
+成功：`200`
+
+```json
+{
+  "generated_at": "2026-05-06T00:00:00Z",
+  "module": {
+    "id": "event-outlook",
+    "title": "Event Outlook",
+    "description": "Forward calendar for technology, policy, and finance events."
+  },
+  "region": "domestic",
+  "tabs": [
+    { "value": "domestic", "label": "国内" },
+    { "value": "international", "label": "国际" }
+  ],
+  "range": {
+    "start_date": "2026-05-06",
+    "end_date": "2027-05-06"
+  },
+  "resolution_options": [
+    { "value": "day", "label": "天" },
+    { "value": "week", "label": "周" },
+    { "value": "month", "label": "月" }
+  ],
+  "events": [
+    {
+      "id": 1,
+      "region": "domestic",
+      "event_date": "2026-06-23",
+      "title": "夏季达沃斯 2026",
+      "summary": "世界经济论坛新领军者年会将于 2026 年 6 月 23 日至 25 日在大连举行。",
+      "category": "finance",
+      "source_name": "World Economic Forum",
+      "source_url": "https://www.weforum.org/meetings/annual-meeting-of-the-new-champions-2026/about/",
+      "updated_at": "2026-05-06T00:00:00Z"
+    }
+  ]
+}
+```
+
+失败：
+
+- `400`：`invalid_event_outlook_payload`
+- `503`：`frontend_event_outlook_module_unavailable`
+
+#### 4.5.2 `POST /api/frontend/modules/event-outlook/events`
+
+用途：手动录入一条时间轴事件并写入 SQLite。
+
+请求体：
+
+```json
+{
+  "region": "domestic",
+  "event_date": "2026-09-09",
+  "title": "2026 中国国际服务贸易交易会",
+  "summary": "服贸会及全球服务贸易峰会窗口。",
+  "category": "finance",
+  "source_name": "manual",
+  "source_url": ""
+}
+```
+
+成功：`201`，返回 `{ "event": { ... } }`
+
+失败：`400`，`invalid_event_outlook_payload`
+
+#### 4.5.3 `PUT /api/frontend/modules/event-outlook/events/{event_id}`
+
+用途：修改事件标题与摘要，修改后立即持久化。
+
+请求体：
+
+```json
+{
+  "title": "COMPUTEX 2026 更新",
+  "summary": "更新后的事件摘要。"
+}
+```
+
+成功：`200`，返回 `{ "event": { ... } }`
+
+失败：`400`，`invalid_event_outlook_payload`
+
+### 4.6 `GET /api/frontend/modules/push`
 
 查询参数：
 

@@ -1,10 +1,12 @@
 import {
   Bars3Icon,
+  CalendarDaysIcon,
   ChartBarSquareIcon,
   ChartPieIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   Cog6ToothIcon,
+  DocumentTextIcon,
   PaperAirplaneIcon,
   SparklesIcon,
 } from "@heroicons/react/24/outline";
@@ -150,6 +152,14 @@ function CompactNavIcon({ item }: { item: NavItem }) {
 
   if (pathname === "/market-data") {
     return <ChartPieIcon aria-hidden="true" className={iconClassName} />;
+  }
+
+  if (pathname === "/event-outlook") {
+    return <CalendarDaysIcon aria-hidden="true" className={iconClassName} />;
+  }
+
+  if (pathname === "/notes") {
+    return <DocumentTextIcon aria-hidden="true" className={iconClassName} />;
   }
 
   if (pathname === "/trend-models") {

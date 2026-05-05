@@ -9,6 +9,8 @@ from fastapi.responses import HTMLResponse
 
 WORKBENCH_ROUTES = (
     "/macro-data",
+    "/event-outlook",
+    "/notes",
     "/market-data",
     "/push",
     "/settings",

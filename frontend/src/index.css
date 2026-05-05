@@ -107,3 +107,51 @@ body {
 [data-theme="dark"] .fill-slate-300 {
   fill: rgb(100 116 139) !important;
 }
+
+.event-outlook-timeline .vis-panel.vis-center,
+.event-outlook-timeline .vis-panel.vis-left,
+.event-outlook-timeline .vis-panel.vis-right,
+.event-outlook-timeline .vis-panel.vis-top,
+.event-outlook-timeline .vis-panel.vis-bottom {
+  border-color: rgb(226 232 240);
+}
+
+.event-outlook-timeline .vis-time-axis .vis-text {
+  color: rgb(71 85 105);
+  font-size: 12px;
+}
+
+.event-outlook-timeline .vis-item {
+  border-radius: 6px;
+  border-width: 1px;
+  box-shadow: 0 8px 18px rgb(15 23 42 / 0.08);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.event-outlook-timeline .vis-item.event-technology {
+  border-color: rgb(14 165 233);
+  background: rgb(224 242 254);
+  color: rgb(12 74 110);
+}
+
+.event-outlook-timeline .vis-item.event-politics {
+  border-color: rgb(244 114 182);
+  background: rgb(252 231 243);
+  color: rgb(131 24 67);
+}
+
+.event-outlook-timeline .vis-item.event-finance {
+  border-color: rgb(34 197 94);
+  background: rgb(220 252 231);
+  color: rgb(22 101 52);
+}
+
+.event-outlook-timeline .vis-current-time {
+  background-color: rgb(14 165 233);
+}
+
+[data-theme="dark"] .event-outlook-timeline .vis-panel,
+[data-theme="dark"] .event-outlook-timeline .vis-labelset .vis-label {
+  border-color: rgb(51 65 85) !important;
+}

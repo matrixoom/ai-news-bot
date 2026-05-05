@@ -14,6 +14,8 @@ export type ModuleDirectory = {
 
 export const moduleRootNavItems: NavItem[] = [
   { to: "/macro-data", title: "Macro Data", description: "GDP, credit, leverage, and prices" },
+  { to: "/event-outlook", title: "Event Outlook", description: "Technology, policy, and finance event calendar" },
+  { to: "/notes", title: "Notes", description: "Workspace notes" },
   { to: "/push", title: "Push Center", description: "Templates and schedules" },
   { to: "/market-data", title: "Market Data", description: "Commodities, precious metals, and stock indices" },
   { to: "/trend-models", title: "Trend Models", description: "AI trend analysis and forecasting" },
@@ -77,7 +79,7 @@ export const moduleDirectories: ModuleDirectory[] = [
   },
   {
     id: "push",
-    item: moduleRootNavItems[1],
+    item: moduleRootNavItems[3],
     children: [
       {
         to: "/push?tab=schedules",
@@ -96,7 +98,7 @@ export const moduleDirectories: ModuleDirectory[] = [
   },
   {
     id: "market-data",
-    item: moduleRootNavItems[2],
+    item: moduleRootNavItems[4],
     children: [
       {
         to: "/market-data?tab=commodities",
@@ -126,8 +128,33 @@ export const moduleDirectories: ModuleDirectory[] = [
     defaultExpanded: true,
   },
   {
+    id: "event-outlook",
+    item: moduleRootNavItems[1],
+    children: [
+      {
+        to: "/event-outlook?tab=domestic",
+        title: "国内",
+        ariaLabel: "Event Outlook > 国内",
+        description: "China-region technology, policy, and finance events",
+      },
+      {
+        to: "/event-outlook?tab=international",
+        title: "国际",
+        ariaLabel: "Event Outlook > 国际",
+        description: "Global technology, policy, and finance events",
+      },
+    ],
+    defaultExpanded: true,
+  },
+  {
+    id: "notes",
+    item: moduleRootNavItems[2],
+    children: [],
+    defaultExpanded: false,
+  },
+  {
     id: "trend-models",
-    item: moduleRootNavItems[3],
+    item: moduleRootNavItems[5],
     children: [],
     defaultExpanded: false,
   },
