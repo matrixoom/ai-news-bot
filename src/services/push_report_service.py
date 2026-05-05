@@ -544,7 +544,7 @@ class PushReportService:
       <td style="white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#ff5f72;vertical-align:middle;margin-right:6px;"></span>Deviation</td>
     </tr>
   </table>
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="100%" height="{height:.0f}" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;max-width:100%;height:auto;" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="100%" height="{height:.0f}" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;max-width:100%;min-height:{height:.0f}px;" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
     <line x1="{left:.2f}" y1="{top:.2f}" x2="{width - right:.2f}" y2="{top:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
     <line x1="{left:.2f}" y1="{top + (price_height / 2):.2f}" x2="{width - right:.2f}" y2="{top + (price_height / 2):.2f}" stroke="#efe6d3" stroke-width="1" stroke-dasharray="3 3"></line>
     <line x1="{left:.2f}" y1="{top + price_height:.2f}" x2="{width - right:.2f}" y2="{top + price_height:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
