@@ -62,7 +62,18 @@ uv run python -m pytest tests/test_task08_push_workflow.py tests/test_push_cente
 uv run python -m pytest tests/test_task05_macro_monitoring.py -q
 ```
 
-### NewsNow 子模块
+### 修改后验证
+
+每次代码修改后必须执行：
+
+- **后端修改后**：运行相关测试套件，确保全部通过
+- **前端修改后**：运行 `cmd /c npm --prefix frontend run build`（含 tsc -b + vite build），确保无编译错误
+- 两项均通过才算修改完成，不要跳过
+
+# 验证后提交
+After every complete file edit, check if the test suite passes. If all tests pass, stage all changed files, generate a conventional commit message summarizing the changes, and create a pull request against the main branch with a detailed description of what was changed, why, and which files were affected. If tests fail, analyze the failure output, fix the code, and re-run tests up to 3 times before asking for help.
+
+### NewsNow 子模块(废弃)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/init-newsnow-submodule.ps1       # 初始化 + npm install
@@ -136,13 +147,7 @@ Adapter（`model/*-adapter.ts`）隔离 UI 与后端字段名。当后端响应�
 
 4. **数据降级**：每个 provider 返回 `live | degraded | unavailable`。Service 按 live → fallback → sample 依次降级，确保 UI 始终有内容可展示。
 
-### 新闻模式
 
-- `hybrid`：优先使用 NewsNow API，失败时回退到上游抓取
-- `api`：仅使用 NewsNow API
-- `upstream`：使用本地 NewsNow 上游项目（`.third_part_newsnow/`）
-
-在任何页面或端点通过 `?news_mode=` 传递。
 
 ### 重要约定
 
@@ -153,3 +158,12 @@ Adapter（`model/*-adapter.ts`）隔离 UI 与后端字段名。当后端响应�
 - **图表要求**：每张图表必须包含标题、单位标注和图例。使用 ECharts，通过 shared 组件调用。
 - **注释语言**：注释使用中文，保持简洁、不冗余。
 - **AGENTS.md**：包含完整规则手册（提交规范、代码边界、变更流程、回归检查清单）。任何非简单修改前应先阅读该文件。
+
+## 前端图表开发
+
+ECharts + React 集成时的关键约束（基于实际调试经验）：
+
+- **禁止对 wheel 事件使用 stopPropagation**：会阻断 ECharts 内部的 dataZoom 处理器，导致缩放功能失效
+- **图表容器挂载时机**：使用 `ref callback` 或确保图表 div 已挂载后再绑定事件监听器。避免在 useEffect 中使用空依赖数组绑定监听器到条件渲染的图表容器上——容器可能在 effect 执行时尚未挂载
+- **交互验证**：实现任何图表交互后，必须同时验证：① 新功能正常；② ECharts 内置功能（缩放、tooltip、dataZoom）未被破坏；③ 页面级交互（滚动、缩放）未受负面影响
+- **数值参数精确实现**：用户指定的坐标轴范围、刻度间隔等数值参数需精确匹配。不确定时先确认，避免因默认值与期望不符而返工
