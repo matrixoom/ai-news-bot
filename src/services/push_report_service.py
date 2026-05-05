@@ -439,12 +439,14 @@ class PushReportService:
                 continue
             ma20_price = point.get("ma20_price")
             deviation_pct = point.get("deviation_pct")
+            volume = point.get("volume")
             normalized.append(
                 {
                     "trade_date": str(point.get("trade_date") or ""),
                     "close_price": float(close_price),
                     "ma20_price": float(ma20_price) if isinstance(ma20_price, (int, float)) else None,
                     "deviation_pct": float(deviation_pct) if isinstance(deviation_pct, (int, float)) else None,
+                    "volume": float(volume) if isinstance(volume, (int, float)) else None,
                 }
             )
         return normalized
@@ -464,10 +466,9 @@ class PushReportService:
         top = 12.0
         price_height = 66.0
         gap = 10.0
-        deviation_height = 24.0
+        volume_height = 24.0
         chart_width = width - left - right
-        zero_y = top + price_height + gap + (deviation_height / 2)
-        deviation_center = deviation_height / 2
+        volume_baseline_y = top + price_height + gap + volume_height
 
         price_values = [
             value
@@ -481,14 +482,14 @@ class PushReportService:
             max_price += 1
             min_price -= 1
 
-        deviation_values = [
-            float(point["deviation_pct"])
+        volume_values = [
+            float(point["volume"])
             for point in points
-            if isinstance(point.get("deviation_pct"), (int, float))
+            if isinstance(point.get("volume"), (int, float)) and float(point["volume"]) >= 0
         ]
-        max_abs_deviation = max((abs(value) for value in deviation_values), default=1.0)
-        if math.isclose(max_abs_deviation, 0.0):
-            max_abs_deviation = 1.0
+        max_volume = max(volume_values, default=1.0)
+        if math.isclose(max_volume, 0.0):
+            max_volume = 1.0
 
         def to_x(index: int) -> float:
             return left + (chart_width * index) / max(len(points) - 1, 1)
@@ -496,8 +497,8 @@ class PushReportService:
         def to_price_y(value: float) -> float:
             return top + ((max_price - value) / (max_price - min_price)) * price_height
 
-        def to_deviation_y(value: float) -> float:
-            return zero_y - (value / max_abs_deviation) * deviation_center
+        def to_volume_height(value: float) -> float:
+            return (value / max_volume) * volume_height
 
         close_path = self._build_svg_line_path(
             [(to_x(index), to_price_y(float(point["close_price"]))) for index, point in enumerate(points)]
@@ -516,14 +517,21 @@ class PushReportService:
         bar_width = min(8.0, max(3.0, step * 0.55))
         bars: list[str] = []
         for index, point in enumerate(points):
-            value = point.get("deviation_pct")
+            value = point.get("volume")
             if not isinstance(value, (int, float)):
                 continue
+            volume_value = max(float(value), 0.0)
             x = to_x(index) - (bar_width / 2)
-            y = to_deviation_y(float(value))
-            bar_top = min(y, zero_y)
-            bar_height = max(abs(zero_y - y), 1.0)
-            fill = "#ff5f72" if value > 0 else "#37c48d" if value < 0 else "#8fa0b4"
+            bar_height = max(to_volume_height(volume_value), 1.0)
+            bar_top = volume_baseline_y - bar_height
+            previous_close = points[index - 1]["close_price"] if index > 0 else None
+            fill = (
+                "#ff5f72"
+                if isinstance(previous_close, (int, float)) and float(point["close_price"]) >= float(previous_close)
+                else "#37c48d"
+                if isinstance(previous_close, (int, float))
+                else "#8fa0b4"
+            )
             bars.append(
                 f'<rect x="{x:.2f}" y="{bar_top:.2f}" width="{bar_width:.2f}" '
                 f'height="{bar_height:.2f}" rx="1.5" fill="{fill}"></rect>'
@@ -545,14 +553,14 @@ class PushReportService:
     <tr>
       <td style="padding:0 14px 0 0;white-space:nowrap;"><span style="display:inline-block;width:12px;height:2px;background:#f6a313;vertical-align:middle;margin-right:6px;"></span>Close</td>
       <td style="padding:0 14px 0 0;white-space:nowrap;"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #31b8c4;vertical-align:middle;margin-right:6px;"></span>M20</td>
-      <td style="white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#ff5f72;vertical-align:middle;margin-right:6px;"></span>Deviation</td>
+      <td style="white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#ff5f72;vertical-align:middle;margin-right:6px;"></span>Volume</td>
     </tr>
   </table>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="{width:.0f}" height="{height:.0f}" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%;min-height:{height:.0f}px;" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
     <line x1="{left:.2f}" y1="{top:.2f}" x2="{width - right:.2f}" y2="{top:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
     <line x1="{left:.2f}" y1="{top + (price_height / 2):.2f}" x2="{width - right:.2f}" y2="{top + (price_height / 2):.2f}" stroke="#efe6d3" stroke-width="1" stroke-dasharray="3 3"></line>
     <line x1="{left:.2f}" y1="{top + price_height:.2f}" x2="{width - right:.2f}" y2="{top + price_height:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
-    <line x1="{left:.2f}" y1="{zero_y:.2f}" x2="{width - right:.2f}" y2="{zero_y:.2f}" stroke="#d0c3a8" stroke-width="1" stroke-dasharray="4 4"></line>
+    <line x1="{left:.2f}" y1="{volume_baseline_y:.2f}" x2="{width - right:.2f}" y2="{volume_baseline_y:.2f}" stroke="#d0c3a8" stroke-width="1" stroke-dasharray="4 4"></line>
     {''.join(bars)}
     <path d="{close_path}" fill="none" stroke="#f6a313" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
     <path d="{ma20_path}" fill="none" stroke="#31b8c4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 4"></path>

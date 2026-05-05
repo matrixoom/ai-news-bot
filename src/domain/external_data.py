@@ -67,15 +67,16 @@ class SearchResultItem:
 
 @dataclass(frozen=True)
 class MarketIndexHistoryPoint:
-    """One historical close used for market monitoring and charting."""
+    """用于市场监控与图表展示的单日指数历史数据。"""
 
     trade_date: date
     close_price: float
+    volume: float | None = None
 
 
 @dataclass(frozen=True)
 class MarketIndexSnapshot:
-    """Raw market snapshot for a broad index on a trading day."""
+    """宽基指数在单个交易日的原始市场快照。"""
 
     provider: str
     symbol: str
@@ -84,6 +85,7 @@ class MarketIndexSnapshot:
     close_price: float
     currency: str
     source_url: str
+    volume: float | None = None
     lookback_closes: tuple[float, ...] = ()
     history_points: tuple[MarketIndexHistoryPoint, ...] = field(default_factory=tuple)
 

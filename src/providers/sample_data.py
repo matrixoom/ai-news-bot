@@ -361,6 +361,7 @@ class SampleMarketDataProvider:
     provider_key = "sample-market"
 
     def _build_history_points(self, *, trade_date: date, start_value: float, drift: float) -> tuple[MarketIndexHistoryPoint, ...]:
+        """生成带成交量的样例指数历史点，便于日报图表在离线环境展示。"""
         points: list[MarketIndexHistoryPoint] = []
         cursor = trade_date - timedelta(days=210)
         value = start_value
@@ -372,6 +373,7 @@ class SampleMarketDataProvider:
                     MarketIndexHistoryPoint(
                         trade_date=cursor,
                         close_price=round(value + wave, 2),
+                        volume=round(8_000_000 + (step % 12) * 420_000 + drift * 120_000, 2),
                     )
                 )
                 value += drift
@@ -409,6 +411,7 @@ class SampleMarketDataProvider:
                     close_price=current[symbol],
                     currency="HKD" if symbol == "HSTECH" else "CNY",
                     source_url="https://akshare.akfamily.xyz/",
+                    volume=history[symbol][-1].volume if history[symbol] else None,
                     lookback_closes=tuple(point.close_price for point in history[symbol][-19:]),
                     history_points=history[symbol],
                 )

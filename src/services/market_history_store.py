@@ -17,10 +17,11 @@ def _utc_now() -> str:
 
 @dataclass(frozen=True)
 class StoredMarketPoint:
-    """One persisted market close."""
+    """本地持久化的单日市场指数数据。"""
 
     trade_date: date
     close_price: float
+    volume: float | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ class MarketHistoryStore:
                 point.trade_date.isoformat(),
                 display_name,
                 float(point.close_price),
+                float(getattr(point, "volume")) if isinstance(getattr(point, "volume", None), (int, float)) else None,
                 currency,
                 provider_key,
                 source_url,
@@ -92,14 +94,16 @@ class MarketHistoryStore:
                         trade_date,
                         display_name,
                         close_price,
+                        volume,
                         currency,
                         provider_key,
                         source_url,
                         last_seen_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(symbol, trade_date) DO UPDATE SET
                         display_name=excluded.display_name,
                         close_price=excluded.close_price,
+                        volume=excluded.volume,
                         currency=excluded.currency,
                         provider_key=excluded.provider_key,
                         source_url=excluded.source_url,
@@ -277,7 +281,7 @@ class MarketHistoryStore:
         with self._session() as connection:
             rows = connection.execute(
                 """
-                SELECT trade_date, close_price
+                SELECT trade_date, close_price, volume
                 FROM market_index_daily
                 WHERE symbol = ?
                   AND trade_date >= ?
@@ -290,6 +294,7 @@ class MarketHistoryStore:
             StoredMarketPoint(
                 trade_date=date.fromisoformat(row["trade_date"]),
                 close_price=float(row["close_price"]),
+                volume=float(row["volume"]) if row["volume"] is not None else None,
             )
             for row in rows
         ]
@@ -298,7 +303,7 @@ class MarketHistoryStore:
         with self._session() as connection:
             rows = connection.execute(
                 """
-                SELECT trade_date, close_price
+                SELECT trade_date, close_price, volume
                 FROM market_index_daily
                 WHERE symbol = ?
                 ORDER BY trade_date DESC
@@ -310,6 +315,7 @@ class MarketHistoryStore:
             StoredMarketPoint(
                 trade_date=date.fromisoformat(row["trade_date"]),
                 close_price=float(row["close_price"]),
+                volume=float(row["volume"]) if row["volume"] is not None else None,
             )
             for row in reversed(rows)
         ]
@@ -376,6 +382,7 @@ class MarketHistoryStore:
                     trade_date TEXT NOT NULL,
                     display_name TEXT NOT NULL,
                     close_price REAL NOT NULL,
+                    volume REAL,
                     currency TEXT NOT NULL,
                     provider_key TEXT NOT NULL,
                     source_url TEXT NOT NULL,
@@ -384,6 +391,7 @@ class MarketHistoryStore:
                 )
                 """
             )
+            self._ensure_market_index_daily_columns(connection)
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS market_index_sync_state (
@@ -406,6 +414,15 @@ class MarketHistoryStore:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_market_index_daily_symbol_date ON market_index_daily(symbol, trade_date)"
             )
+
+    def _ensure_market_index_daily_columns(self, connection: sqlite3.Connection) -> None:
+        """为旧版 SQLite 库补齐新增列，避免本地历史数据需要手工重建。"""
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(market_index_daily)").fetchall()
+        }
+        if "volume" not in columns:
+            connection.execute("ALTER TABLE market_index_daily ADD COLUMN volume REAL")
 
     @contextmanager
     def _session(self) -> Iterator[sqlite3.Connection]:

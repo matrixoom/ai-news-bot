@@ -26,12 +26,13 @@ class TrackedIndexDefinition:
 
 @dataclass(frozen=True)
 class MarketChartPoint:
-    """Chart-ready market history point."""
+    """日报图表可直接使用的市场历史点。"""
 
     trade_date: str
     close_price: float
     ma20_price: float | None
     deviation_pct: float | None
+    volume: float | None = None
 
 
 @dataclass(frozen=True)
