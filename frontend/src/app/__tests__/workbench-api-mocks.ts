@@ -9,6 +9,7 @@ type WorkbenchPayloads = {
   push: Record<string, unknown>;
   macroData: Record<string, unknown>;
   macroChart: Record<string, unknown>;
+  eventOutlook: Record<string, unknown>;
 };
 
 type WorkbenchOverrides = Partial<WorkbenchPayloads>;
@@ -489,6 +490,75 @@ export const macroChartPayload: WorkbenchPayloads["macroChart"] = {
   ],
 };
 
+export const eventOutlookPayload: WorkbenchPayloads["eventOutlook"] = {
+  generated_at: "2026-05-05T12:00:00Z",
+  module: {
+    id: "event-outlook",
+    title: "Event Outlook",
+    description: "Forward calendar for technology, policy, and finance events.",
+  },
+  region: "domestic",
+  tabs: [
+    { value: "domestic", label: "国内" },
+    { value: "international", label: "国际" },
+  ],
+  range: {
+    start_date: "2026-05-05",
+    end_date: "2027-05-05",
+  },
+  resolution_options: [
+    { value: "day", label: "天" },
+    { value: "week", label: "周" },
+    { value: "month", label: "月" },
+  ],
+  events: [
+    {
+      id: 1,
+      region: "domestic",
+      event_date: "2026-06-02",
+      title: "COMPUTEX 2026",
+      summary: "台北国际电脑展，聚焦 AI、机器人、半导体与下一代计算。",
+      category: "technology",
+      source_name: "COMPUTEX",
+      source_url: "https://www.computextaipei.com.tw/en/news/8F914C77B6AF77A5/info.html?cid=news&cr=5&lt=data",
+      updated_at: "2026-05-05T12:00:00Z",
+    },
+    {
+      id: 2,
+      region: "domestic",
+      event_date: "2026-06-02",
+      title: "Microsoft Build 2026",
+      summary: "开发者大会，关注 Azure、GitHub 与 AI 应用构建。",
+      category: "technology",
+      source_name: "Microsoft",
+      source_url: "https://www.microsoft.com/en-us/startups/blog/microsoft-build-2026-sessions-every-startup-should-attend/",
+      updated_at: "2026-05-05T12:00:00Z",
+    },
+    {
+      id: 3,
+      region: "domestic",
+      event_date: "2026-06-23",
+      title: "夏季达沃斯 2026",
+      summary: "世界经济论坛新领军者年会，关注新增长模式、全球经济和中国经济前景。",
+      category: "finance",
+      source_name: "World Economic Forum",
+      source_url: "https://www.weforum.org/meetings/annual-meeting-of-the-new-champions-2026/about/",
+      updated_at: "2026-05-05T12:00:00Z",
+    },
+    {
+      id: 4,
+      region: "domestic",
+      event_date: "2026-11-18",
+      title: "APEC 领导人非正式会议",
+      summary: "第三十三次 APEC 领导人非正式会议将在深圳举行。",
+      category: "politics",
+      source_name: "中国政府网",
+      source_url: "https://english.www.gov.cn/news/202512/12/content_WS693c1432c6d00ca5f9a080e6.html",
+      updated_at: "2026-05-05T12:00:00Z",
+    },
+  ],
+};
+
 export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
   const payloads: WorkbenchPayloads = {
     dashboard: overrides.dashboard ?? dashboardPayload,
@@ -499,9 +569,11 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     push: overrides.push ?? pushPayload,
     macroData: overrides.macroData ?? macroDataPayload,
     macroChart: overrides.macroChart ?? macroChartPayload,
+    eventOutlook: overrides.eventOutlook ?? eventOutlookPayload,
   };
 
   let pushState: any = clone(payloads.push);
+  let eventOutlookState: any = clone(payloads.eventOutlook);
 
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -510,6 +582,78 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
 
     if (url.pathname === "/api/frontend/modules/push") {
       return jsonResponse(pushState);
+    }
+
+    if (url.pathname === "/api/frontend/modules/event-outlook") {
+      const region = url.searchParams.get("region") ?? "domestic";
+      const source = region === "international"
+        ? {
+            ...eventOutlookState,
+            region,
+            events: [
+              {
+                id: 11,
+                region: "international",
+                event_date: "2026-05-19",
+                title: "Google I/O 2026",
+                summary: "Google 年度开发者大会，关注 Gemini、Android 与云端 AI 能力。",
+                category: "technology",
+                source_name: "Google I/O",
+                source_url: "https://io.google/2026/",
+                updated_at: "2026-05-05T12:00:00Z",
+              },
+              {
+                id: 12,
+                region: "international",
+                event_date: "2026-06-16",
+                title: "FOMC 利率会议",
+                summary: "美联储 FOMC 议息会议，关注政策路径和经济预测摘要。",
+                category: "finance",
+                source_name: "Federal Reserve",
+                source_url: "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+                updated_at: "2026-05-05T12:00:00Z",
+              },
+            ],
+          }
+        : eventOutlookState;
+      return jsonResponse(source);
+    }
+
+    if (url.pathname === "/api/frontend/modules/event-outlook/events" && method === "POST") {
+      const body = await readJsonBody(input, init?.body);
+      const event = {
+        id: 99,
+        region: body.region ?? "domestic",
+        event_date: body.event_date,
+        title: body.title,
+        summary: body.summary,
+        category: body.category ?? "technology",
+        source_name: body.source_name ?? "manual",
+        source_url: body.source_url ?? "",
+        updated_at: "2026-05-05T12:05:00Z",
+      };
+      eventOutlookState = {
+        ...eventOutlookState,
+        events: [event, ...eventOutlookState.events],
+      };
+      return jsonResponse({ event });
+    }
+
+    if (url.pathname.startsWith("/api/frontend/modules/event-outlook/events/") && method === "PUT") {
+      const body = await readJsonBody(input, init?.body);
+      const eventId = Number(url.pathname.split("/").pop());
+      const existing = eventOutlookState.events.find((event: any) => event.id === eventId) ?? eventOutlookState.events[0];
+      const event = {
+        ...existing,
+        title: body.title ?? existing.title,
+        summary: body.summary ?? existing.summary,
+        updated_at: "2026-05-05T12:10:00Z",
+      };
+      eventOutlookState = {
+        ...eventOutlookState,
+        events: eventOutlookState.events.map((item: any) => (item.id === event.id ? event : item)),
+      };
+      return jsonResponse({ event });
     }
 
     if (url.pathname === "/api/frontend/modules/macro-data") {

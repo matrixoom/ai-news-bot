@@ -6,6 +6,10 @@
 
 ### Added
 
+- 新增与 Macro Data 平级的 Event Outlook 一级目录页，提供国内/国际子标签、基于开源 `vis-timeline` 的可拖拽/缩放时间轴、天/周/月分辨率、范围定位、手工录入和编辑事件能力。
+- Event Outlook 新增科技、时政、财经三类未来一年事件，三类在时间轴中分别用不同颜色展示；事件持久化到 `.data/events_outlook.db` 的 `timeline_events` 表。
+- 新增 Notes 一级目录页，当前作为空白工作区入口预留。
+- 新增 Event Outlook 前端接口：`/api/frontend/modules/event-outlook`、`/api/frontend/modules/event-outlook/events` 与 `/api/frontend/modules/event-outlook/events/{event_id}`。
 - Macro Data 景气标签新增 `综合PMI` 指标，随制造业/非制造业 PMI 一起注册、同步并以同样的折线图样式展示。
 - Macro Data 信贷标签在 `新增人民币贷款` 下方新增 `居民活期存款` 宽图表，复用“总量虚线 + 分项堆叠柱 + 同名虚线折线”格式，并新增居民存款总计、活期、定期及其他三张事实表。
 - 新增与 Push Center 平级的 Macro Data 模块，提供 `GDP / 信贷 / 杠杆率 / 物价` 子标签页、ECharts 图表、预设时间跨度和自定义日期范围。
@@ -23,6 +27,7 @@
 
 ### Changed
 
+- Pytest 默认收集范围限定为 `tests/`，避免继续递归执行已归档到 `to_delete/tests/` 的历史用例。
 - Macro Data 的 `新增人民币贷款` 与 `居民活期存款` 组合柱线图 tooltip 按业务序列名去重，避免同名柱状图与折线图在悬浮框中重复展示同一数值。
 - 推送中心市场日报组合图下方柱体改为每日成交量，表格中的收盘、MA20 与乖离率字段保持不变；市场历史库新增可选 `volume` 字段并兼容旧 SQLite 数据。
 - Market Data 全国 70 城二手房价格指数城市选择器支持点击外部区域自动确认并关闭，确认/取消操作移动到搜索框右侧的 Heroicons 小图标；同一城市的全局、同比、环比折线统一颜色并用线型区分指标。

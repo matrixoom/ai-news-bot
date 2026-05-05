@@ -15,11 +15,21 @@ describe("Workbench shell", () => {
     return render(<App />);
   }
 
-  it("renders the remaining Macro Data, Push Center, and Settings routes", async () => {
+  it("renders the remaining Macro Data, Event Outlook, Notes, Push Center, and Settings routes", async () => {
     installWorkbenchFetchMock({ push: pushPayload });
 
     renderApp("/macro-data");
     expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
+
+    cleanup();
+    installWorkbenchFetchMock({ push: pushPayload });
+    renderApp("/event-outlook");
+    expect((await screen.findAllByRole("heading", { name: "Event Outlook" })).length).toBeGreaterThan(0);
+
+    cleanup();
+    installWorkbenchFetchMock({ push: pushPayload });
+    renderApp("/notes");
+    expect((await screen.findAllByRole("heading", { name: "Notes" })).length).toBeGreaterThan(0);
 
     cleanup();
     installWorkbenchFetchMock({ push: pushPayload });
@@ -66,7 +76,10 @@ describe("Workbench shell", () => {
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "News" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Market" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Events" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Event Outlook" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Event Outlook > 国内" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Event Outlook > 国际" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Notes" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Market ticker" })).not.toBeInTheDocument();
   });
@@ -119,8 +132,10 @@ describe("Workbench shell", () => {
     const primaryNavigation = screen.getByRole("navigation", { name: "Primary" });
     const links = within(primaryNavigation).getAllByRole("link");
 
-    expect(links).toHaveLength(5);
+    expect(links).toHaveLength(7);
     expect(within(primaryNavigation).getByRole("link", { name: "Macro Data" })).toBeInTheDocument();
+    expect(within(primaryNavigation).getByRole("link", { name: "Event Outlook" })).toBeInTheDocument();
+    expect(within(primaryNavigation).getByRole("link", { name: "Notes" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Push Center" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Market Data" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Settings" })).toBeInTheDocument();
