@@ -195,9 +195,9 @@ class PushWorkflowTests(unittest.TestCase):
 
         html = PushReportService().build_email_html(snapshot, module_ids=["market"])
 
-        self.assertIn('width="100%"', html)
+        self.assertIn('max-width:344px;width:100%;', html)
         self.assertIn("max-width:100%", html)
-        self.assertNotIn('width="344" height="126"', html)
+        self.assertIn('width="344"', html)
 
     def test_push_job_survives_partial_notifier_failure(self):
         result = run_push_job(

@@ -536,7 +536,7 @@ class PushReportService:
         last_date = str(points[-1].get("trade_date") or "")
 
         return f"""
-<div>
+<div style="max-width:344px;width:100%;">
   <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:12px;color:#6e654f;margin-bottom:6px;">
     <tr>
       <td style="padding:0 14px 0 0;white-space:nowrap;"><span style="display:inline-block;width:12px;height:2px;background:#f6a313;vertical-align:middle;margin-right:6px;"></span>Close</td>
@@ -544,7 +544,7 @@ class PushReportService:
       <td style="white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#ff5f72;vertical-align:middle;margin-right:6px;"></span>Deviation</td>
     </tr>
   </table>
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="100%" height="{height:.0f}" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;max-width:100%;min-height:{height:.0f}px;" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="{width:.0f}" height="{height:.0f}" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%;min-height:{height:.0f}px;" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
     <line x1="{left:.2f}" y1="{top:.2f}" x2="{width - right:.2f}" y2="{top:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
     <line x1="{left:.2f}" y1="{top + (price_height / 2):.2f}" x2="{width - right:.2f}" y2="{top + (price_height / 2):.2f}" stroke="#efe6d3" stroke-width="1" stroke-dasharray="3 3"></line>
     <line x1="{left:.2f}" y1="{top + price_height:.2f}" x2="{width - right:.2f}" y2="{top + price_height:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
@@ -671,7 +671,7 @@ class PushReportService:
             left_max_width = "50%" if right else "100%"
             right_block = (
                 f'<div class="email-two-up-col email-two-up-col-right" '
-                f'style="display:inline-block;width:100%;max-width:50%;vertical-align:top;">'
+                f'style="display:inline-block;min-width:260px;width:100%;max-width:50%;vertical-align:top;">'
                 '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
                 'style="width:100%;border-collapse:collapse;">'
                 f'<tr><td style="padding-left:6px;">{right}</td></tr>'
@@ -682,7 +682,7 @@ class PushReportService:
                 "<tr>"
                 f'<td style="{row_padding}font-size:0;text-align:left;">'
                 f'<div class="email-two-up-col email-two-up-col-left" '
-                f'style="display:inline-block;width:100%;max-width:{left_max_width};vertical-align:top;">'
+                f'style="display:inline-block;min-width:260px;width:100%;max-width:{left_max_width};vertical-align:top;">'
                 '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
                 'style="width:100%;border-collapse:collapse;">'
                 f'<tr><td style="padding-right:6px;">{left}</td></tr>'
