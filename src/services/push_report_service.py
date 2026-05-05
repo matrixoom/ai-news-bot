@@ -155,7 +155,7 @@ class PushReportService:
         }}
 
         .email-market-summary-table {{
-          font-size: 12px !important;
+          font-size: 8px !important;
         }}
       }}
     </style>

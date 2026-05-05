@@ -239,7 +239,7 @@ class PushWorkflowTests(unittest.TestCase):
 
         self.assertIn('class="email-market-summary-table"', html)
         self.assertIn(".email-market-summary-table", html)
-        self.assertIn("font-size: 12px !important", html)
+        self.assertIn("font-size: 8px !important", html)
 
     def test_push_job_survives_partial_notifier_failure(self):
         result = run_push_job(
