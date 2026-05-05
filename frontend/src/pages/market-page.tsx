@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { MarketChartCard } from "../features/market-data/components/market-chart-card";
+import { RealEstateChartCard } from "../features/market-data/components/real-estate-chart-card";
 import { useMarketDataModuleQuery } from "../features/market-data/hooks/use-market-data-module-query";
 import {
   MARKET_DATA_TABS,
@@ -138,19 +139,34 @@ export function MarketPage() {
           <EmptyPanelState title="No market charts" description="The selected category has no chart definitions yet." />
         ) : (
           <div className="flex flex-col items-stretch gap-6">
-            {charts.map((chart) => (
-              <MarketChartCard
-                key={chart.id}
-                chart={chart}
-                className="w-full"
-                frequency={chartFrequency(chart.id, chart.frequency)}
-                frequencyOptions={frequencyOptions}
-                onFrequencyChange={(nextFrequency) => updateChartFrequency(chart.id, nextFrequency)}
-                onRangeChange={(nextRange) => updateChartRange(chart.id, nextRange)}
-                range={chartRange(chart.id)}
-                rangeOptions={rangeOptions}
-              />
-            ))}
+            {activeTab === "real_estate"
+              ? charts.map((chart) => (
+                  <RealEstateChartCard
+                    key={chart.id}
+                    chart={chart}
+                    className="w-full"
+                    frequency={chartFrequency(chart.id, chart.frequency)}
+                    frequencyOptions={frequencyOptions}
+                    onFrequencyChange={(nextFrequency) => updateChartFrequency(chart.id, nextFrequency)}
+                    onRangeChange={(nextRange) => updateChartRange(chart.id, nextRange)}
+                    range={chartRange(chart.id)}
+                    rangeOptions={rangeOptions}
+                    housingCities={query.data.housing_cities ?? []}
+                  />
+                ))
+              : charts.map((chart) => (
+                  <MarketChartCard
+                    key={chart.id}
+                    chart={chart}
+                    className="w-full"
+                    frequency={chartFrequency(chart.id, chart.frequency)}
+                    frequencyOptions={frequencyOptions}
+                    onFrequencyChange={(nextFrequency) => updateChartFrequency(chart.id, nextFrequency)}
+                    onRangeChange={(nextRange) => updateChartRange(chart.id, nextRange)}
+                    range={chartRange(chart.id)}
+                    rangeOptions={rangeOptions}
+                  />
+                ))}
           </div>
         )
       }

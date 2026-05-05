@@ -119,7 +119,7 @@ describe("Workbench shell", () => {
     const primaryNavigation = screen.getByRole("navigation", { name: "Primary" });
     const links = within(primaryNavigation).getAllByRole("link");
 
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(5);
     expect(within(primaryNavigation).getByRole("link", { name: "Macro Data" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Push Center" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Market Data" })).toBeInTheDocument();

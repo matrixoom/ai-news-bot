@@ -201,8 +201,10 @@ def create_fastapi_app(
         start_date: str | None = None,
         end_date: str | None = None,
         frequency: str | None = None,
+        cities: str | None = None,
     ) -> JSONResponse:
         """返回 Market Data 单张图表序列。"""
+        city_list = [c.strip() for c in cities.split(",") if c.strip()] if cities else None
         try:
             return JSONResponse(
                 market_service.build_chart_payload(
@@ -211,6 +213,7 @@ def create_fastapi_app(
                     start_date=start_date,
                     end_date=end_date,
                     frequency=frequency,
+                    cities=city_list,
                 )
             )
         except MarketDataValidationError:
