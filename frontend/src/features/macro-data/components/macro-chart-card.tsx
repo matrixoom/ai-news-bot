@@ -26,6 +26,113 @@ type MacroChartCardProps = {
 
 const STACKED_LINE_COLORS = ["#4f46e5", "#a3c72a", "#334155", "#fb923c", "#0ea5e9"];
 
+type AxisTooltipParam = {
+  axisValue?: unknown;
+  axisValueLabel?: unknown;
+  marker?: unknown;
+  seriesName?: string;
+  value?: unknown;
+};
+
+/**
+ * 转义 tooltip 中的文本字段，避免序列名或标签被当作 HTML 片段渲染。
+ *
+ * Args:
+ *   value: 需要展示到 tooltip 的原始文本。
+ *
+ * Returns:
+ *   可安全拼接进 HTML tooltip 的文本。
+ */
+function escapeTooltipText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * 格式化 tooltip 中的数值，保持财经图表常见的千分位与最多两位小数。
+ *
+ * Args:
+ *   value: ECharts 传入的原始数据值，可能是数字、空值或数组结构。
+ *
+ * Returns:
+ *   面向用户展示的数值文本。
+ */
+function formatTooltipValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return formatTooltipValue(value.at(-1));
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value);
+  }
+  if (typeof value === "string" && value.trim()) {
+    return escapeTooltipText(value);
+  }
+  return "-";
+}
+
+/**
+ * 归一化 ECharts tooltip 参数，兼容单点、数组以及 marker 非字符串的情况。
+ *
+ * Args:
+ *   params: ECharts formatter 回调传入的原始参数。
+ *
+ * Returns:
+ *   可供 tooltip 去重与渲染使用的参数列表。
+ */
+function normalizeAxisTooltipParams(params: unknown): AxisTooltipParam[] {
+  const rawItems = Array.isArray(params) ? params : [params];
+  return rawItems.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    return [
+      {
+        axisValue: record.axisValue,
+        axisValueLabel: record.axisValueLabel,
+        marker: record.marker,
+        seriesName: typeof record.seriesName === "string" ? record.seriesName : undefined,
+        value: record.value,
+      },
+    ];
+  });
+}
+
+/**
+ * 为柱线绑定的组合图表生成 axis tooltip，按业务序列名去重。
+ *
+ * Args:
+ *   params: ECharts 在 axis trigger 下传入的 tooltip 参数列表。
+ *
+ * Returns:
+ *   去除同名柱/线重复项后的 HTML tooltip。
+ */
+function formatDeduplicatedAxisTooltip(params: unknown): string {
+  const items = normalizeAxisTooltipParams(params);
+  const firstItem = items[0];
+  const title = firstItem?.axisValueLabel ?? firstItem?.axisValue ?? "";
+  const seenNames = new Set<string>();
+  const rows: string[] = [];
+
+  for (const item of items) {
+    const seriesName = item.seriesName;
+    if (!seriesName || seenNames.has(seriesName)) {
+      continue;
+    }
+    seenNames.add(seriesName);
+    const marker = typeof item.marker === "string" ? item.marker : "";
+    rows.push(
+      `<div>${marker}<span>${escapeTooltipText(seriesName)}</span><span style="float:right;margin-left:16px;font-weight:600;">${formatTooltipValue(item.value)}</span></div>`,
+    );
+  }
+
+  return [`<div>${escapeTooltipText(String(title))}</div>`, ...rows].join("");
+}
+
 export function MacroChartCard({
   chart,
   className,
@@ -163,11 +270,15 @@ export function MacroChartCard({
         },
       },
     };
+    const tooltip: echarts.EChartsOption["tooltip"] =
+      chartType === "bar_stacked_line"
+        ? { trigger: "axis", formatter: (params: unknown) => formatDeduplicatedAxisTooltip(params) }
+        : { trigger: "axis" };
 
     if (isWide) {
       return {
         animation: false,
-        tooltip: { trigger: "axis" },
+        tooltip,
         legend: {
           orient: "vertical",
           right: 0,
@@ -188,7 +299,7 @@ export function MacroChartCard({
     }
     return {
       animation: false,
-      tooltip: { trigger: "axis" },
+      tooltip,
       legend: { top: 0, data: legendNames },
       grid: { left: 48, right: 20, top: 48, bottom: 48 },
       xAxis: { type: "category", data: chartLabels },
@@ -200,7 +311,7 @@ export function MacroChartCard({
       series: chartSeries,
       ...zoom,
     };
-  }, [query.data, chartDates.length, isWide, legendNames, chartLabels, chartSeries, pmiYRange]);
+  }, [query.data, chartDates.length, chartType, isWide, legendNames, chartLabels, chartSeries, pmiYRange]);
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
