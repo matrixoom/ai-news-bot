@@ -71,7 +71,7 @@ uv run python -m pytest tests/test_task05_macro_monitoring.py -q
 - 两项均通过才算修改完成，不要跳过
 
 # 验证后提交
-After every complete file edit, check if the test suite passes. If all tests pass, stage all changed files, generate a conventional commit message summarizing the changes, and create a pull request against the main branch with a detailed description of what was changed, why, and which files were affected. If tests fail, analyze the failure output, fix the code, and re-run tests up to 3 times before asking for help.
+After every complete file edit, check if the test suite passes. If all tests pass, stage all changed files, generate a conventional commit message summarizing the changes: what was changed, why, and which files were affected. If tests fail, analyze the failure output, fix the code, and re-run tests up to 3 times before asking for help.
 
 ### NewsNow 子模块(废弃)
 

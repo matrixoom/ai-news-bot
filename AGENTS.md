@@ -153,3 +153,6 @@
 4. 修改内容
 5. 验证方式
 6. 风险与建议
+
+## 10. 验证后提交
+After every complete file edit, check if the test suite passes. If all tests pass, stage all changed files, generate a conventional commit message summarizing the changes: what was changed, why, and which files were affected. If tests fail, analyze the failure output, fix the code, and re-run tests up to 3 times before asking for help.
