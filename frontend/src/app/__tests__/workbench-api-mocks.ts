@@ -454,6 +454,7 @@ const creditMacroDataPayload: WorkbenchPayloads["macroData"] = {
   ],
   charts: [
     { id: "new_rmb_loans", title: "新增人民币贷款", unit: "亿元", frequency: "monthly", status: "live", chart_type: "bar_stacked_line", wide: true },
+    { id: "household_demand_deposits", title: "居民活期存款", unit: "亿元", frequency: "monthly", status: "live", chart_type: "bar_stacked_line", wide: true },
     { id: "social_financing", title: "社会融资规模", unit: "亿元", frequency: "monthly", status: "live", chart_type: "line", wide: true },
     { id: "household_leverage_ratio", title: "居民部门杠杆率", unit: "%", frequency: "quarterly", status: "live", chart_type: "line" },
     { id: "corporate_leverage_ratio", title: "企业部门杠杆率", unit: "%", frequency: "quarterly", status: "live", chart_type: "line" },
@@ -632,6 +633,35 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
               { date: "2025-12-31", period_label: "2025-12", value: 61000, unit: "亿元", released_at: "" },
               { date: "2026-01-31", period_label: "2026-01", value: 12000, unit: "亿元", released_at: "" },
               { date: "2026-02-28", period_label: "2026-02", value: 45000, unit: "亿元", released_at: "" },
+            ]},
+          ],
+          range: {
+            ...(payloads.macroChart.range as Record<string, unknown>),
+            type: url.searchParams.get("range") ?? "1y",
+          },
+        });
+      }
+      if (chartId === "household_demand_deposits") {
+        return jsonResponse({
+          ...payloads.macroChart,
+          id: chartId,
+          title: "居民活期存款",
+          unit: "亿元",
+          frequency: "monthly",
+          chart_type: "bar_stacked_line",
+          wide: true,
+          series: [
+            { name: "居民存款总计", points: [
+              { date: "2000-01-31", period_label: "2000-01", value: 60241.8, unit: "亿元", released_at: "" },
+              { date: "2026-03-31", period_label: "2026-03", value: 1735889.52, unit: "亿元", released_at: "" },
+            ]},
+            { name: "居民活期存款", points: [
+              { date: "2000-01-31", period_label: "2000-01", value: 14975, unit: "亿元", released_at: "" },
+              { date: "2026-03-31", period_label: "2026-03", value: 420190.26, unit: "亿元", released_at: "" },
+            ]},
+            { name: "居民定期及其他存款", points: [
+              { date: "2000-01-31", period_label: "2000-01", value: 45266.8, unit: "亿元", released_at: "" },
+              { date: "2026-03-31", period_label: "2026-03", value: 1315699.26, unit: "亿元", released_at: "" },
             ]},
           ],
           range: {
