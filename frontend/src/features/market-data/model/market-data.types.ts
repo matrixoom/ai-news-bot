@@ -78,6 +78,7 @@ export type MarketChartPayload = {
   };
   series: Array<{
     name: string;
+    metric?: "yoy" | "mom" | "global_index" | string;
     points: MarketChartPoint[];
   }>;
   housing_cities?: string[];

@@ -17,6 +17,7 @@
 | --- | --- | --- |
 | `/` | GET | SPA 可用时重定向到 `/push`；否则返回 workbench unavailable |
 | `/macro-data` | GET | Macro Data SPA 入口 |
+| `/market-data` | GET | Market Data SPA 入口 |
 | `/push` | GET | Push Center SPA 入口 |
 | `/settings` | GET | Settings SPA 入口 |
 | `/healthz` | GET | 健康检查，返回 `{"status":"ok"}` |
@@ -43,9 +44,11 @@
 
 查询参数：
 
-- `tab`：`gdp | credit | leverage | prices`，默认 `gdp`
+- `tab`：`gdp | credit | climate | trade | prices | currency | expectations`，默认 `gdp`
 
 用途：返回 Macro Data 模块元数据、子标签、时间范围选项和当前分类下的图表定义。
+
+兼容说明：景气标签包含 `manufacturing_pmi`、`non_manufacturing_pmi`、`comprehensive_pmi` 三个 PMI 折线图；信贷标签的 `new_rmb_loans` 使用 `chart_type: "bar_stacked_line"`，总量序列为虚线折线，居民/企业短期与长期贷款各自返回同名堆叠柱与虚线折线，前端图例选中/取消时同名柱线同步联动。
 
 成功：`200`
 
@@ -104,7 +107,7 @@
 - `range`：`6m | 1y | 3y | 5y | 10y | 15y | 20y | 25y | 30y | custom`，默认 `1y`
 - `start_date`：自定义范围起始日期，`YYYY-MM-DD`
 - `end_date`：自定义范围结束日期，`YYYY-MM-DD`
-- `frequency`：`quarterly | yearly`，GDP 页面使用；未传入时按指标默认频率读取，例如月度指标继续使用 `monthly`
+- `frequency`：`monthly | quarterly | yearly`；未传入时按指标默认频率读取，例如月度指标继续使用 `monthly`
 
 用途：按单张图表读取 SQLite 中对应指标表的数据。基础指标分别持久化在 `.data/macro_data.db` 的独立事实表中，例如 `macro_nominal_gdp`、`macro_cpi`。事实表以 `(period_end, frequency)` 作为幂等键，年度 `YYYY-12-31` 与四季度 `YYYYQ4` 可同时保存，不会互相覆盖。`gdp_growth` 为组合图表，优先读取本地持久化的 `macro_nominal_gdp_growth` 与 `macro_real_gdp_growth`，缺少增长表时再基于 `macro_nominal_gdp` 与 `macro_real_gdp` 回退计算同比增速。
 
@@ -120,6 +123,8 @@ uv run python main.py macro-sync
 - 名义 GDP：World Bank 年度人民币 GDP + 东方财富/AkShare 季度累计值；季度图展示当季值，年度图优先使用完整四季度合计，保证同年四个季度之和与年度值一致。
 - 实际 GDP：World Bank 年度不变价人民币 GDP + 可访问的不变价 GDP 镜像近年季度当季值；年度图优先使用完整四季度合计。
 - GDP 增速：从本地同频率总量点位同比推导，年度和季度分开计算。
+- 景气 PMI：制造业 PMI、非制造业 PMI 与综合 PMI 分别写入独立事实表。
+- 信贷细分：人民银行贷款余额表按列序修正 10 月列，避免 Excel `2025.1` 显示导致 10 月被误解析为 1 月；`new_rmb_loans` 图表返回总量虚线 + 四项细分堆叠柱和同名虚线折线。
 
 成功：`200`
 
@@ -180,7 +185,30 @@ uv run python main.py macro-sync
 - `400`：`invalid_macro_data_range`
 - `503`：`frontend_macro_data_chart_unavailable`
 
-### 4.3 `GET /api/frontend/modules/push`
+### 4.3 `GET /api/frontend/modules/market-data`
+
+查询参数：
+
+- `tab`：`commodities | precious_metals | stock_market | real_estate`，默认 `commodities`
+
+用途：返回 Market Data 模块元数据、分类标签、时间范围选项和图表定义。房地产分类包含 `second_hand_housing`。
+
+### 4.4 `GET /api/frontend/modules/market-data/charts/{chart_id}`
+
+查询参数：
+
+- `range`：`6m | 1y | 3y | 5y | 10y | 15y | 20y | 25y | 30y | custom`
+- `start_date` / `end_date`：自定义范围日期，`YYYY-MM-DD`
+- `frequency`：`daily | monthly | yearly`
+- `cities`：房地产图表可选，逗号分隔城市名，例如 `北京,上海`
+
+房地产口径说明：`second_hand_housing` 来源字段为 AkShare/国家统计局 70 城二手住宅价格指数；旧版页面显示的是“二手住宅价格指数-同比”的 100 基准指数。当前接口改为 `chart_type: "housing_multi_metric"`，每个城市返回三组序列：
+
+- `{city} 同比`：`二手住宅价格指数-同比 - 100`，单位 `%`
+- `{city} 环比`：`二手住宅价格指数-环比 - 100`，单位 `%`
+- `{city} 全局走势`：从历史首期前值 `100` 起，用环比百分比逐月复合得到的全局房价走势指数，单位 `指数`
+
+### 4.5 `GET /api/frontend/modules/push`
 
 查询参数：
 

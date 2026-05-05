@@ -391,32 +391,7 @@ def _load_housing_rows() -> list[dict[str, Any]]:
             frame = ak.macro_china_new_house_price(c1, c2)
         except Exception:
             return []
-        points: list[dict[str, Any]] = []
-        for _, row in frame.iterrows():
-            try:
-                date_val = row["日期"]
-                if hasattr(date_val, "strftime"):
-                    date_str = date_val.strftime("%Y-%m-%d")
-                else:
-                    date_str = str(date_val)[:10]
-            except (TypeError, ValueError):
-                continue
-            city = str(row["城市"]).strip()
-            value = _optional_float(row.get("二手住宅价格指数-同比"))
-            if value is None:
-                continue
-            points.append({
-                "period_end": date_str,
-                "period_label": date_str[:7],
-                "city": city,
-                "value": value,
-                "unit": "%",
-                "frequency": "monthly",
-                "provider_key": "akshare_housing",
-                "source_url": "https://www.stats.gov.cn/sj/zxfb/",
-                "released_at": "",
-            })
-        return points
+        return _housing_points_from_frame(frame)
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(_fetch_pair, c1, c2): (c1, c2) for c1, c2 in city_pairs}
@@ -429,6 +404,85 @@ def _load_housing_rows() -> list[dict[str, Any]]:
                 print(f"[housing_sync] 获取 {c1}/{c2} 失败: {e}")
 
     return all_points
+
+
+def _housing_points_from_frame(frame: Any) -> list[dict[str, Any]]:
+    """将 AkShare 70 城房价表转换为同比、环比和全局走势点位。
+
+    AkShare 字段值是以 100 为中性的指数，存储时将同比/环比转为百分比变化，
+    并用环比序列从 100 起连续复合，得到跨全历史的房价走势指数。
+
+    Args:
+        frame: `macro_china_new_house_price` 返回的 DataFrame。
+
+    Returns:
+        含 city 与 metric 维度的标准化点位列表。
+    """
+
+    rows_by_city: dict[str, list[dict[str, Any]]] = {}
+    for _, row in frame.iterrows():
+        try:
+            date_val = row["日期"]
+            if hasattr(date_val, "strftime"):
+                date_str = date_val.strftime("%Y-%m-%d")
+            else:
+                date_str = str(date_val)[:10]
+        except (TypeError, ValueError):
+            continue
+        city = str(row["城市"]).strip()
+        if not city:
+            continue
+        yoy_index = _optional_float(row.get("二手住宅价格指数-同比"))
+        mom_index = _optional_float(row.get("二手住宅价格指数-环比"))
+        if yoy_index is None and mom_index is None:
+            continue
+        rows_by_city.setdefault(city, []).append({
+            "period_end": date_str,
+            "period_label": date_str[:7],
+            "city": city,
+            "yoy": round(yoy_index - 100, 4) if yoy_index is not None else None,
+            "mom": round(mom_index - 100, 4) if mom_index is not None else None,
+        })
+
+    points: list[dict[str, Any]] = []
+    for city, city_rows in rows_by_city.items():
+        global_index = 100.0
+        for item in sorted(city_rows, key=lambda row: str(row["period_end"])):
+            if item["yoy"] is not None:
+                points.append(_housing_metric_point(item, "yoy", item["yoy"], "%"))
+            if item["mom"] is None:
+                continue
+            points.append(_housing_metric_point(item, "mom", item["mom"], "%"))
+            global_index *= 1 + float(item["mom"]) / 100
+            points.append(_housing_metric_point(item, "global_index", round(global_index, 4), "指数"))
+    return points
+
+
+def _housing_metric_point(row: dict[str, Any], metric: str, value: float, unit: str) -> dict[str, Any]:
+    """构造单条房价口径点位。
+
+    Args:
+        row: 已标准化的城市月份基础行。
+        metric: 指标口径，取值 `yoy`、`mom`、`global_index`。
+        value: 指标值。
+        unit: 展示单位。
+
+    Returns:
+        可写入房价事实表的点位字典。
+    """
+
+    return {
+        "period_end": str(row["period_end"]),
+        "period_label": str(row["period_label"]),
+        "city": str(row["city"]),
+        "metric": metric,
+        "value": value,
+        "unit": unit,
+        "frequency": "monthly",
+        "provider_key": "akshare_housing",
+        "source_url": "https://www.stats.gov.cn/sj/zxfb/",
+        "released_at": "",
+    }
 
 
 def _optional_float(value: Any) -> float | None:

@@ -24,6 +24,8 @@ type MacroChartCardProps = {
   onRangeChange: (nextRange: MacroDataRangeSelection) => void;
 };
 
+const STACKED_LINE_COLORS = ["#4f46e5", "#a3c72a", "#334155", "#fb923c", "#0ea5e9"];
+
 export function MacroChartCard({
   chart,
   className,
@@ -49,11 +51,20 @@ export function MacroChartCard({
   }, [refreshMutation.isSuccess]);
 
   const series = query.data?.series ?? [];
-  const points = series[0]?.points ?? [];
-  const chartLabels = useMemo(() => points.map((point) => point.period_label || point.date), [points]);
+  const chartPointIndex = useMemo(() => {
+    const pointsByDate = new Map<string, string>();
+    for (const item of series) {
+      for (const point of item.points) {
+        pointsByDate.set(point.date, point.period_label || point.date);
+      }
+    }
+    return Array.from(pointsByDate.entries()).sort(([leftDate], [rightDate]) => leftDate.localeCompare(rightDate));
+  }, [series]);
+  const chartDates = useMemo(() => chartPointIndex.map(([date]) => date), [chartPointIndex]);
+  const chartLabels = useMemo(() => chartPointIndex.map(([, label]) => label), [chartPointIndex]);
   const legendNames = useMemo(() => series.map((item) => item.name), [series]);
   const chartType = query.data?.chart_type ?? "line";
-  const isWide = query.data?.wide === true || chartType === "bar_stacked";
+  const isWide = query.data?.wide === true || chartType === "bar_stacked" || chartType === "bar_stacked_line";
   const isPMI = chart.id.includes("pmi");
 
   const pmiYRange = useMemo(() => {
@@ -68,24 +79,54 @@ export function MacroChartCard({
     return { min: 50 - halfRange, max: 50 + halfRange };
   }, [isPMI, series]);
 
-  const chartSeries = useMemo(
+  const chartSeries = useMemo<echarts.SeriesOption[]>(
     () =>
-      series.map((item, index) => {
+      series.flatMap<echarts.SeriesOption>((item, index) => {
+        const valueByDate = new Map(item.points.map((point) => [point.date, point.value]));
+        const data = chartDates.map((date) => valueByDate.get(date) ?? null);
+        const color = STACKED_LINE_COLORS[index % STACKED_LINE_COLORS.length];
         if (chartType === "bar_stacked") {
           return {
             name: item.name,
             type: "bar" as const,
             stack: "total",
-            data: item.points.map((point) => point.value),
-          };
+            data,
+            itemStyle: { color },
+          } as echarts.SeriesOption;
         }
         const lineSeries: Record<string, unknown> = {
           name: item.name,
           type: "line" as const,
-          smooth: true,
+          smooth: chartType !== "bar_stacked_line",
           symbol: "circle",
-          data: item.points.map((point) => point.value),
+          data,
         };
+        if (chartType === "bar_stacked_line") {
+          if (index > 0) {
+            return [
+              {
+                name: item.name,
+                type: "bar" as const,
+                stack: "total",
+                data,
+                itemStyle: { color },
+              },
+              {
+                name: item.name,
+                type: "line" as const,
+                smooth: false,
+                symbol: "circle",
+                data,
+                itemStyle: { color },
+                lineStyle: { color, type: "dashed", width: 1.6, opacity: 0.85 },
+                z: 4,
+              },
+            ] as echarts.SeriesOption[];
+          }
+          lineSeries.itemStyle = { color };
+          lineSeries.lineStyle = { color, type: "dashed", width: 2 };
+          lineSeries.z = 3;
+        }
         if (isPMI && index === 0) {
           lineSeries.markLine = {
             silent: true,
@@ -101,13 +142,13 @@ export function MacroChartCard({
             data: [{ yAxis: 50 }],
           };
         }
-        return lineSeries;
+        return lineSeries as echarts.SeriesOption;
       }),
-    [chartType, series, isPMI],
+    [chartType, series, chartDates, isPMI],
   );
 
   const chartOption = useMemo((): echarts.EChartsOption | null => {
-    if (!query.data || points.length === 0) return null;
+    if (!query.data || chartDates.length === 0) return null;
     const zoom: echarts.EChartsOption = {
       dataZoom: [
         { type: "inside", zoomOnMouseWheel: true, moveOnMouseMove: true },
@@ -159,7 +200,7 @@ export function MacroChartCard({
       series: chartSeries,
       ...zoom,
     };
-  }, [query.data, points.length, isWide, legendNames, chartLabels, chartSeries, pmiYRange]);
+  }, [query.data, chartDates.length, isWide, legendNames, chartLabels, chartSeries, pmiYRange]);
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
@@ -205,13 +246,13 @@ export function MacroChartCard({
         <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-8 text-sm text-slate-500">图表加载中...</div>
       ) : query.isError ? (
         <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-8 text-sm text-rose-700">图表数据加载失败。</div>
-      ) : points.length === 0 ? (
+      ) : chartDates.length === 0 ? (
         <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-8 text-sm text-slate-500">当前时间范围暂无数据。</div>
       ) : (
         <div className="mt-5">
           <div ref={chartRef} aria-label={`${chart.title} 图表`} role="img" className="h-72 w-full" />
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
-            <span>样本数：{points.length}</span>
+            <span>样本数：{chartDates.length}</span>
             <span>状态：{query.data?.sync_state.status ?? chart.status}</span>
             {query.data?.sync_state.warning_message ? <span>{query.data.sync_state.warning_message}</span> : null}
           </div>

@@ -27,7 +27,6 @@ export function ModulePageFrame({
           <div className="max-w-3xl">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Module workspace</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{title}</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
           </div>
           {(toolbar || lastUpdated) && (
             <div className="flex flex-col gap-3 lg:items-end">

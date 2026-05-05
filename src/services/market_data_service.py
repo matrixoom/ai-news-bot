@@ -141,6 +141,8 @@ class MarketDataService:
         if chart_id == "second_hand_housing":
             available_cities = self._repository.list_housing_cities(chart_id)
             payload["housing_cities"] = available_cities
+            payload["chart_type"] = "housing_multi_metric"
+            payload["unit"] = "% / 指数"
             selected_cities = cities or available_cities[:2]
             raw_series = self._repository.load_housing_points(
                 indicator_id=chart_id,
@@ -148,23 +150,35 @@ class MarketDataService:
                 start_date=resolved_range.start_date,
                 end_date=resolved_range.end_date,
             )
-            payload["series"] = [
-                {
-                    "name": city,
-                    "points": [
-                        {
-                            "date": point.period_end,
-                            "period_label": point.period_label,
-                            "value": point.value,
-                            "unit": point.unit,
-                            "released_at": point.released_at,
-                        }
-                        for point in city_points
-                    ],
-                }
-                for city, city_points in raw_series.items()
-                if city_points
-            ]
+            metric_labels = {
+                "yoy": "同比",
+                "mom": "环比",
+                "global_index": "全局走势",
+            }
+            payload["series"] = []
+            for city, city_points in raw_series.items():
+                points_by_metric: dict[str, list[Any]] = {metric: [] for metric in metric_labels}
+                for point in city_points:
+                    if point.metric in points_by_metric:
+                        points_by_metric[point.metric].append(point)
+                for metric, label in metric_labels.items():
+                    metric_points = points_by_metric[metric]
+                    if not metric_points:
+                        continue
+                    payload["series"].append({
+                        "name": f"{city} {label}",
+                        "metric": metric,
+                        "points": [
+                            {
+                                "date": point.period_end,
+                                "period_label": point.period_label,
+                                "value": point.value,
+                                "unit": point.unit,
+                                "released_at": point.released_at,
+                            }
+                            for point in metric_points
+                        ],
+                    })
             sync_state = self._repository.get_sync_state(chart_id)
             payload["sync_state"] = {
                 "status": sync_state.status if sync_state else "unavailable",
@@ -215,7 +229,7 @@ class MarketDataService:
         return frequency
 
     def _default_frequency_for_tab(self, tab: str) -> str:
-        if tab == "stock_market":
+        if tab in {"stock_market", "real_estate"}:
             return "monthly"
         return "daily"
 

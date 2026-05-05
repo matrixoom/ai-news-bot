@@ -17,7 +17,6 @@ export function HeaderBar({
       <div data-testid="shell-header-row" className="flex min-w-0 items-start gap-4">
         <div data-testid="shell-header-title" className="shrink-0 pr-1">
           <h2 className="text-2xl font-semibold text-slate-950">{meta.title}</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">{meta.description}</p>
         </div>
 
         <div className="flex-1" />

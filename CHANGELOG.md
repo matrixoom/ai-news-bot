@@ -6,6 +6,7 @@
 
 ### Added
 
+- Macro Data 景气标签新增 `综合PMI` 指标，随制造业/非制造业 PMI 一起注册、同步并以同样的折线图样式展示。
 - 新增与 Push Center 平级的 Macro Data 模块，提供 `GDP / 信贷 / 杠杆率 / 物价` 子标签页、ECharts 图表、预设时间跨度和自定义日期范围。
 - 新增 Macro Data 后端接口：`/api/frontend/modules/macro-data` 与 `/api/frontend/modules/macro-data/charts/{chart_id}`。
 - 新增 `.data/macro_data.db` 本地 SQLite 持久化，8 个宏观指标各自一张事实表，并提供注册表与同步状态表。
@@ -21,6 +22,12 @@
 
 ### Changed
 
+- Market Data 全国 70 城二手房价格指数城市选择器支持点击外部区域自动确认并关闭，确认/取消操作移动到搜索框右侧的 Heroicons 小图标；同一城市的全局、同比、环比折线统一颜色并用线型区分指标。
+- 综合 PMI 本地库已补齐 AkShare 真实月度数据，指标注册状态在真实同步后不再被默认样例种子回写为 `sample`。
+- Macro Data 信贷标签的 `新增人民币贷款` 从多折线图改为“总量虚线 + 居民/企业短期与长期贷款堆叠柱 + 同名虚线折线”，并修复人民银行 Excel 10 月列被解析成 1 月导致细分贷款缺 10-11 月数据的问题。
+- Market Data 的全国 70 城二手房价格指数从单一同比 100 基准指数扩展为同比、环比和全局走势三组序列；同比/环比统一展示为相对 100 的百分比变化，全局走势使用环比从历史首期前值 100 连续复合。
+- 顶部 Header、模块工作区和侧栏一级模块不再展示描述性副标题；侧栏折叠态为 Market Data、Trend Models、Push Center 分别使用不同 Heroicons 图标。
+- 推送中心日报内联 SVG 图表改为百分比宽度与 `max-width:100%`，降低手机端 QQ 邮箱裁切图表的概率。
 - Dashboard / News / Macro / Market / Events / Status 前端页面已清空并从导航与默认入口移除；`/api/dashboard`、`/api/frontend/dashboard`、`/api/frontend/modules/status`、`/legacy` 与对应页面 SPA 入口移除，Push Center 后端接口保留。
 - News / Market / Events 顶层模块移除页内子 tab 与侧栏子目录，页面统一展示单页总览；`/api/frontend/modules/news|market|events` 独立后端接口移除，前端改从 `/api/frontend/dashboard` 聚合 payload 读取对应模块数据。
 - Macro 顶层模块移除页内子 tab、侧栏子目录和 `/api/frontend/modules/macro` 独立后端接口；`/macro` 改为从 `/api/frontend/dashboard` 的 `macro_sections` 渲染单页总览。

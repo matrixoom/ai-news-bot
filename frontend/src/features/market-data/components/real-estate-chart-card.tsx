@@ -1,5 +1,5 @@
 import * as echarts from "echarts";
-import { ArrowsPointingOutIcon, ChevronDownIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { ArrowsPointingOutIcon, CheckIcon, ChevronDownIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRealEstateChartQuery } from "../hooks/use-real-estate-chart-query";
 import { useMarketDataRefreshMutation } from "../hooks/use-market-data-refresh-mutation";
@@ -45,7 +45,7 @@ function writeSelectedCities(cities: string[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cities));
   } catch {
-    // storage full or disabled
+    // 浏览器存储可能被禁用，失败时仅放弃持久化，不影响当前选择。
   }
 }
 
@@ -55,6 +55,25 @@ const COLORS = [
   "#14b8a6", "#e11d48", "#6366f1", "#a855f7", "#0ea5e9",
 ];
 
+/**
+ * 根据 70 城房价指标类型返回线型：同城保持同色，指标差异用线型表达。
+ */
+function resolveMetricLineType(metric?: string): "solid" | "dashed" | "dotted" {
+  if (metric === "global_index") return "solid";
+  if (metric === "mom") return "dotted";
+  return "dashed";
+}
+
+/**
+ * 从后端序列名中提取城市名，用于将同城的同比、环比、全局走势归为一组。
+ */
+function resolveSeriesCityName(seriesName: string): string {
+  return seriesName.replace(/\s+(同比|环比|全局走势)$/, "");
+}
+
+/**
+ * 展示单个 70 城房价图表，包含城市选择、时间范围切换与 ECharts 渲染。
+ */
 export function RealEstateChartCard({
   chart,
   className,
@@ -67,11 +86,13 @@ export function RealEstateChartCard({
   onRangeChange,
 }: RealEstateChartCardProps) {
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const cityPickerRef = useRef<HTMLDivElement | null>(null);
   const [selectedCities, setSelectedCities] = useState<string[]>(() => {
     const saved = readSelectedCities();
     if (saved && saved.length > 0) return saved;
     return housingCities.slice(0, 2);
   });
+  const [draftCities, setDraftCities] = useState<string[]>(selectedCities);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -88,6 +109,11 @@ export function RealEstateChartCard({
   }, [refreshMutation.isSuccess]);
 
   const series = query.data?.series ?? [];
+  const usesMultiMetric = query.data?.chart_type === "housing_multi_metric";
+  const cityColorByName = useMemo(() => {
+    const cityNames = Array.from(new Set(series.map((item) => resolveSeriesCityName(item.name))));
+    return new Map(cityNames.map((city, index) => [city, COLORS[index % COLORS.length]]));
+  }, [series]);
 
   const chartLabels = useMemo(() => {
     const allLabels = new Set<string>();
@@ -101,21 +127,26 @@ export function RealEstateChartCard({
 
   const chartSeries = useMemo(
     () =>
-      series.map((s, index) => ({
-        name: s.name,
-        type: "line" as const,
-        smooth: true,
-        symbol: "circle",
-        data: chartLabels.map((label) => {
-          const point = s.points.find(
-            (p) => (p.period_label || p.date) === label,
-          );
-          return point ? point.value : null;
-        }),
-        lineStyle: { width: 2 },
-        itemStyle: { color: COLORS[index % COLORS.length] },
-      })),
-    [series, chartLabels],
+      series.map((s, index) => {
+        const pointByLabel = new Map(s.points.map((p) => [p.period_label || p.date, p]));
+        const isGlobalIndex = s.metric === "global_index" || s.points.some((point) => point.unit === "指数");
+        const color = cityColorByName.get(resolveSeriesCityName(s.name)) ?? COLORS[index % COLORS.length];
+        return {
+          name: s.name,
+          type: "line" as const,
+          smooth: true,
+          symbol: "circle",
+          yAxisIndex: usesMultiMetric && isGlobalIndex ? 1 : 0,
+          data: chartLabels.map((label) => pointByLabel.get(label)?.value ?? null),
+          lineStyle: {
+            width: isGlobalIndex ? 2.4 : 1.8,
+            type: resolveMetricLineType(s.metric),
+            color,
+          },
+          itemStyle: { color },
+        };
+      }),
+    [series, chartLabels, usesMultiMetric, cityColorByName],
   );
 
   const chartOption = useMemo((): echarts.EChartsOption | null => {
@@ -132,10 +163,21 @@ export function RealEstateChartCard({
       },
       grid: { left: 48, right: 140, top: 24, bottom: 52 },
       xAxis: { type: "category", data: chartLabels },
-      yAxis: {
-        type: "value",
-        name: query.data?.unit ?? "%",
-      },
+      yAxis: usesMultiMetric
+        ? [
+            {
+              type: "value",
+              name: "同比/环比 %",
+            },
+            {
+              type: "value",
+              name: "全局走势",
+            },
+          ]
+        : {
+            type: "value",
+            name: query.data?.unit ?? "%",
+          },
       toolbox: {
         feature: {
           dataZoom: { title: { zoom: "框选放大", back: "还原" } },
@@ -164,7 +206,7 @@ export function RealEstateChartCard({
       ],
       series: chartSeries,
     };
-  }, [chartLabels, chartSeries, query.data?.unit]);
+  }, [chartLabels, chartSeries, query.data?.unit, usesMultiMetric]);
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
@@ -195,13 +237,47 @@ export function RealEstateChartCard({
     };
   }, [chartOption]);
 
-  function toggleCity(city: string) {
-    setSelectedCities((prev) => {
-      const next = prev.includes(city)
-        ? prev.filter((c) => c !== city)
-        : [...prev, city];
-      writeSelectedCities(next);
-      return next;
+  useEffect(() => {
+    if (!dropdownOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!cityPickerRef.current || cityPickerRef.current.contains(event.target as Node)) {
+        return;
+      }
+      applyCitySelection();
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [dropdownOpen, draftCities]);
+
+  function openCityPicker() {
+    setDraftCities(selectedCities);
+    setSearchText("");
+    setDropdownOpen(true);
+  }
+
+  function closeCityPicker() {
+    setSearchText("");
+    setDropdownOpen(false);
+  }
+
+  function applyCitySelection() {
+    setSelectedCities(draftCities);
+    writeSelectedCities(draftCities);
+    closeCityPicker();
+  }
+
+  function cancelCitySelection() {
+    setDraftCities(selectedCities);
+    closeCityPicker();
+  }
+
+  function setCitySelected(city: string, shouldSelect: boolean) {
+    setDraftCities((prev) => {
+      if (shouldSelect && prev.includes(city)) return prev;
+      if (!shouldSelect && !prev.includes(city)) return prev;
+      return shouldSelect ? [...prev, city] : prev.filter((c) => c !== city);
     });
   }
 
@@ -223,7 +299,7 @@ export function RealEstateChartCard({
         <div>
           <h3 className="text-lg font-semibold text-slate-950">{chart.title}</h3>
           <p className="mt-1 text-sm text-slate-500">
-            单位：{chart.unit} · 频率：{chart.frequency} ({housingCities.length} 个城市可选)
+            单位：{query.data?.unit ?? chart.unit} · 频率：{chart.frequency} ({housingCities.length} 个城市可选)
           </p>
         </div>
         <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
@@ -257,11 +333,11 @@ export function RealEstateChartCard({
           )}
         </div>
 
-        <div className="relative">
+        <div className="relative" ref={cityPickerRef}>
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-            onClick={() => setDropdownOpen(!dropdownOpen)}
+            onClick={() => (dropdownOpen ? closeCityPicker() : openCityPicker())}
           >
             {selectedCities.length === 0 ? "选择城市" : `${selectedCities.length} 个城市已选`}
             <ChevronDownIcon className="h-4 w-4 text-slate-400" />
@@ -269,49 +345,56 @@ export function RealEstateChartCard({
 
           {dropdownOpen && (
             <div className="absolute left-0 z-30 mt-1 max-h-64 w-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-              <div className="sticky top-0 border-b border-slate-100 bg-white p-2">
+              <div className="sticky top-0 flex items-center gap-1 border-b border-slate-100 bg-white p-2">
                 <input
                   type="text"
-                  className="w-full rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                  className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
                   placeholder="搜索城市..."
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                 />
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  aria-label="确定城市选择"
+                  onClick={applyCitySelection}
+                >
+                  <CheckIcon aria-hidden="true" className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
+                  aria-label="取消城市选择"
+                  onClick={cancelCitySelection}
+                >
+                  <XMarkIcon aria-hidden="true" className="h-4 w-4" />
+                </button>
               </div>
               <div className="p-1">
-                {filteredCities.map((city) => (
-                  <label
-                    key={city}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50"
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300 text-blue-600"
-                      checked={selectedCities.includes(city)}
-                      onChange={() => toggleCity(city)}
-                    />
-                    {city}
-                  </label>
-                ))}
-              </div>
-              <div className="border-t border-slate-100 p-2 flex gap-2">
-                <button
-                  type="button"
-                  className="flex-1 rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200"
-                  onClick={() => {
-                    setSelectedCities([]);
-                    writeSelectedCities([]);
-                  }}
-                >
-                  清空
-                </button>
-                <button
-                  type="button"
-                  className="flex-1 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-200"
-                  onClick={() => setDropdownOpen(false)}
-                >
-                  确定
-                </button>
+                {filteredCities.map((city) => {
+                  const isSelected = draftCities.includes(city);
+                  return (
+                    <button
+                      key={city}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      aria-label={city}
+                      className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-slate-50"
+                      onClick={() => setCitySelected(city, !isSelected)}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`inline-flex h-4 w-4 items-center justify-center rounded border ${
+                          isSelected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {isSelected ? <CheckIcon className="h-3 w-3" /> : null}
+                      </span>
+                      <span>{city}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

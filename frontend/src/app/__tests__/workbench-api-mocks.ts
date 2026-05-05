@@ -453,7 +453,7 @@ const creditMacroDataPayload: WorkbenchPayloads["macroData"] = {
     { value: "custom", label: "自定义" },
   ],
   charts: [
-    { id: "new_rmb_loans", title: "新增人民币贷款", unit: "亿元", frequency: "monthly", status: "live", chart_type: "line", wide: true },
+    { id: "new_rmb_loans", title: "新增人民币贷款", unit: "亿元", frequency: "monthly", status: "live", chart_type: "bar_stacked_line", wide: true },
     { id: "social_financing", title: "社会融资规模", unit: "亿元", frequency: "monthly", status: "live", chart_type: "line", wide: true },
     { id: "household_leverage_ratio", title: "居民部门杠杆率", unit: "%", frequency: "quarterly", status: "live", chart_type: "line" },
     { id: "corporate_leverage_ratio", title: "企业部门杠杆率", unit: "%", frequency: "quarterly", status: "live", chart_type: "line" },
@@ -691,6 +691,7 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
           title: "新增人民币贷款",
           unit: "亿元",
           frequency: "monthly",
+          chart_type: "bar_stacked_line",
           wide: true,
           series: [
             { name: "居民新增短期贷款", points: [
