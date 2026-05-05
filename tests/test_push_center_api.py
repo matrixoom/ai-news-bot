@@ -391,7 +391,7 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertIn("M20", preview_json["preview"]["html_body"])
         self.assertIn("Deviation", preview_json["preview"]["html_body"])
         self.assertIn('role="presentation"', preview_json["preview"]["html_body"])
-        self.assertIn('style="display:block;width:100%;max-width:100%;min-height:126', preview_json["preview"]["html_body"])
+        self.assertIn('style="display:block;max-width:100%;min-height:126', preview_json["preview"]["html_body"])
         self.assertIn("@media only screen and (max-width: 480px)", preview_json["preview"]["html_body"])
         self.assertIn("email-two-up-col", preview_json["preview"]["html_body"])
         self.assertIn("max-width:50%", preview_json["preview"]["html_body"])
