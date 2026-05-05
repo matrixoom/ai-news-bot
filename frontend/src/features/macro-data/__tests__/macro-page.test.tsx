@@ -91,6 +91,7 @@ describe("MacroDataPage", () => {
     expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "信贷" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("新增人民币贷款")).toBeInTheDocument();
+    expect(await screen.findByText("居民活期存款")).toBeInTheDocument();
     expect(await screen.findByText("社会融资规模")).toBeInTheDocument();
     expect(await screen.findByText("居民部门杠杆率")).toBeInTheDocument();
     expect(await screen.findByText("企业部门杠杆率")).toBeInTheDocument();

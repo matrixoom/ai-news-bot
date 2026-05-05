@@ -29,6 +29,7 @@ CnbsLoader = Callable[[], list[dict[str, Any]]]
 NewLoansLoader = Callable[[], list[dict[str, Any]]]
 SocialFinancingLoader = Callable[[], list[dict[str, Any]]]
 PbocCreditBreakdownLoader = Callable[[], list[dict[str, Any]]]
+HouseholdDepositLoader = Callable[[], list[dict[str, Any]]]
 ChinaBondYieldLoader = Callable[[], list[dict[str, Any]]]
 ZhUsRateLoader = Callable[[], list[dict[str, Any]]]
 UsdCnyLoader = Callable[[], list[dict[str, Any]]]
@@ -87,6 +88,7 @@ class MacroDataSyncService:
         new_loans_loader: NewLoansLoader | None = None,
         social_financing_loader: SocialFinancingLoader | None = None,
         pboc_credit_breakdown_loader: PbocCreditBreakdownLoader | None = None,
+        household_deposit_loader: HouseholdDepositLoader | None = None,
         china_bond_yield_loader: ChinaBondYieldLoader | None = None,
         zh_us_rate_loader: ZhUsRateLoader | None = None,
         usd_cny_loader: UsdCnyLoader | None = None,
@@ -107,6 +109,7 @@ class MacroDataSyncService:
         self._new_loans_loader = new_loans_loader or _load_new_loans_rows
         self._social_financing_loader = social_financing_loader or _load_social_financing_rows
         self._pboc_credit_breakdown_loader = pboc_credit_breakdown_loader or _load_pboc_credit_breakdown_rows
+        self._household_deposit_loader = household_deposit_loader or _load_household_deposit_rows
         self._china_bond_yield_loader = china_bond_yield_loader or _load_china_bond_yield_rows
         self._zh_us_rate_loader = zh_us_rate_loader or _load_zh_us_rate_rows
         self._usd_cny_loader = usd_cny_loader or _load_usd_cny_rows
@@ -195,6 +198,7 @@ class MacroDataSyncService:
         result["trade"] = self.sync_trade_history()
         result["credit"] = self.sync_credit_history()
         result["credit_breakdown"] = self.sync_credit_breakdown_history()
+        result["household_deposits"] = self.sync_household_deposit_history()
         result["expectations"] = self.sync_expectations_history()
         return result
 
@@ -396,6 +400,45 @@ class MacroDataSyncService:
         for indicator_id, points in indicator_points.items():
             self._repository.replace_points(indicator_id, points, status="live", warning_message="")
         return {k: len(v) for k, v in indicator_points.items()}
+
+    def sync_household_deposit_history(self) -> dict[str, int]:
+        """同步居民存款总计、活期和定期及其他分项余额。
+
+        Returns:
+            每个指标本次写入的点位数量。
+        """
+
+        rows = self._household_deposit_loader()
+        indicator_points: dict[str, list[dict[str, Any]]] = {
+            "household_deposits": [],
+            "household_demand_deposits": [],
+            "household_time_deposits": [],
+        }
+        key_map = {
+            "household_total": "household_deposits",
+            "household_demand": "household_demand_deposits",
+            "household_time": "household_time_deposits",
+        }
+        for row in rows:
+            period_end = str(row["period_end"])
+            for row_key, indicator_id in key_map.items():
+                value = _optional_float(row.get(row_key))
+                if value is None:
+                    continue
+                indicator_points[indicator_id].append(
+                    _point(
+                        period_end=period_end,
+                        period_label=_month_label(period_end),
+                        value=value,
+                        unit="亿元",
+                        frequency="monthly",
+                        provider_key="pboc_household_deposits",
+                        source_url="https://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html",
+                    )
+                )
+        for indicator_id, points in indicator_points.items():
+            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {indicator_id: len(points) for indicator_id, points in indicator_points.items()}
 
     def sync_expectations_history(self) -> dict[str, int]:
         """同步预期类指标历史数据（国债收益率、汇率、信用利差）。
@@ -1362,6 +1405,221 @@ def _load_pboc_credit_breakdown_rows() -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _load_household_deposit_rows() -> list[dict[str, Any]]:
+    """从人民银行历史信贷收支表读取居民存款余额。
+
+    2000-2014 年使用人民银行归档 HTML 表，2015 年后使用年度统计页 Excel。
+    两类表格口径名称存在“储蓄存款/居民户存款/住户存款”的历史变化，
+    统一归并为居民存款总计、居民活期存款、居民定期及其他存款。
+
+    Returns:
+        含 household_total/household_demand/household_time 的月度余额行。
+    """
+
+    import io
+    from io import StringIO
+
+    import pandas as pd
+    import requests
+
+    base = "http://www.pbc.gov.cn"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    html_urls: dict[int, str] = {
+        2000: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2000-S1c.htm",
+        2001: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2001-S1c.htm",
+        2002: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2002S1.htm",
+        2003: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2003S1.htm",
+        2004: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2004S1.htm",
+        2005: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2005S1.htm",
+        2006: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2006S03.htm",
+        2007: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2007S03a.htm",
+        2008: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2008S03a.htm",
+        2009: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2009s03a.htm",
+        2010: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2010s03a.htm",
+        2011: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2011s03a.htm",
+        2012: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2012s03a.htm",
+        2013: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2013s03a.htm",
+        2014: "https://www.pbc.gov.cn/eportal/fileDir/defaultCurSite/resource/cms/2015/07/2014s03a.htm",
+    }
+    year_pages: dict[int, str] = {
+        2026: f"{base}/diaochatongjisi/116219/116319/2026ntjsj/index.html",
+        2025: f"{base}/diaochatongjisi/116219/116319/5570903/index.html",
+        2024: f"{base}/diaochatongjisi/116219/116319/5225358/index.html",
+        2023: f"{base}/diaochatongjisi/116219/116319/4780803/index.html",
+        2022: f"{base}/diaochatongjisi/116219/116319/4458449/index.html",
+        2021: f"{base}/diaochatongjisi/116219/116319/4184109/index.html",
+        2020: f"{base}/diaochatongjisi/116219/116319/3959050/index.html",
+        2019: f"{base}/diaochatongjisi/116219/116319/3750274/index.html",
+        2018: f"{base}/diaochatongjisi/116219/116319/3471721/index.html",
+        2017: f"{base}/diaochatongjisi/116219/116319/3245697/index.html",
+        2016: f"{base}/diaochatongjisi/116219/116319/3013637/index.html",
+        2015: f"{base}/diaochatongjisi/116219/116319/2161324/index.html",
+    }
+
+    balances: dict[tuple[int, int], dict[str, float]] = {}
+    for year, url in html_urls.items():
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+            for encoding in ("utf-8-sig", "gb18030"):
+                html = response.content.decode(encoding, "ignore")
+                frame = pd.read_html(StringIO(html))[0]
+                parsed = _parse_household_deposit_balance_sheet(frame, year)
+                if parsed:
+                    balances.update(parsed)
+                    break
+        except Exception:
+            continue
+
+    for year in sorted(year_pages):
+        try:
+            year_page = requests.get(year_pages[year], headers=headers, timeout=30)
+            year_page.encoding = "utf-8"
+            soup = BeautifulSoup(year_page.text, "html.parser")
+
+            credit_link = None
+            for anchor in soup.find_all("a"):
+                if "信贷收支" in anchor.get_text(strip=True):
+                    credit_link = anchor.get("href", "")
+                    break
+            if not credit_link:
+                continue
+
+            credit_url = credit_link if credit_link.startswith("http") else base + credit_link
+            credit_page = requests.get(credit_url, headers=headers, timeout=30)
+            credit_page.encoding = "utf-8"
+            credit_soup = BeautifulSoup(credit_page.text, "html.parser")
+
+            xls_links = [anchor.get("href", "") for anchor in credit_soup.find_all("a") if ".xls" in anchor.get("href", "").lower()]
+            if len(xls_links) < 5:
+                continue
+
+            file_url = xls_links[4] if xls_links[4].startswith("http") else base + xls_links[4]
+            excel_response = requests.get(file_url, headers=headers, timeout=30)
+            frame = pd.read_excel(io.BytesIO(excel_response.content), header=None)
+            balances.update(_parse_household_deposit_balance_sheet(frame, year))
+        except Exception:
+            continue
+
+    rows: list[dict[str, Any]] = []
+    for year, month in sorted(balances):
+        values = balances[(year, month)]
+        rows.append(
+            {
+                "period_end": f"{year}-{month:02d}-{_month_last_day(year, month)}",
+                "household_total": round(values["household_total"], 2),
+                "household_demand": round(values["household_demand"], 2),
+                "household_time": round(values["household_time"], 2),
+            }
+        )
+    return rows
+
+
+def _parse_household_deposit_balance_sheet(
+    df: "pd.DataFrame", expected_year: int
+) -> dict[tuple[int, int], dict[str, float]]:
+    """解析居民存款余额表格。
+
+    Args:
+        df: 人民银行 HTML 或 Excel 表格转出的 DataFrame。
+        expected_year: 当前表格年份，用于筛选月份列。
+
+    Returns:
+        以 `(year, month)` 为键的居民存款余额字典。
+    """
+
+    import re
+
+    import pandas as pd
+
+    header_row = -1
+    for row_index in range(min(12, df.shape[0])):
+        values = [str(df.iloc[row_index, col]) if pd.notna(df.iloc[row_index, col]) else "" for col in range(df.shape[1])]
+        if any("项目" in value or "Item" in value for value in values):
+            header_row = row_index
+            break
+    if header_row < 0:
+        return {}
+
+    month_columns: dict[int, int] = {}
+    for col_index in range(1, df.shape[1]):
+        raw_value = str(df.iloc[header_row, col_index]) if pd.notna(df.iloc[header_row, col_index]) else ""
+        match = re.search(r"(\d{4})\.(\d{1,2})", raw_value)
+        if not match:
+            continue
+        year = int(match.group(1))
+        month = int(match.group(2))
+        if year != expected_year:
+            continue
+        if 1 <= col_index <= 12 and month != col_index:
+            month = col_index
+        month_columns[col_index] = month
+    if not month_columns:
+        return {}
+
+    target_rows: dict[str, int] = {}
+    in_household_deposits = False
+    for row_index in range(header_row + 1, df.shape[0]):
+        label = str(df.iloc[row_index, 0]).replace("\xa0", " ").strip() if pd.notna(df.iloc[row_index, 0]) else ""
+        compact_label = label.replace(" ", "")
+        is_total = (
+            ("住户存款" in compact_label or "居民户存款" in compact_label or "储蓄存款" in compact_label)
+            or "Deposits of Households" in label
+            or "Deposits of Resident Sector" in label
+            or "Household Savings Deposits" in label
+        ) and "贷款" not in compact_label and "Loans" not in label
+        if is_total:
+            target_rows["household_total"] = row_index
+            in_household_deposits = True
+            continue
+        if not in_household_deposits:
+            continue
+        if _is_next_deposit_section(label):
+            in_household_deposits = False
+            continue
+        if ("活期" in compact_label or "Demand" in label) and "household_demand" not in target_rows:
+            target_rows["household_demand"] = row_index
+        elif (("定期" in compact_label or "Time" in label) and "household_time" not in target_rows):
+            target_rows["household_time"] = row_index
+        if {"household_total", "household_demand", "household_time"}.issubset(target_rows):
+            break
+
+    if not {"household_total", "household_demand", "household_time"}.issubset(target_rows):
+        return {}
+
+    result: dict[tuple[int, int], dict[str, float]] = {}
+    for col_index, month in month_columns.items():
+        values: dict[str, float] = {}
+        for key, row_index in target_rows.items():
+            raw_value = df.iloc[row_index, col_index]
+            value = _optional_float(raw_value)
+            if value is None:
+                break
+            values[key] = value
+        if len(values) == 3:
+            result[(expected_year, month)] = values
+    return result
+
+
+def _is_next_deposit_section(label: str) -> bool:
+    """判断行标签是否已经离开居民存款分组。
+
+    Args:
+        label: 当前行的中英混合标签。
+
+    Returns:
+        进入其他存款项目时返回 True。
+    """
+
+    compact_label = label.replace(" ", "")
+    if not compact_label:
+        return False
+    if any(keyword in compact_label for keyword in ["非金融", "财政存款", "机关团体", "农业存款", "信托存款"]):
+        return True
+    if "其他存款" in compact_label and "定期" not in compact_label:
+        return True
+    return "Non-financial" in label or "Fiscal" in label or "Government" in label
 
 
 def _parse_credit_balance_sheet(df: "pd.DataFrame", expected_year: int) -> dict[tuple[int, int], dict[str, float]]:

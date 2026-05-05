@@ -25,6 +25,7 @@ GDP_GROWTH_CHART_ID = "gdp_growth"
 GDP_TOTAL_COMBINED_CHART_ID = "gdp_total_combined"
 CURRENCY_SUPPLY_CHART_ID = "currency_supply"
 NEW_RMB_LOANS_COMBINED_CHART_ID = "new_rmb_loans"
+HOUSEHOLD_DEMAND_DEPOSITS_CHART_ID = "household_demand_deposits"
 SOCIAL_FINANCING_CHART_ID = "social_financing"
 
 _NEW_RMB_LOANS_SERIES = [
@@ -35,11 +36,18 @@ _NEW_RMB_LOANS_SERIES = [
     {"indicator_id": "corporate_long_term_loans", "name": "企业新增长期贷款"},
 ]
 
+_HOUSEHOLD_DEPOSIT_SERIES = [
+    {"indicator_id": "household_deposits", "name": "居民存款总计"},
+    {"indicator_id": "household_demand_deposits", "name": "居民活期存款"},
+    {"indicator_id": "household_time_deposits", "name": "居民定期及其他存款"},
+]
+
 _CREDIT_CHART_ORDER = {
     "new_rmb_loans": 1,
-    "social_financing": 2,
-    "household_leverage_ratio": 3,
-    "corporate_leverage_ratio": 4,
+    "household_demand_deposits": 2,
+    "social_financing": 3,
+    "household_leverage_ratio": 4,
+    "corporate_leverage_ratio": 5,
 }
 
 _CHART_SYNC_GROUPS: dict[str, str] = {
@@ -54,6 +62,7 @@ _CHART_SYNC_GROUPS: dict[str, str] = {
     "exports": "trade",
     "imports": "trade",
     "new_rmb_loans": "credit_breakdown",
+    "household_demand_deposits": "household_deposits",
     "social_financing": "credit",
     "household_leverage_ratio": "credit",
     "corporate_leverage_ratio": "credit",
@@ -130,6 +139,7 @@ class MacroDataService:
             "trade": syncer.sync_trade_history,
             "credit": syncer.sync_credit_history,
             "credit_breakdown": syncer.sync_credit_breakdown_history,
+            "household_deposits": syncer.sync_household_deposit_history,
             "expectations": syncer.sync_expectations_history,
         }
         point_counts = sync_methods[group]()
@@ -159,11 +169,13 @@ class MacroDataService:
             chart_payloads = [
                 c for c in chart_payloads
                 if c["id"] not in ("new_rmb_loans", "household_short_term_loans", "household_long_term_loans",
-                                   "corporate_short_term_loans", "corporate_long_term_loans")
+                                   "corporate_short_term_loans", "corporate_long_term_loans",
+                                   "household_deposits", "household_time_deposits")
             ]
-            chart_payloads = [c for c in chart_payloads if c["id"] != "social_financing"]
+            chart_payloads = [c for c in chart_payloads if c["id"] not in ("social_financing", "household_demand_deposits")]
             chart_payloads.insert(0, self._new_rmb_loans_combined_definition_payload())
-            chart_payloads.insert(1, self._social_financing_wide_definition_payload())
+            chart_payloads.insert(1, self._household_demand_deposits_definition_payload())
+            chart_payloads.insert(2, self._social_financing_wide_definition_payload())
             chart_payloads.sort(key=lambda c: _CREDIT_CHART_ORDER.get(c["id"], 99))
         return {
             "generated_at": _utc_now(),
@@ -235,6 +247,9 @@ class MacroDataService:
         if chart_id == NEW_RMB_LOANS_COMBINED_CHART_ID:
             normalized_frequency = self._validate_frequency(frequency or "monthly")
             return self._build_new_rmb_loans_combined_payload(resolved_range, normalized_frequency)
+        if chart_id == HOUSEHOLD_DEMAND_DEPOSITS_CHART_ID:
+            normalized_frequency = self._validate_frequency(frequency or "monthly")
+            return self._build_household_demand_deposits_payload(resolved_range, normalized_frequency)
         if chart_id == SOCIAL_FINANCING_CHART_ID and frequency in (None, "monthly"):
             normalized_frequency = self._validate_frequency(frequency or "monthly")
             return self._build_social_financing_wide_payload(resolved_range, normalized_frequency)
@@ -814,6 +829,23 @@ class MacroDataService:
             "wide": True,
         }
 
+    def _household_demand_deposits_definition_payload(self) -> dict[str, Any]:
+        """构造居民活期存款组合图表定义。
+
+        Returns:
+            前端可直接使用的图表定义，含 wide 布局标记。
+        """
+
+        return {
+            "id": HOUSEHOLD_DEMAND_DEPOSITS_CHART_ID,
+            "title": "居民活期存款",
+            "unit": "亿元",
+            "frequency": "monthly",
+            "status": "sample",
+            "chart_type": "bar_stacked_line",
+            "wide": True,
+        }
+
     def _build_new_rmb_loans_combined_payload(
         self, resolved_range: ResolvedDateRange, frequency: str
     ) -> dict[str, Any]:
@@ -893,6 +925,41 @@ class MacroDataService:
             ],
         }
 
+    def _build_household_demand_deposits_payload(
+        self, resolved_range: ResolvedDateRange, frequency: str
+    ) -> dict[str, Any]:
+        """合并居民存款总计及活期/定期分项为单张图表。
+
+        Args:
+            resolved_range: 已解析的目标展示范围。
+            frequency: 数据频率。
+
+        Returns:
+            包含总量线和两项存款分项的图表 payload。
+        """
+
+        series: list[dict[str, Any]] = []
+        for series_def in _HOUSEHOLD_DEPOSIT_SERIES:
+            points = self._repository.load_points(
+                indicator_id=series_def["indicator_id"],
+                start_date=resolved_range.start_date,
+                end_date=resolved_range.end_date,
+                frequency=frequency,
+            )
+            series.append({"name": series_def["name"], "points": self._points_payload(points, resolved_range)})
+
+        return {
+            **self._household_demand_deposits_definition_payload(),
+            "frequency": frequency,
+            "range": {
+                "type": resolved_range.range_type,
+                "start_date": resolved_range.start_date,
+                "end_date": resolved_range.end_date,
+            },
+            "sync_state": self._combined_household_deposit_sync_state(series),
+            "series": series,
+        }
+
     def _combined_credit_breakdown_sync_state(self) -> dict[str, Any]:
         """合并贷款细分指标四表的同步状态。
 
@@ -912,6 +979,29 @@ class MacroDataService:
             "synced_at": max((s.synced_at for s in states), default=""),
             "warning_message": "；".join(warning_messages),
             "point_count": sum(s.point_count for s in states),
+        }
+
+    def _combined_household_deposit_sync_state(self, series: list[dict[str, Any]]) -> dict[str, Any]:
+        """合并居民存款指标三表的同步状态。
+
+        Args:
+            series: 当前图表已装载的三条序列。
+
+        Returns:
+            前端展示用同步状态。
+        """
+
+        states = [
+            state
+            for series_def in _HOUSEHOLD_DEPOSIT_SERIES
+            if (state := self._repository.get_sync_state(series_def["indicator_id"])) is not None
+        ]
+        warning_messages = [state.warning_message for state in states if state.warning_message]
+        return {
+            "status": states[0].status if states else "unavailable",
+            "synced_at": max((state.synced_at for state in states), default=""),
+            "warning_message": "；".join(warning_messages),
+            "point_count": sum(len(item["points"]) for item in series),
         }
 
 

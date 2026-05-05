@@ -48,7 +48,7 @@
 
 用途：返回 Macro Data 模块元数据、子标签、时间范围选项和当前分类下的图表定义。
 
-兼容说明：景气标签包含 `manufacturing_pmi`、`non_manufacturing_pmi`、`comprehensive_pmi` 三个 PMI 折线图；信贷标签的 `new_rmb_loans` 使用 `chart_type: "bar_stacked_line"`，总量序列为虚线折线，居民/企业短期与长期贷款各自返回同名堆叠柱与虚线折线，前端图例选中/取消时同名柱线同步联动。
+兼容说明：景气标签包含 `manufacturing_pmi`、`non_manufacturing_pmi`、`comprehensive_pmi` 三个 PMI 折线图；信贷标签的 `new_rmb_loans` 与 `household_demand_deposits` 使用 `chart_type: "bar_stacked_line"`。`new_rmb_loans` 返回总量虚线折线，居民/企业短期与长期贷款各自返回同名堆叠柱与虚线折线；`household_demand_deposits` 返回居民存款总计虚线折线，以及居民活期存款、居民定期及其他存款同名堆叠柱与虚线折线。前端图例选中/取消时同名柱线同步联动。
 
 成功：`200`
 
@@ -125,6 +125,7 @@ uv run python main.py macro-sync
 - GDP 增速：从本地同频率总量点位同比推导，年度和季度分开计算。
 - 景气 PMI：制造业 PMI、非制造业 PMI 与综合 PMI 分别写入独立事实表。
 - 信贷细分：人民银行贷款余额表按列序修正 10 月列，避免 Excel `2025.1` 显示导致 10 月被误解析为 1 月；`new_rmb_loans` 图表返回总量虚线 + 四项细分堆叠柱和同名虚线折线。
+- 居民存款：`household_demand_deposits` 图表读取 `macro_household_deposits`、`macro_household_demand_deposits`、`macro_household_time_deposits` 三张事实表；同步优先解析人民银行 2000 年以来归档 HTML 与 2015 年以来年度 Excel，覆盖近 30 年窗口中的月度余额。
 
 成功：`200`
 

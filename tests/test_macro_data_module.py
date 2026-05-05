@@ -7,7 +7,11 @@ from fastapi.testclient import TestClient
 from src.app.web import create_fastapi_app
 from src.services.macro_data_repository import MacroDataRepository
 from src.services.macro_data_service import MacroDataService
-from src.services.macro_data_sync_service import MacroDataSyncService, _parse_credit_balance_sheet
+from src.services.macro_data_sync_service import (
+    MacroDataSyncService,
+    _parse_credit_balance_sheet,
+    _parse_household_deposit_balance_sheet,
+)
 
 
 class MacroDataRepositoryTests(unittest.TestCase):
@@ -30,6 +34,9 @@ class MacroDataRepositoryTests(unittest.TestCase):
         self.assertIn("macro_corporate_new_loans", table_names)
         self.assertIn("macro_household_leverage_ratio", table_names)
         self.assertIn("macro_corporate_leverage_ratio", table_names)
+        self.assertIn("macro_household_deposits", table_names)
+        self.assertIn("macro_household_demand_deposits", table_names)
+        self.assertIn("macro_household_time_deposits", table_names)
         self.assertIn("macro_ppi", table_names)
         self.assertIn("macro_cpi", table_names)
         self.assertIn("macro_nominal_gdp_growth", table_names)
@@ -205,9 +212,12 @@ class MacroDataApiTests(unittest.TestCase):
         self.assertEqual(payload["tab"], "credit")
         chart_ids = [chart["id"] for chart in payload["charts"]]
         self.assertIn("new_rmb_loans", chart_ids)
+        self.assertIn("household_demand_deposits", chart_ids)
         self.assertIn("social_financing", chart_ids)
         self.assertIn("household_leverage_ratio", chart_ids)
         self.assertIn("corporate_leverage_ratio", chart_ids)
+        self.assertLess(chart_ids.index("new_rmb_loans"), chart_ids.index("household_demand_deposits"))
+        self.assertLess(chart_ids.index("household_demand_deposits"), chart_ids.index("social_financing"))
         social_financing = next(c for c in payload["charts"] if c["id"] == "social_financing")
         self.assertEqual(social_financing["chart_type"], "line")
         self.assertEqual(social_financing["title"], "社会融资规模")
@@ -216,6 +226,11 @@ class MacroDataApiTests(unittest.TestCase):
         self.assertEqual(new_loans["chart_type"], "bar_stacked_line")
         self.assertEqual(new_loans["title"], "新增人民币贷款")
         self.assertEqual(new_loans["unit"], "亿元")
+        household_deposits = next(c for c in payload["charts"] if c["id"] == "household_demand_deposits")
+        self.assertEqual(household_deposits["chart_type"], "bar_stacked_line")
+        self.assertEqual(household_deposits["title"], "居民活期存款")
+        self.assertEqual(household_deposits["unit"], "亿元")
+        self.assertTrue(household_deposits["wide"])
 
     def test_frontend_macro_data_module_returns_comprehensive_pmi_chart(self) -> None:
         """校验景气标签包含综合 PMI，且保持 PMI 折线图契约。"""
@@ -270,6 +285,107 @@ class MacroDataApiTests(unittest.TestCase):
         self.assertEqual(payload["frequency"], "monthly")
         self.assertEqual(len(payload["series"]), 1)
         self.assertEqual(payload["series"][0]["name"], "社会融资规模")
+
+    def test_frontend_macro_data_chart_returns_household_deposit_series(self) -> None:
+        """校验居民活期存款图表返回总量线和活期/定期分项序列。"""
+        self.repository.replace_points(
+            "household_deposits",
+            [
+                {
+                    "period_end": "2000-01-31",
+                    "period_label": "2000-01",
+                    "value": 60241.8,
+                    "unit": "亿元",
+                    "frequency": "monthly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                },
+                {
+                    "period_end": "2026-03-31",
+                    "period_label": "2026-03",
+                    "value": 1735889.52,
+                    "unit": "亿元",
+                    "frequency": "monthly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                },
+            ],
+            status="live",
+            warning_message="",
+        )
+        self.repository.replace_points(
+            "household_demand_deposits",
+            [
+                {
+                    "period_end": "2000-01-31",
+                    "period_label": "2000-01",
+                    "value": 14975.0,
+                    "unit": "亿元",
+                    "frequency": "monthly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                },
+                {
+                    "period_end": "2026-03-31",
+                    "period_label": "2026-03",
+                    "value": 420190.26,
+                    "unit": "亿元",
+                    "frequency": "monthly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                },
+            ],
+            status="live",
+            warning_message="",
+        )
+        self.repository.replace_points(
+            "household_time_deposits",
+            [
+                {
+                    "period_end": "2000-01-31",
+                    "period_label": "2000-01",
+                    "value": 45266.8,
+                    "unit": "亿元",
+                    "frequency": "monthly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                },
+                {
+                    "period_end": "2026-03-31",
+                    "period_label": "2026-03",
+                    "value": 1315699.26,
+                    "unit": "亿元",
+                    "frequency": "monthly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                },
+            ],
+            status="live",
+            warning_message="",
+        )
+
+        response = self.client.get(
+            "/api/frontend/modules/macro-data/charts/household_demand_deposits"
+            "?range=custom&start_date=2000-01-01&end_date=2026-12-31"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["id"], "household_demand_deposits")
+        self.assertEqual(payload["chart_type"], "bar_stacked_line")
+        self.assertEqual(payload["frequency"], "monthly")
+        self.assertEqual(
+            [series["name"] for series in payload["series"]],
+            ["居民存款总计", "居民活期存款", "居民定期及其他存款"],
+        )
+        self.assertEqual(payload["series"][1]["points"][0]["date"], "2000-01-31")
+        self.assertEqual(payload["series"][1]["points"][-1]["date"], "2026-03-31")
 
     def test_frontend_macro_data_chart_returns_gdp_growth_series(self) -> None:
         """校验 GDP 增速图按名义和实际 GDP 总量派生两条同比序列。"""
@@ -469,6 +585,103 @@ class MacroDataSyncServiceTests(unittest.TestCase):
             frequency="monthly",
         )
         self.assertEqual(points[0].value, 51.5)
+
+    def test_sync_household_deposit_history_persists_near_30_year_points(self) -> None:
+        """校验居民存款同步可写入覆盖近 30 年窗口的月度活期存款序列。"""
+        repository = MacroDataRepository(self.db_path)
+        service = MacroDataSyncService(
+            repository=repository,
+            household_deposit_loader=lambda: [
+                {
+                    "period_end": "2000-01-31",
+                    "household_total": 60241.8,
+                    "household_demand": 14975.0,
+                    "household_time": 45266.8,
+                },
+                {
+                    "period_end": "2026-03-31",
+                    "household_total": 1735889.52,
+                    "household_demand": 420190.26,
+                    "household_time": 1315699.26,
+                },
+            ],
+        )
+
+        result = service.sync_household_deposit_history()
+
+        self.assertEqual(result["household_demand_deposits"], 2)
+        points = repository.load_points(
+            indicator_id="household_demand_deposits",
+            start_date="1999-01-01",
+            end_date="2026-12-31",
+            frequency="monthly",
+        )
+        self.assertEqual(points[0].period_end, "2000-01-31")
+        self.assertEqual(points[-1].period_end, "2026-03-31")
+        self.assertEqual(repository.get_sync_state("household_demand_deposits").status, "live")
+
+    def test_parse_household_deposit_balance_sheet_reads_household_demand_rows(self) -> None:
+        """校验人民银行信贷收支表可解析住户存款、活期和定期分项余额。"""
+        import pandas as pd
+
+        rows = [[""] * 4 for _ in range(15)]
+        rows[5][0] = "项目 Item"
+        rows[5][1] = "2000.01"
+        rows[5][2] = "2000.02"
+        rows[5][3] = "2000.03"
+        rows[8][0] = "储蓄存款 Household Savings Deposits"
+        rows[9][0] = "活期储蓄 Demand deposits"
+        rows[10][0] = "定期储蓄 Time Deposits"
+        rows[8][1:] = [60241.8, 62270.3, 62492.29]
+        rows[9][1:] = [14975.0, 15726.8, 16001.83]
+        rows[10][1:] = [45266.8, 46543.4, 46490.46]
+
+        result = _parse_household_deposit_balance_sheet(pd.DataFrame(rows), 2000)
+
+        self.assertEqual(result[(2000, 1)]["household_total"], 60241.8)
+        self.assertEqual(result[(2000, 1)]["household_demand"], 14975.0)
+        self.assertEqual(result[(2000, 1)]["household_time"], 45266.8)
+
+    def test_parse_household_deposit_balance_sheet_accepts_chinese_only_savings_rows(self) -> None:
+        """校验 2000 年前后仅中文行名的储蓄存款表可解析为居民存款。"""
+        import pandas as pd
+
+        rows = [[""] * 3 for _ in range(12)]
+        rows[2][0] = "项目"
+        rows[2][1] = "2001.01"
+        rows[2][2] = "2001.02"
+        rows[6][0] = "储蓄存款"
+        rows[7][0] = "活期储蓄"
+        rows[8][0] = "定期储蓄"
+        rows[6][1:] = [70000.0, 71000.0]
+        rows[7][1:] = [18000.0, 18100.0]
+        rows[8][1:] = [52000.0, 52900.0]
+
+        result = _parse_household_deposit_balance_sheet(pd.DataFrame(rows), 2001)
+
+        self.assertEqual(result[(2001, 1)]["household_total"], 70000.0)
+        self.assertEqual(result[(2001, 1)]["household_demand"], 18000.0)
+        self.assertEqual(result[(2001, 1)]["household_time"], 52000.0)
+
+    def test_parse_household_deposit_balance_sheet_keeps_time_and_other_deposits_row(self) -> None:
+        """校验定期及其他存款不会被误判为居民存款分组结束。"""
+        import pandas as pd
+
+        rows = [[""] * 3 for _ in range(12)]
+        rows[2][0] = "项目 Item"
+        rows[2][1] = "2011.01"
+        rows[2][2] = "2011.02"
+        rows[6][0] = "1.住户存款 Deposits of Households"
+        rows[7][0] = "（1）活期及临时性存款 Demand & Temporary Deposits"
+        rows[8][0] = "（2）定期及其他存款 Time & Other Deposits"
+        rows[9][0] = "2.非金融企业存款 Deposits of Non-financial Enterprises"
+        rows[6][1:] = [320000.0, 330000.0]
+        rows[7][1:] = [120000.0, 121000.0]
+        rows[8][1:] = [200000.0, 209000.0]
+
+        result = _parse_household_deposit_balance_sheet(pd.DataFrame(rows), 2011)
+
+        self.assertEqual(result[(2011, 1)]["household_time"], 200000.0)
 
     def test_parse_credit_balance_sheet_keeps_october_month_from_truncated_excel_header(self) -> None:
         """校验 Excel 将 10 月显示为 2025.1 时仍能按列序解析为 10 月。"""
