@@ -12,12 +12,12 @@
         --muted: #64748b;
         --line: #cbd5e1;
         --axis: #334155;
-        --tech: #0284c7;
-        --tech-soft: #e0f2fe;
-        --policy: #db2777;
-        --policy-soft: #fce7f3;
-        --finance: #16a34a;
-        --finance-soft: #dcfce7;
+        --tech: #38bdf8;
+        --tech-soft: #f0f9ff;
+        --policy: #f9a8d4;
+        --policy-soft: #fdf2f8;
+        --finance: #86efac;
+        --finance-soft: #f0fdf4;
       }
 
       * {
@@ -63,7 +63,7 @@
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        min-width: 1120px;
+        min-width: 1240px;
         padding: 18px 20px 8px;
         pointer-events: none;
       }
@@ -86,8 +86,51 @@
       .canvas-actions {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 12px;
         pointer-events: auto;
+      }
+
+      .range-filter {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        background: #ffffff;
+        box-shadow: 0 8px 18px rgb(15 23 42 / 0.04);
+      }
+
+      .date-field {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .date-field input {
+        width: 128px;
+        height: 28px;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        padding: 0 9px;
+        color: var(--ink);
+        font: inherit;
+        font-weight: 500;
+      }
+
+      .filter-button {
+        height: 28px;
+        border: 0;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #334155;
+        cursor: pointer;
+        padding: 0 12px;
+        font-size: 12px;
+        font-weight: 700;
       }
 
       .legend {
@@ -146,7 +189,7 @@
 
       .timeline-track {
         position: relative;
-        min-width: 1120px;
+        min-width: 1240px;
         height: calc(100vh - 116px);
         min-height: 560px;
         margin-top: 10px;
@@ -208,7 +251,7 @@
         border: 1px solid currentcolor;
         border-radius: 8px;
         background: #ffffff;
-        box-shadow: 0 12px 28px rgb(15 23 42 / 0.1);
+        box-shadow: 0 10px 24px rgb(15 23 42 / 0.08);
         transform: translateX(-50%);
       }
 
@@ -267,17 +310,17 @@
 
       .event-card.tech {
         color: var(--tech);
-        background: linear-gradient(180deg, #ffffff, var(--tech-soft));
+        background: var(--tech-soft);
       }
 
       .event-card.policy {
         color: var(--policy);
-        background: linear-gradient(180deg, #ffffff, var(--policy-soft));
+        background: var(--policy-soft);
       }
 
       .event-card.finance {
         color: var(--finance);
-        background: linear-gradient(180deg, #ffffff, var(--finance-soft));
+        background: var(--finance-soft);
       }
 
       .event-card[data-tooltip]:hover .tooltip {
@@ -409,11 +452,11 @@
         .canvas-topbar {
           align-items: flex-start;
           flex-direction: column;
-          min-width: 980px;
+          min-width: 1040px;
         }
 
         .timeline-track {
-          min-width: 980px;
+          min-width: 1040px;
         }
       }
     </style>
@@ -424,9 +467,20 @@
         <div class="canvas-topbar">
           <div class="canvas-title">
             <strong>Event Outlook</strong>
-            <span>横向时间线：同日事件堆叠，按分类统一着色，悬停查看摘要。</span>
+            <span>2026 重点事件观察</span>
           </div>
           <div class="canvas-actions">
+            <form class="range-filter" aria-label="时间范围过滤器">
+              <label class="date-field">
+                起始
+                <input type="date" value="2026-06-01" />
+              </label>
+              <label class="date-field">
+                结束
+                <input type="date" value="2026-10-31" />
+              </label>
+              <button class="filter-button" type="button">筛选</button>
+            </form>
             <div class="legend" aria-label="事件分类图例">
               <span><i class="dot tech"></i>Technology</span>
               <span><i class="dot policy"></i>Politics</span>
@@ -462,13 +516,13 @@
             <span class="tooltip">关注全球增长、产业政策、跨境资本与企业投资预期。</span>
           </article>
 
-          <article class="event-card above policy" data-tooltip style="left: 46%; top: calc(50% - 242px); --connector: 146px">
+          <article class="event-card above policy" data-tooltip style="left: 46%; top: calc(50% - 210px); --connector: 114px">
             <strong>政策窗口观察</strong>
             <small>2026-08-15</small>
             <span class="tooltip">重要政策会议前后，跟踪产业扶持、财政节奏与监管信号。</span>
           </article>
 
-          <article class="event-card above finance" data-tooltip style="left: 46%; top: calc(50% - 134px); --connector: 38px">
+          <article class="event-card above finance" data-tooltip style="left: 46%; top: calc(50% - 132px); --connector: 36px">
             <strong>中报密集披露</strong>
             <small>2026-08-15</small>
             <span class="tooltip">同一日期多事件时依次堆叠，避免标题互相遮挡。</span>
