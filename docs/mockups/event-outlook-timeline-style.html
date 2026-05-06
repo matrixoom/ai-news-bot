@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Event Outlook 时间轴样式稿</title>
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --canvas: #ffffff;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --line: #cbd5e1;
+        --axis: #334155;
+        --tech: #0284c7;
+        --tech-soft: #e0f2fe;
+        --policy: #db2777;
+        --policy-soft: #fce7f3;
+        --finance: #16a34a;
+        --finance-soft: #dcfce7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter,
+          "Segoe UI",
+          "PingFang SC",
+          "Microsoft YaHei",
+          sans-serif;
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: 24px;
+      }
+
+      .timeline-canvas {
+        position: relative;
+        min-height: calc(100vh - 48px);
+        overflow-x: auto;
+        overflow-y: hidden;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background:
+          linear-gradient(180deg, rgb(248 250 252 / 0.82), rgb(255 255 255 / 0.96)),
+          var(--canvas);
+        box-shadow: 0 18px 45px rgb(15 23 42 / 0.08);
+      }
+
+      .canvas-topbar {
+        position: sticky;
+        left: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-width: 1120px;
+        padding: 18px 20px 8px;
+        pointer-events: none;
+      }
+
+      .canvas-title {
+        display: grid;
+        gap: 4px;
+      }
+
+      .canvas-title strong {
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .canvas-title span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .canvas-actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        pointer-events: auto;
+      }
+
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+      }
+
+      .dot.tech {
+        background: var(--tech);
+      }
+
+      .dot.policy {
+        background: var(--policy);
+      }
+
+      .dot.finance {
+        background: var(--finance);
+      }
+
+      .add-button {
+        display: inline-grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border: 1px solid #0f172a;
+        border-radius: 999px;
+        background: #0f172a;
+        color: #ffffff;
+        cursor: pointer;
+        font-size: 24px;
+        line-height: 1;
+        transition:
+          transform 160ms ease,
+          box-shadow 160ms ease;
+      }
+
+      .add-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 18px rgb(15 23 42 / 0.22);
+      }
+
+      .timeline-track {
+        position: relative;
+        min-width: 1120px;
+        height: calc(100vh - 116px);
+        min-height: 560px;
+        margin-top: 10px;
+      }
+
+      .axis {
+        position: absolute;
+        top: 50%;
+        left: 56px;
+        right: 56px;
+        height: 2px;
+        transform: translateY(-50%);
+        background: var(--axis);
+      }
+
+      .axis::before,
+      .axis::after {
+        position: absolute;
+        top: 50%;
+        width: 9px;
+        height: 9px;
+        content: "";
+        border-radius: 999px;
+        background: var(--axis);
+        transform: translateY(-50%);
+      }
+
+      .axis::before {
+        left: -1px;
+      }
+
+      .axis::after {
+        right: -1px;
+      }
+
+      .tick {
+        position: absolute;
+        top: calc(50% - 8px);
+        width: 1px;
+        height: 16px;
+        background: var(--axis);
+        transform: translateX(-50%);
+      }
+
+      .tick-label {
+        position: absolute;
+        top: calc(50% + 18px);
+        width: 96px;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+        transform: translateX(-50%);
+      }
+
+      .event-card {
+        position: absolute;
+        width: 184px;
+        padding: 10px 12px;
+        border: 1px solid currentcolor;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 12px 28px rgb(15 23 42 / 0.1);
+        transform: translateX(-50%);
+      }
+
+      .event-card::before {
+        position: absolute;
+        left: 50%;
+        width: 1px;
+        content: "";
+        background: currentcolor;
+        transform: translateX(-50%);
+      }
+
+      .event-card::after {
+        position: absolute;
+        left: 50%;
+        width: 9px;
+        height: 9px;
+        content: "";
+        border: 2px solid currentcolor;
+        border-radius: 999px;
+        background: #ffffff;
+        transform: translateX(-50%);
+      }
+
+      .event-card.above::before {
+        top: 100%;
+        height: var(--connector);
+      }
+
+      .event-card.above::after {
+        top: calc(100% + var(--connector) - 4px);
+      }
+
+      .event-card.below::before {
+        bottom: 100%;
+        height: var(--connector);
+      }
+
+      .event-card.below::after {
+        bottom: calc(100% + var(--connector) - 4px);
+      }
+
+      .event-card strong {
+        display: block;
+        color: var(--ink);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .event-card small {
+        display: block;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .event-card.tech {
+        color: var(--tech);
+        background: linear-gradient(180deg, #ffffff, var(--tech-soft));
+      }
+
+      .event-card.policy {
+        color: var(--policy);
+        background: linear-gradient(180deg, #ffffff, var(--policy-soft));
+      }
+
+      .event-card.finance {
+        color: var(--finance);
+        background: linear-gradient(180deg, #ffffff, var(--finance-soft));
+      }
+
+      .event-card[data-tooltip]:hover .tooltip {
+        opacity: 1;
+        transform: translate(-50%, -8px);
+        visibility: visible;
+      }
+
+      .tooltip {
+        position: absolute;
+        bottom: calc(100% + 12px);
+        left: 50%;
+        z-index: 30;
+        width: 260px;
+        padding: 10px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #0f172a;
+        color: #f8fafc;
+        font-size: 12px;
+        line-height: 1.45;
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, 0);
+        transition:
+          opacity 140ms ease,
+          transform 140ms ease,
+          visibility 140ms ease;
+        visibility: hidden;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgb(15 23 42 / 0.36);
+        padding: 24px;
+      }
+
+      .modal-backdrop.is-open {
+        display: flex;
+      }
+
+      .modal {
+        width: min(480px, 100%);
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 24px 60px rgb(15 23 42 / 0.24);
+      }
+
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 18px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .modal-header h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .close-button {
+        width: 32px;
+        height: 32px;
+        border: 0;
+        border-radius: 999px;
+        background: #f1f5f9;
+        color: #334155;
+        cursor: pointer;
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      .event-form {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+      }
+
+      .event-form label {
+        display: grid;
+        gap: 6px;
+        color: #334155;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .event-form input,
+      .event-form select,
+      .event-form textarea {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 9px 10px;
+        color: var(--ink);
+        font: inherit;
+      }
+
+      .event-form textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+
+      .submit-button {
+        height: 40px;
+        border: 0;
+        border-radius: 6px;
+        background: #0f172a;
+        color: #ffffff;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      @media (max-width: 760px) {
+        .page {
+          padding: 12px;
+        }
+
+        .timeline-canvas {
+          min-height: calc(100vh - 24px);
+        }
+
+        .canvas-topbar {
+          align-items: flex-start;
+          flex-direction: column;
+          min-width: 980px;
+        }
+
+        .timeline-track {
+          min-width: 980px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="timeline-canvas" aria-label="事件时间轴画布">
+        <div class="canvas-topbar">
+          <div class="canvas-title">
+            <strong>Event Outlook</strong>
+            <span>横向时间线：同日事件堆叠，按分类统一着色，悬停查看摘要。</span>
+          </div>
+          <div class="canvas-actions">
+            <div class="legend" aria-label="事件分类图例">
+              <span><i class="dot tech"></i>Technology</span>
+              <span><i class="dot policy"></i>Politics</span>
+              <span><i class="dot finance"></i>Finance</span>
+            </div>
+            <button class="add-button" id="openModal" type="button" aria-label="新增事件">+</button>
+          </div>
+        </div>
+
+        <div class="timeline-track">
+          <div class="axis" aria-hidden="true"></div>
+
+          <div class="tick" style="left: 10%"></div>
+          <div class="tick-label" style="left: 10%">2026-06</div>
+          <div class="tick" style="left: 28%"></div>
+          <div class="tick-label" style="left: 28%">2026-07</div>
+          <div class="tick" style="left: 46%"></div>
+          <div class="tick-label" style="left: 46%">2026-08</div>
+          <div class="tick" style="left: 64%"></div>
+          <div class="tick-label" style="left: 64%">2026-09</div>
+          <div class="tick" style="left: 82%"></div>
+          <div class="tick-label" style="left: 82%">2026-10</div>
+
+          <article class="event-card above tech" data-tooltip style="left: 16%; top: calc(50% - 178px); --connector: 82px">
+            <strong>COMPUTEX 2026</strong>
+            <small>2026-06-02</small>
+            <span class="tooltip">台北电脑展观察 AI PC、半导体供应链与终端设备新品节奏。</span>
+          </article>
+
+          <article class="event-card below finance" data-tooltip style="left: 28%; top: calc(50% + 112px); --connector: 76px">
+            <strong>夏季达沃斯 2026</strong>
+            <small>2026-06-24</small>
+            <span class="tooltip">关注全球增长、产业政策、跨境资本与企业投资预期。</span>
+          </article>
+
+          <article class="event-card above policy" data-tooltip style="left: 46%; top: calc(50% - 242px); --connector: 146px">
+            <strong>政策窗口观察</strong>
+            <small>2026-08-15</small>
+            <span class="tooltip">重要政策会议前后，跟踪产业扶持、财政节奏与监管信号。</span>
+          </article>
+
+          <article class="event-card above finance" data-tooltip style="left: 46%; top: calc(50% - 134px); --connector: 38px">
+            <strong>中报密集披露</strong>
+            <small>2026-08-15</small>
+            <span class="tooltip">同一日期多事件时依次堆叠，避免标题互相遮挡。</span>
+          </article>
+
+          <article class="event-card below tech" data-tooltip style="left: 46%; top: calc(50% + 112px); --connector: 76px">
+            <strong>AI 芯片发布会</strong>
+            <small>2026-08-15</small>
+            <span class="tooltip">同一时间刻度下方也可继续承载事件，形成上下平衡。</span>
+          </article>
+
+          <article class="event-card above tech" data-tooltip style="left: 66%; top: calc(50% - 178px); --connector: 82px">
+            <strong>Google I/O 2026</strong>
+            <small>2026-09-09</small>
+            <span class="tooltip">观察大模型、多模态应用、开发者生态与终端入口变化。</span>
+          </article>
+
+          <article class="event-card below policy" data-tooltip style="left: 82%; top: calc(50% + 112px); --connector: 76px">
+            <strong>FOMC 利率会议</strong>
+            <small>2026-10-28</small>
+            <span class="tooltip">跟踪利率路径、美元流动性与风险资产估值变化。</span>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal-backdrop" id="eventModal" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="eventModalTitle">新增时间轴事件</h2>
+          <button class="close-button" id="closeModal" type="button" aria-label="关闭弹窗">×</button>
+        </div>
+        <form class="event-form">
+          <label>
+            事件日期
+            <input type="date" value="2026-09-11" />
+          </label>
+          <label>
+            事件标题
+            <input type="text" value="自定义发布会" />
+          </label>
+          <label>
+            分类
+            <select>
+              <option>Technology</option>
+              <option>Politics</option>
+              <option>Finance</option>
+            </select>
+          </label>
+          <label>
+            事件摘要
+            <textarea>跟踪重点公司新品发布、产业链订单和市场预期变化。</textarea>
+          </label>
+          <button class="submit-button" type="button">保存事件</button>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      const modal = document.querySelector("#eventModal");
+      const openModal = document.querySelector("#openModal");
+      const closeModal = document.querySelector("#closeModal");
+
+      /**
+       * 设置新增事件弹窗可见状态。
+       * @param {boolean} visible 是否展示弹窗。
+       * @returns {void}
+       */
+      function setModalVisible(visible) {
+        modal.classList.toggle("is-open", visible);
+      }
+
+      openModal.addEventListener("click", () => setModalVisible(true));
+      closeModal.addEventListener("click", () => setModalVisible(false));
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) setModalVisible(false);
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") setModalVisible(false);
+      });
+    </script>
+  </body>
+</html>
