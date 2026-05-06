@@ -108,50 +108,215 @@ body {
   fill: rgb(100 116 139) !important;
 }
 
-.event-outlook-timeline .vis-panel.vis-center,
-.event-outlook-timeline .vis-panel.vis-left,
-.event-outlook-timeline .vis-panel.vis-right,
-.event-outlook-timeline .vis-panel.vis-top,
-.event-outlook-timeline .vis-panel.vis-bottom {
-  border-color: rgb(226 232 240);
+.event-outlook-canvas {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgb(248 250 252 / 0.86), rgb(255 255 255 / 0.98)),
+    rgb(255 255 255);
+  box-shadow: 0 18px 45px rgb(15 23 42 / 0.08);
 }
 
-.event-outlook-timeline .vis-time-axis .vis-text {
-  color: rgb(71 85 105);
-  font-size: 12px;
+.event-outlook-canvas__toolbar {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  min-width: 1120px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 8px;
 }
 
-.event-outlook-timeline .vis-item {
-  border-radius: 6px;
-  border-width: 1px;
-  box-shadow: 0 8px 18px rgb(15 23 42 / 0.08);
+.event-outlook-track {
+  position: relative;
+  min-width: 1120px;
+  height: 580px;
+  margin-top: 8px;
+}
+
+.event-outlook-axis {
+  position: absolute;
+  top: 292px;
+  right: 56px;
+  left: 56px;
+  height: 2px;
+  background: rgb(51 65 85);
+}
+
+.event-outlook-axis::before,
+.event-outlook-axis::after {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  content: "";
+  border-radius: 999px;
+  background: rgb(51 65 85);
+  transform: translateY(-50%);
+}
+
+.event-outlook-axis::before {
+  left: -1px;
+}
+
+.event-outlook-axis::after {
+  right: -1px;
+}
+
+.event-outlook-tick {
+  position: absolute;
+  top: 284px;
+  width: 1px;
+  height: 16px;
+  background: rgb(51 65 85);
+  transform: translateX(-50%);
+}
+
+.event-outlook-tick span {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  width: 92px;
+  color: rgb(100 116 139);
   font-size: 12px;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.event-outlook-node {
+  position: absolute;
+  width: 184px;
+  min-height: 66px;
+  padding: 10px 12px;
+  border: 1px solid currentcolor;
+  border-radius: 8px;
+  background: rgb(255 255 255);
+  box-shadow: 0 10px 24px rgb(15 23 42 / 0.08);
+  cursor: pointer;
+  text-align: left;
+  transform: translateX(-50%);
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.event-outlook-node:hover,
+.event-outlook-node:focus-visible {
+  box-shadow: 0 16px 32px rgb(15 23 42 / 0.12);
+  outline: none;
+  transform: translateX(-50%) translateY(-1px);
+}
+
+.event-outlook-node::before {
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  content: "";
+  background: currentcolor;
+  transform: translateX(-50%);
+}
+
+.event-outlook-node::after {
+  position: absolute;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  content: "";
+  border: 2px solid currentcolor;
+  border-radius: 999px;
+  background: rgb(255 255 255);
+  transform: translateX(-50%);
+}
+
+.event-outlook-node--above::before {
+  top: 100%;
+  height: var(--connector-height);
+}
+
+.event-outlook-node--above::after {
+  top: calc(100% + var(--connector-height) - 4px);
+}
+
+.event-outlook-node--below::before {
+  bottom: 100%;
+  height: var(--connector-height);
+}
+
+.event-outlook-node--below::after {
+  bottom: calc(100% + var(--connector-height) - 4px);
+}
+
+.event-outlook-node--technology {
+  color: rgb(56 189 248);
+  background: rgb(240 249 255);
+}
+
+.event-outlook-node--politics {
+  color: rgb(249 168 212);
+  background: rgb(253 242 248);
+}
+
+.event-outlook-node--finance {
+  color: rgb(134 239 172);
+  background: rgb(240 253 244);
+}
+
+.event-outlook-node__title {
+  display: block;
+  color: rgb(15 23 42);
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1.35;
 }
 
-.event-outlook-timeline .vis-item.event-technology {
-  border-color: rgb(14 165 233);
-  background: rgb(224 242 254);
-  color: rgb(12 74 110);
+.event-outlook-node__date {
+  display: block;
+  margin-top: 5px;
+  color: rgb(100 116 139);
+  font-size: 11px;
 }
 
-.event-outlook-timeline .vis-item.event-politics {
-  border-color: rgb(244 114 182);
-  background: rgb(252 231 243);
-  color: rgb(131 24 67);
+.event-outlook-node__tooltip {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  z-index: 30;
+  width: 260px;
+  padding: 10px 12px;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 8px;
+  background: rgb(15 23 42);
+  color: rgb(248 250 252);
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 0);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+  visibility: hidden;
 }
 
-.event-outlook-timeline .vis-item.event-finance {
-  border-color: rgb(34 197 94);
-  background: rgb(220 252 231);
-  color: rgb(22 101 52);
+.event-outlook-node:hover .event-outlook-node__tooltip,
+.event-outlook-node:focus-visible .event-outlook-node__tooltip {
+  opacity: 1;
+  transform: translate(-50%, -8px);
+  visibility: visible;
 }
 
-.event-outlook-timeline .vis-current-time {
-  background-color: rgb(14 165 233);
+[data-theme="dark"] .event-outlook-canvas {
+  border-color: rgb(51 65 85);
+  background:
+    linear-gradient(180deg, rgb(15 23 42 / 0.92), rgb(15 23 42 / 0.98)),
+    rgb(15 23 42);
 }
 
-[data-theme="dark"] .event-outlook-timeline .vis-panel,
-[data-theme="dark"] .event-outlook-timeline .vis-labelset .vis-label {
-  border-color: rgb(51 65 85) !important;
+[data-theme="dark"] .event-outlook-node__title {
+  color: rgb(248 250 252);
 }
