@@ -1,6 +1,6 @@
 import { FunnelIcon, PencilSquareIcon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState, type FormEvent } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { EventTimelineCanvas } from "../features/event-outlook/components/event-timeline-canvas";
 import { useCreateEventOutlookEventMutation, useUpdateEventOutlookEventMutation } from "../features/event-outlook/hooks/use-event-outlook-mutations";
 import { useEventOutlookModuleQuery } from "../features/event-outlook/hooks/use-event-outlook-module-query";
@@ -9,10 +9,7 @@ import {
   type EventOutlookCategory,
   type EventOutlookEvent,
 } from "../features/event-outlook/model/event-outlook.types";
-import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
-import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
-import { ModulePageFrame } from "../shared/ui/module-page-frame";
-import { ModuleTabBar } from "../shared/ui/module-tab-bar";
+import { resolveModuleTab } from "../shared/lib/module-tabs";
 import { ErrorPanelState, LoadingPanelState } from "../shared/ui/panel-state";
 
 type EventFormState = {
@@ -66,7 +63,6 @@ const defaultEventForm: EventFormState = {
  * @returns Event Outlook 页面组件。
  */
 export function EventOutlookPage() {
-  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveModuleTab(searchParams.get("tab"), EVENT_OUTLOOK_TABS, "domestic");
   const initialStartDate = searchParams.get("start_date") ?? todayIsoDate();
@@ -95,17 +91,6 @@ export function EventOutlookPage() {
     setSearchParams(nextSearchParams, { replace: true });
   }, [activeTab, searchParams, setSearchParams]);
 
-  const toolbar = (
-    <ModuleTabBar
-      activeTab={activeTab}
-      ariaLabel="Event Outlook category tabs"
-      pathname={location.pathname}
-      searchParams={buildModuleTabSearchParams(searchParams, activeTab)}
-      storageKey="event-outlook-tab-order"
-      tabs={EVENT_OUTLOOK_TABS}
-    />
-  );
-
   /**
    * 应用画布工具栏中的时间范围筛选。
    * @param nextStart 下一次查询的起始日期。
@@ -132,6 +117,16 @@ export function EventOutlookPage() {
   function handleRangeSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     applyRange();
+  }
+
+  /**
+   * 处理时间轴交互产生的新范围，并同步输入框、URL 与请求参数。
+   * @param nextStart 下一次查询的起始日期。
+   * @param nextEnd 下一次查询的结束日期。
+   * @returns 无返回值。
+   */
+  function handleTimelineRangeChange(nextStart: string, nextEnd: string) {
+    applyRange(nextStart, nextEnd);
   }
 
   /**
@@ -188,41 +183,19 @@ export function EventOutlookPage() {
   }
 
   if (query.isPending) {
-    return (
-      <ModulePageFrame
-        contentLayoutClassName="grid gap-6"
-        description="Forward calendar for technology, policy, and finance events."
-        lastUpdated={null}
-        main={<LoadingPanelState title="Loading event outlook" description="Fetching timeline events and local range settings." />}
-        title="Event Outlook"
-        toolbar={toolbar}
-      />
-    );
+    return <LoadingPanelState title="Loading event outlook" description="Fetching timeline events and local range settings." />;
   }
 
   if (query.isError || !query.data) {
-    return (
-      <ModulePageFrame
-        contentLayoutClassName="grid gap-6"
-        description="Forward calendar for technology, policy, and finance events."
-        lastUpdated={null}
-        main={<ErrorPanelState title="Event outlook unavailable" description="The timeline payload could not be loaded." />}
-        title="Event Outlook"
-        toolbar={toolbar}
-      />
-    );
+    return <ErrorPanelState title="Event outlook unavailable" description="The timeline payload could not be loaded." />;
   }
 
   return (
-    <ModulePageFrame
-      contentLayoutClassName="grid gap-6"
-      description={query.data.module.description}
-      lastUpdated={<LastUpdatedBadge value={query.data.generated_at} />}
-      main={
-        <>
+    <>
           <EventTimelineCanvas
             endDate={appliedEndDate}
             events={query.data.events}
+            onRangeChange={handleTimelineRangeChange}
             onSelectEvent={beginEditEvent}
             startDate={appliedStartDate}
             toolbar={
@@ -389,10 +362,6 @@ export function EventOutlookPage() {
               </form>
             </div>
           ) : null}
-        </>
-      }
-      title="Event Outlook"
-      toolbar={toolbar}
-    />
+    </>
   );
 }

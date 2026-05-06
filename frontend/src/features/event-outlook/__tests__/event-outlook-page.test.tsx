@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../../app/app";
@@ -15,31 +15,43 @@ describe("EventOutlookPage", () => {
     render(<App />);
   }
 
-  it("renders domestic and international tabs with one timeline canvas", async () => {
+  function installTrackLayout(track: HTMLElement) {
+    track.getBoundingClientRect = () =>
+      ({
+        x: 100,
+        y: 100,
+        left: 100,
+        top: 100,
+        right: 1100,
+        bottom: 680,
+        width: 1000,
+        height: 580,
+        toJSON: () => ({}),
+      }) as DOMRect;
+  }
+
+  it("renders only the timeline canvas surface", async () => {
     installWorkbenchFetchMock();
 
     renderEventOutlookApp();
 
-    expect((await screen.findAllByRole("heading", { name: "Event Outlook" })).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "国内" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "国际" })).toBeInTheDocument();
     expect(await screen.findByText("COMPUTEX 2026")).toBeInTheDocument();
     expect(await screen.findByText("夏季达沃斯 2026")).toBeInTheDocument();
     const canvas = screen.getByTestId("event-timeline-canvas");
     expect(within(canvas).getByRole("form", { name: "时间范围过滤器" })).toBeInTheDocument();
     expect(within(canvas).getByRole("button", { name: "新增事件" })).toBeInTheDocument();
+    expect(screen.queryByText("Module workspace")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "国内" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "国际" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "天" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "周" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "月" })).not.toBeInTheDocument();
   });
 
-  it("switches to the international timeline tab", async () => {
+  it("loads the international timeline from the route tab", async () => {
     const fetchMock = installWorkbenchFetchMock();
-    const user = userEvent.setup();
 
-    renderEventOutlookApp();
-
-    await user.click(await screen.findByRole("link", { name: "国际" }));
+    renderEventOutlookApp("/event-outlook?tab=international");
 
     await waitFor(() => {
       expect(window.location.search).toContain("tab=international");
@@ -49,6 +61,50 @@ describe("EventOutlookPage", () => {
     });
     expect(await screen.findByText("Google I/O 2026")).toBeInTheDocument();
     expect(await screen.findByText("FOMC 利率会议")).toBeInTheDocument();
+  });
+
+  it("zooms into a dragged canvas range", async () => {
+    const fetchMock = installWorkbenchFetchMock();
+
+    renderEventOutlookApp();
+
+    const track = await screen.findByTestId("event-timeline-track");
+    installTrackLayout(track);
+    fireEvent.mouseDown(track, { clientX: 300, clientY: 320, button: 0 });
+    fireEvent.mouseMove(track, { clientX: 700, clientY: 320, buttons: 1 });
+    fireEvent.mouseUp(track, { clientX: 700, clientY: 320 });
+
+    await waitFor(() => {
+      expect(window.location.search).toContain("start_date=2026-07-18");
+      expect(window.location.search).toContain("end_date=2026-12-11");
+      expect(
+        fetchMock.mock.calls.some(([input]) => {
+          const value = String(input);
+          return value.includes("start_date=2026-07-18") && value.includes("end_date=2026-12-11");
+        }),
+      ).toBe(true);
+    });
+  });
+
+  it("zooms with the mouse wheel around the cursor", async () => {
+    const fetchMock = installWorkbenchFetchMock();
+
+    renderEventOutlookApp();
+
+    const track = await screen.findByTestId("event-timeline-track");
+    installTrackLayout(track);
+    fireEvent.wheel(track, { clientX: 600, deltaY: -120 });
+
+    await waitFor(() => {
+      expect(window.location.search).toContain("start_date=2026-06-11");
+      expect(window.location.search).toContain("end_date=2027-03-30");
+      expect(
+        fetchMock.mock.calls.some(([input]) => {
+          const value = String(input);
+          return value.includes("start_date=2026-06-11") && value.includes("end_date=2027-03-30");
+        }),
+      ).toBe(true);
+    });
   });
 
   it("applies a custom range from the canvas filter", async () => {

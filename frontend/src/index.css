@@ -136,6 +136,9 @@ body {
   min-width: 1120px;
   height: 580px;
   margin-top: 8px;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
 }
 
 .event-outlook-axis {
@@ -202,6 +205,17 @@ body {
   transition:
     box-shadow 160ms ease,
     transform 160ms ease;
+}
+
+.event-outlook-selection {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  z-index: 10;
+  border: 1px solid rgb(56 189 248);
+  border-radius: 8px;
+  background: rgb(186 230 253 / 0.28);
+  pointer-events: none;
 }
 
 .event-outlook-node:hover,
