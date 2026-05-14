@@ -617,6 +617,32 @@ class MacroDataRepository:
         for indicator_id, points in _default_sample_points().items():
             if not self.load_points(indicator_id=indicator_id, start_date="1900-01-01", end_date="2999-12-31"):
                 self.upsert_points(indicator_id, points, status="sample", warning_message="sample data")
+        self._seed_official_unemployment_insurance_fund_expense()
+
+    def _seed_official_unemployment_insurance_fund_expense(self) -> None:
+        """写入失业保险基金支出近二十年官方年度序列。
+
+        Returns:
+            无返回值；仅在本地仍为空、样例或少于二十个年度点时替换，避免覆盖已完整同步的数据。
+        """
+
+        indicator_id = "unemployment_insurance_fund_expense"
+        points = self.load_points(
+            indicator_id=indicator_id,
+            start_date="2005-01-01",
+            end_date="2024-12-31",
+            frequency="yearly",
+        )
+        sync_state = self.get_sync_state(indicator_id)
+        should_replace = not points or len(points) < 20 or (sync_state is not None and sync_state.status == "sample")
+        if not should_replace:
+            return
+        self.replace_points(
+            indicator_id,
+            _official_unemployment_insurance_fund_expense_points(),
+            status="live",
+            warning_message="official yearly data manually curated from China Statistical Yearbook and MOF final accounts",
+        )
 
     def _safe_table_name(self, table_name: str) -> str:
         """校验表名来自受控注册表。
@@ -1131,8 +1157,6 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
     labels = ["2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1"]
     monthly_periods = ["2025-11-30", "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31"]
     monthly_labels = ["2025-11", "2025-12", "2026-01", "2026-02", "2026-03"]
-    yearly_periods = ["2020-12-31", "2021-12-31", "2022-12-31", "2023-12-31", "2024-12-31"]
-    yearly_labels = ["2020", "2021", "2022", "2023", "2024"]
 
     def quarterly(values: list[float], unit: str) -> list[dict[str, object]]:
         return [_point(period, label, value, unit, "quarterly") for period, label, value in zip(periods, labels, values)]
@@ -1141,12 +1165,6 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
         return [
             _point(period, label, value, unit, "monthly")
             for period, label, value in zip(monthly_periods, monthly_labels, values)
-        ]
-
-    def yearly(values: list[float], unit: str) -> list[dict[str, object]]:
-        return [
-            _point(period, label, value, unit, "yearly")
-            for period, label, value in zip(yearly_periods, yearly_labels, values)
         ]
 
     return {
@@ -1187,11 +1205,65 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
         "us_10y_bond_yield": monthly([4.25, 4.32, 4.28, 4.41, 4.38], "%"),
         "usd_cny": monthly([7.28, 7.25, 7.31, 7.27, 7.24], "元"),
         "us_credit_spread": monthly([1.05, 1.12, 1.08, 1.15, 1.10], "%"),
-        "unemployment_insurance_fund_expense": yearly([2103.0, 1670.0, 1560.0, 1700.0, 1800.0], "亿元"),
     }
 
 
-def _point(period_end: str, period_label: str, value: float, unit: str, frequency: str) -> dict[str, object]:
+def _official_unemployment_insurance_fund_expense_points() -> list[dict[str, object]]:
+    """构造失业保险基金支出累计值近二十年官方年度点位。
+
+    Returns:
+        2005-2024 年度失业保险基金支出累计值，单位为亿元。
+    """
+
+    yearbook_2011_url = "https://www.stats.gov.cn/sj/ndsj/2011/html/V2137C.HTM"
+    yearbook_2024_url = "https://www.stats.gov.cn/sj/ndsj/2024/html/C24-24.jpg"
+    mof_2024_url = "https://yss.mof.gov.cn/2024zyjs/202509/t20250904_3971476.htm"
+    values_by_year = [
+        (2005, 206.9, yearbook_2011_url),
+        (2006, 198.0, yearbook_2011_url),
+        (2007, 217.6, yearbook_2011_url),
+        (2008, 253.5, yearbook_2011_url),
+        (2009, 366.8, yearbook_2011_url),
+        (2010, 423.3, yearbook_2011_url),
+        (2011, 432.8, yearbook_2024_url),
+        (2012, 450.6, yearbook_2024_url),
+        (2013, 531.6, yearbook_2024_url),
+        (2014, 614.7, yearbook_2024_url),
+        (2015, 736.4, yearbook_2024_url),
+        (2016, 976.1, yearbook_2024_url),
+        (2017, 893.8, yearbook_2024_url),
+        (2018, 915.3, yearbook_2024_url),
+        (2019, 1333.2, yearbook_2024_url),
+        (2020, 2103.0, yearbook_2024_url),
+        (2021, 1500.0, yearbook_2024_url),
+        (2022, 2017.8, yearbook_2024_url),
+        (2023, 1485.2, yearbook_2024_url),
+        (2024, 1842.21, mof_2024_url),
+    ]
+    return [
+        _point(
+            f"{year}-12-31",
+            str(year),
+            value,
+            "亿元",
+            "yearly",
+            provider_key="official_unemployment_insurance_fund_expense_manual",
+            source_url=source_url,
+        )
+        for year, value, source_url in values_by_year
+    ]
+
+
+def _point(
+    period_end: str,
+    period_label: str,
+    value: float,
+    unit: str,
+    frequency: str,
+    *,
+    provider_key: str = "manual_seed",
+    source_url: str = "",
+) -> dict[str, object]:
     """构造样例点位。
 
     Args:
@@ -1200,6 +1272,8 @@ def _point(period_end: str, period_label: str, value: float, unit: str, frequenc
         value: 指标数值。
         unit: 单位。
         frequency: 频率。
+        provider_key: 数据来源标识。
+        source_url: 数据来源链接。
 
     Returns:
         可写入 Repository 的点位字典。
@@ -1211,7 +1285,7 @@ def _point(period_end: str, period_label: str, value: float, unit: str, frequenc
         "value": value,
         "unit": unit,
         "frequency": frequency,
-        "provider_key": "manual_seed",
-        "source_url": "",
+        "provider_key": provider_key,
+        "source_url": source_url,
         "released_at": "",
     }

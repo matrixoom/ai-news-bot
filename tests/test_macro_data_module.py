@@ -175,6 +175,28 @@ class MacroDataRepositoryTests(unittest.TestCase):
         self.assertEqual([point.value for point in yearly_points], [700.0])
         self.assertEqual([point.value for point in quarterly_points], [250.0])
 
+    def test_repository_seeds_twenty_year_unemployment_insurance_expense_history(self) -> None:
+        """校验失业保险基金支出默认种子覆盖近二十年官方年度序列。"""
+        repository = MacroDataRepository(self.db_path)
+
+        points = repository.load_points(
+            indicator_id="unemployment_insurance_fund_expense",
+            start_date="2005-01-01",
+            end_date="2024-12-31",
+            frequency="yearly",
+        )
+        sync_state = repository.get_sync_state("unemployment_insurance_fund_expense")
+
+        self.assertEqual(len(points), 20)
+        self.assertEqual(points[0].period_label, "2005")
+        self.assertEqual(points[-1].period_label, "2024")
+        self.assertEqual(points[0].value, 206.9)
+        self.assertEqual(points[1].value, 198.0)
+        self.assertEqual(points[-2].value, 1485.2)
+        self.assertEqual(points[-1].value, 1842.21)
+        self.assertIsNotNone(sync_state)
+        self.assertEqual(sync_state.status, "live")
+
 
 class MacroDataApiTests(unittest.TestCase):
     """校验前端 Macro Data API 契约。"""
