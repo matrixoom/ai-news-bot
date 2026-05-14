@@ -200,7 +200,18 @@ class MacroDataSyncService:
         result["credit_breakdown"] = self.sync_credit_breakdown_history()
         result["household_deposits"] = self.sync_household_deposit_history()
         result["expectations"] = self.sync_expectations_history()
+        result["employment"] = self.sync_employment_history()
         return result
+
+    def sync_employment_history(self) -> dict[str, int]:
+        """保留就业类指标当前本地数据，真实历史同步后续单独接入。
+
+        Returns:
+            当前失业保险基金支出累计值的本地点位数量。
+        """
+
+        sync_state = self._repository.get_sync_state("unemployment_insurance_fund_expense")
+        return {"unemployment_insurance_fund_expense": sync_state.point_count if sync_state else 0}
 
     def sync_currency_history(self) -> dict[str, int]:
         """同步货币供应量 M0/M1/M2 历史数据。

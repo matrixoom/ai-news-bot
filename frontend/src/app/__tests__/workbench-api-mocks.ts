@@ -390,6 +390,8 @@ export const macroDataPayload: WorkbenchPayloads["macroData"] = {
     { value: "trade", label: "外贸" },
     { value: "prices", label: "物价" },
     { value: "currency", label: "货币" },
+    { value: "expectations", label: "预期" },
+    { value: "employment", label: "就业" },
   ],
   tab: "gdp",
   default_range: "1y",
@@ -432,6 +434,8 @@ const creditMacroDataPayload: WorkbenchPayloads["macroData"] = {
     { value: "trade", label: "外贸" },
     { value: "prices", label: "物价" },
     { value: "currency", label: "货币" },
+    { value: "expectations", label: "预期" },
+    { value: "employment", label: "就业" },
   ],
   tab: "credit",
   default_range: "1y",
@@ -559,6 +563,57 @@ export const eventOutlookPayload: WorkbenchPayloads["eventOutlook"] = {
   ],
 };
 
+const employmentMacroDataPayload: WorkbenchPayloads["macroData"] = {
+  generated_at: "2026-05-01T08:00:00Z",
+  module: {
+    id: "macro-data",
+    label: "Macro Data",
+    description: "GDP, credit, climate, trade, prices, currency, expectations, and employment indicators",
+    status: "live",
+    loading: false,
+  },
+  tabs: [
+    { value: "gdp", label: "GDP" },
+    { value: "credit", label: "信贷" },
+    { value: "climate", label: "景气" },
+    { value: "trade", label: "外贸" },
+    { value: "prices", label: "物价" },
+    { value: "currency", label: "货币" },
+    { value: "expectations", label: "预期" },
+    { value: "employment", label: "就业" },
+  ],
+  tab: "employment",
+  default_range: "1y",
+  default_frequency: "yearly",
+  frequency_options: [
+    { value: "monthly", label: "月度" },
+    { value: "quarterly", label: "季度" },
+    { value: "yearly", label: "年度" },
+  ],
+  range_options: [
+    { value: "6m", label: "半年" },
+    { value: "1y", label: "1年" },
+    { value: "3y", label: "3年" },
+    { value: "5y", label: "5年" },
+    { value: "10y", label: "10年" },
+    { value: "15y", label: "15年" },
+    { value: "20y", label: "20年" },
+    { value: "25y", label: "25年" },
+    { value: "30y", label: "30年" },
+    { value: "custom", label: "自定义" },
+  ],
+  charts: [
+    {
+      id: "unemployment_insurance_fund_expense",
+      title: "中国社会保险基金支出:失业保险:累计值",
+      unit: "亿元",
+      frequency: "yearly",
+      status: "sample",
+      chart_type: "line",
+    },
+  ],
+};
+
 export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
   const payloads: WorkbenchPayloads = {
     dashboard: overrides.dashboard ?? dashboardPayload,
@@ -660,6 +715,9 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
       const tab = url.searchParams.get("tab") ?? "gdp";
       if (tab === "credit") {
         return jsonResponse(creditMacroDataPayload);
+      }
+      if (tab === "employment") {
+        return jsonResponse(employmentMacroDataPayload);
       }
       return jsonResponse(payloads.macroData);
     }
@@ -892,6 +950,31 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
               { date: "2026-01-31", period_label: "2026-01", value: 19500, unit: "亿元", released_at: "" },
               { date: "2026-02-28", period_label: "2026-02", value: 11500, unit: "亿元", released_at: "" },
             ]},
+          ],
+          range: {
+            ...(payloads.macroChart.range as Record<string, unknown>),
+            type: url.searchParams.get("range") ?? "1y",
+          },
+        });
+      }
+      if (chartId === "unemployment_insurance_fund_expense") {
+        return jsonResponse({
+          ...payloads.macroChart,
+          id: chartId,
+          title: "中国社会保险基金支出:失业保险:累计值",
+          unit: "亿元",
+          frequency: url.searchParams.get("frequency") ?? "yearly",
+          series: [
+            {
+              name: "中国社会保险基金支出:失业保险:累计值",
+              points: [
+                { date: "2020-12-31", period_label: "2020", value: 2103.0, unit: "亿元", released_at: "" },
+                { date: "2021-12-31", period_label: "2021", value: 1670.0, unit: "亿元", released_at: "" },
+                { date: "2022-12-31", period_label: "2022", value: 1560.0, unit: "亿元", released_at: "" },
+                { date: "2023-12-31", period_label: "2023", value: 1700.0, unit: "亿元", released_at: "" },
+                { date: "2024-12-31", period_label: "2024", value: 1800.0, unit: "亿元", released_at: "" },
+              ],
+            },
           ],
           range: {
             ...(payloads.macroChart.range as Record<string, unknown>),

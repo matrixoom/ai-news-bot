@@ -73,6 +73,7 @@ describe("Workbench shell", () => {
     expect(await screen.findByRole("link", { name: "Push Center" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Macro Data" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Macro Data > GDP" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data > 就业" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "News" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Market" })).not.toBeInTheDocument();

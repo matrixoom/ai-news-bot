@@ -42,6 +42,7 @@ class MacroDataRepositoryTests(unittest.TestCase):
         self.assertIn("macro_nominal_gdp_growth", table_names)
         self.assertIn("macro_real_gdp_growth", table_names)
         self.assertIn("macro_comprehensive_pmi", table_names)
+        self.assertIn("macro_unemployment_insurance_fund_expense", table_names)
         self.assertIn("macro_data_indicator_registry", table_names)
         self.assertIn("macro_data_sync_state", table_names)
 
@@ -243,6 +244,51 @@ class MacroDataApiTests(unittest.TestCase):
         comprehensive = payload["charts"][2]
         self.assertEqual(comprehensive["title"], "综合PMI")
         self.assertEqual(comprehensive["chart_type"], "line")
+
+    def test_frontend_macro_data_module_returns_employment_chart(self) -> None:
+        """校验就业标签返回失业保险基金支出累计值图表定义。"""
+        response = self.client.get("/api/frontend/modules/macro-data?tab=employment")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["tab"], "employment")
+        self.assertEqual([chart["id"] for chart in payload["charts"]], ["unemployment_insurance_fund_expense"])
+        chart = payload["charts"][0]
+        self.assertEqual(chart["title"], "中国社会保险基金支出:失业保险:累计值")
+        self.assertEqual(chart["unit"], "亿元")
+        self.assertEqual(chart["frequency"], "yearly")
+
+    def test_frontend_macro_data_chart_returns_unemployment_insurance_expense_series(self) -> None:
+        """校验就业指标图表返回年度失业保险基金支出累计值序列。"""
+        self.repository.replace_points(
+            "unemployment_insurance_fund_expense",
+            [
+                {
+                    "period_end": "2024-12-31",
+                    "period_label": "2024",
+                    "value": 1800.0,
+                    "unit": "亿元",
+                    "frequency": "yearly",
+                    "provider_key": "unit_test",
+                    "source_url": "",
+                    "released_at": "",
+                }
+            ],
+            status="sample",
+            warning_message="",
+        )
+
+        response = self.client.get(
+            "/api/frontend/modules/macro-data/charts/unemployment_insurance_fund_expense"
+            "?range=custom&start_date=2024-01-01&end_date=2024-12-31&frequency=yearly"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["id"], "unemployment_insurance_fund_expense")
+        self.assertEqual(payload["series"][0]["name"], "中国社会保险基金支出:失业保险:累计值")
+        self.assertEqual(payload["series"][0]["points"][0]["period_label"], "2024")
+        self.assertEqual(payload["series"][0]["points"][0]["value"], 1800.0)
 
     def test_frontend_comprehensive_pmi_chart_uses_live_sync_status(self) -> None:
         """校验综合 PMI 图表同步后对外状态为真实数据状态。"""

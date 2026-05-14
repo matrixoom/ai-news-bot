@@ -6,6 +6,7 @@
 
 ### Added
 
+- Macro Data 新增 `就业` 子标签页，注册 `中国社会保险基金支出:失业保险:累计值` 年度折线图，并为该指标创建独立 SQLite 事实表。
 - 新增与 Macro Data 平级的 Event Outlook 一级目录页，提供国内/国际子标签、自绘横向时间轴、画布内日期范围筛选、弹窗手工录入和编辑事件能力。
 - Event Outlook 新增科技、时政、财经三类未来一年事件，三类在时间轴中分别用不同颜色展示；事件持久化到 `.data/events_outlook.db` 的 `timeline_events` 表。
 - 新增 Notes 一级目录页，当前作为空白工作区入口预留。

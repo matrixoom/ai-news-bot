@@ -39,7 +39,7 @@
 
 - 路由壳、query 参数与 `news_mode` 保留
 - 页面渲染和关键交互（包括侧栏折叠/导航折叠等）
-- Macro Data 分类子标签、图表卡片和自定义时间范围
+- Macro Data 分类子标签、图表卡片、自定义时间范围和就业年度指标页
 - push 页面行为（保存配置、预览、触发）
 
 ## 3. 回归门禁（建议最小集合）
@@ -88,9 +88,11 @@ cmd /c npm run build
 3. 健康检查通过：`GET /healthz`
 4. 核心接口抽查：
    - `/api/frontend/modules/macro-data?tab=gdp`
+   - `/api/frontend/modules/macro-data?tab=employment`
    - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=1y`
    - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=30y`
    - `/api/frontend/modules/macro-data/charts/nominal_gdp?range=1y&frequency=yearly`
+   - `/api/frontend/modules/macro-data/charts/unemployment_insurance_fund_expense?range=30y&frequency=yearly`
    - `uv run python main.py macro-sync` 后检查 `.data/macro_data.db` 中 `macro_nominal_gdp`、`macro_real_gdp`、`macro_nominal_gdp_growth`、`macro_real_gdp_growth` 的同步状态为 `live`
    - GDP 年度与季度一致性：同一年四个 `quarterly` 点位之和应等于对应 `yearly` 点位；事实表主键应为 `(period_end, frequency)`
    - `/api/frontend/modules/push`

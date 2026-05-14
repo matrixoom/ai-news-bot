@@ -74,6 +74,12 @@ export const moduleDirectories: ModuleDirectory[] = [
         ariaLabel: "Macro Data > 预期",
         description: "Bond yields, exchange rate, and credit spread",
       },
+      {
+        to: "/macro-data?tab=employment",
+        title: "就业",
+        ariaLabel: "Macro Data > 就业",
+        description: "Unemployment insurance fund expense",
+      },
     ],
     defaultExpanded: true,
   },

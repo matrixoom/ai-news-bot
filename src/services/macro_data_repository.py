@@ -50,6 +50,7 @@ MACRO_DATA_TABLES: dict[str, str] = {
     "us_10y_bond_yield": "macro_us_10y_bond_yield",
     "usd_cny": "macro_usd_cny",
     "us_credit_spread": "macro_us_credit_spread",
+    "unemployment_insurance_fund_expense": "macro_unemployment_insurance_fund_expense",
 }
 
 
@@ -1104,6 +1105,18 @@ def _default_indicator_rows(timestamp: str) -> list[tuple[str, str, str, str, st
             timestamp,
             timestamp,
         ),
+        (
+            "unemployment_insurance_fund_expense",
+            "macro_unemployment_insurance_fund_expense",
+            "employment",
+            "中国社会保险基金支出:失业保险:累计值",
+            "亿元",
+            "yearly",
+            1,
+            "sample",
+            timestamp,
+            timestamp,
+        ),
     ]
 
 
@@ -1118,6 +1131,8 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
     labels = ["2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1"]
     monthly_periods = ["2025-11-30", "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31"]
     monthly_labels = ["2025-11", "2025-12", "2026-01", "2026-02", "2026-03"]
+    yearly_periods = ["2020-12-31", "2021-12-31", "2022-12-31", "2023-12-31", "2024-12-31"]
+    yearly_labels = ["2020", "2021", "2022", "2023", "2024"]
 
     def quarterly(values: list[float], unit: str) -> list[dict[str, object]]:
         return [_point(period, label, value, unit, "quarterly") for period, label, value in zip(periods, labels, values)]
@@ -1126,6 +1141,12 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
         return [
             _point(period, label, value, unit, "monthly")
             for period, label, value in zip(monthly_periods, monthly_labels, values)
+        ]
+
+    def yearly(values: list[float], unit: str) -> list[dict[str, object]]:
+        return [
+            _point(period, label, value, unit, "yearly")
+            for period, label, value in zip(yearly_periods, yearly_labels, values)
         ]
 
     return {
@@ -1166,6 +1187,7 @@ def _default_sample_points() -> dict[str, list[dict[str, object]]]:
         "us_10y_bond_yield": monthly([4.25, 4.32, 4.28, 4.41, 4.38], "%"),
         "usd_cny": monthly([7.28, 7.25, 7.31, 7.27, 7.24], "元"),
         "us_credit_spread": monthly([1.05, 1.12, 1.08, 1.15, 1.10], "%"),
+        "unemployment_insurance_fund_expense": yearly([2103.0, 1670.0, 1560.0, 1700.0, 1800.0], "亿元"),
     }
 
 

@@ -17,6 +17,7 @@ MACRO_DATA_TABS = {
     "prices": "物价",
     "currency": "货币",
     "expectations": "预期",
+    "employment": "就业",
 }
 
 MACRO_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"}
@@ -70,6 +71,7 @@ _CHART_SYNC_GROUPS: dict[str, str] = {
     "us_10y_bond_yield": "expectations",
     "usd_cny": "expectations",
     "us_credit_spread": "expectations",
+    "unemployment_insurance_fund_expense": "employment",
 }
 
 
@@ -141,6 +143,7 @@ class MacroDataService:
             "credit_breakdown": syncer.sync_credit_breakdown_history,
             "household_deposits": syncer.sync_household_deposit_history,
             "expectations": syncer.sync_expectations_history,
+            "employment": syncer.sync_employment_history,
         }
         point_counts = sync_methods[group]()
         return {"ok": True, "point_counts": point_counts}
