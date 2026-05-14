@@ -987,7 +987,7 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
                 { date: "2021-12-31", period_label: "2021", value: 1500.0, unit: "亿元", released_at: "" },
                 { date: "2022-12-31", period_label: "2022", value: 2017.8, unit: "亿元", released_at: "" },
                 { date: "2023-12-31", period_label: "2023", value: 1485.2, unit: "亿元", released_at: "" },
-                { date: "2024-12-31", period_label: "2024", value: 1842.21, unit: "亿元", released_at: "" },
+                { date: "2024-12-31", period_label: "2024", value: 1842.0, unit: "亿元", released_at: "" },
               ],
             },
           ],

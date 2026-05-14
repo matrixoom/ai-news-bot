@@ -634,14 +634,26 @@ class MacroDataRepository:
             frequency="yearly",
         )
         sync_state = self.get_sync_state(indicator_id)
-        should_replace = not points or len(points) < 20 or (sync_state is not None and sync_state.status == "sample")
+        official_points = _official_unemployment_insurance_fund_expense_points()
+        expected_values = {str(point["period_end"]): float(point["value"]) for point in official_points}
+        has_stale_manual_seed = (
+            sync_state is not None
+            and sync_state.provider_key == "official_unemployment_insurance_fund_expense_manual"
+            and any(round(point.value, 2) != round(expected_values.get(point.period_end, float("nan")), 2) for point in points)
+        )
+        should_replace = (
+            not points
+            or len(points) < 20
+            or (sync_state is not None and sync_state.status == "sample")
+            or has_stale_manual_seed
+        )
         if not should_replace:
             return
         self.replace_points(
             indicator_id,
-            _official_unemployment_insurance_fund_expense_points(),
+            official_points,
             status="live",
-            warning_message="official yearly data manually curated from China Statistical Yearbook and MOF final accounts",
+            warning_message="official yearly data manually curated from China Statistical Yearbook and MOHRSS communiques",
         )
 
     def _safe_table_name(self, table_name: str) -> str:
@@ -1217,7 +1229,7 @@ def _official_unemployment_insurance_fund_expense_points() -> list[dict[str, obj
 
     yearbook_2011_url = "https://www.stats.gov.cn/sj/ndsj/2011/html/V2137C.HTM"
     yearbook_2024_url = "https://www.stats.gov.cn/sj/ndsj/2024/html/C24-24.jpg"
-    mof_2024_url = "https://yss.mof.gov.cn/2024zyjs/202509/t20250904_3971476.htm"
+    mohrss_2024_url = "https://www.mohrss.gov.cn/SYrlzyhshbzb/zwgk/szrs/tjgb/202506/t20250616_543689.html"
     values_by_year = [
         (2005, 206.9, yearbook_2011_url),
         (2006, 198.0, yearbook_2011_url),
@@ -1238,7 +1250,7 @@ def _official_unemployment_insurance_fund_expense_points() -> list[dict[str, obj
         (2021, 1500.0, yearbook_2024_url),
         (2022, 2017.8, yearbook_2024_url),
         (2023, 1485.2, yearbook_2024_url),
-        (2024, 1842.21, mof_2024_url),
+        (2024, 1842.0, mohrss_2024_url),
     ]
     return [
         _point(
