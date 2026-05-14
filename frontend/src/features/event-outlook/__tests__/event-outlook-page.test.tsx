@@ -66,7 +66,7 @@ describe("EventOutlookPage", () => {
   it("zooms into a dragged canvas range", async () => {
     const fetchMock = installWorkbenchFetchMock();
 
-    renderEventOutlookApp();
+    renderEventOutlookApp("/event-outlook?tab=domestic&start_date=2026-05-05&end_date=2027-05-05");
 
     const track = await screen.findByTestId("event-timeline-track");
     installTrackLayout(track);
@@ -75,12 +75,12 @@ describe("EventOutlookPage", () => {
     fireEvent.mouseUp(track, { clientX: 700, clientY: 320 });
 
     await waitFor(() => {
-      expect(window.location.search).toContain("start_date=2026-07-18");
-      expect(window.location.search).toContain("end_date=2026-12-11");
+      expect(window.location.search).toContain("start_date=2026-07-17");
+      expect(window.location.search).toContain("end_date=2026-12-10");
       expect(
         fetchMock.mock.calls.some(([input]) => {
           const value = String(input);
-          return value.includes("start_date=2026-07-18") && value.includes("end_date=2026-12-11");
+          return value.includes("start_date=2026-07-17") && value.includes("end_date=2026-12-10");
         }),
       ).toBe(true);
     });
@@ -89,19 +89,19 @@ describe("EventOutlookPage", () => {
   it("zooms with the mouse wheel around the cursor", async () => {
     const fetchMock = installWorkbenchFetchMock();
 
-    renderEventOutlookApp();
+    renderEventOutlookApp("/event-outlook?tab=domestic&start_date=2026-05-05&end_date=2027-05-05");
 
     const track = await screen.findByTestId("event-timeline-track");
     installTrackLayout(track);
     fireEvent.wheel(track, { clientX: 600, deltaY: -120 });
 
     await waitFor(() => {
-      expect(window.location.search).toContain("start_date=2026-06-11");
-      expect(window.location.search).toContain("end_date=2027-03-30");
+      expect(window.location.search).toContain("start_date=2026-06-10");
+      expect(window.location.search).toContain("end_date=2027-03-29");
       expect(
         fetchMock.mock.calls.some(([input]) => {
           const value = String(input);
-          return value.includes("start_date=2026-06-11") && value.includes("end_date=2027-03-30");
+          return value.includes("start_date=2026-06-10") && value.includes("end_date=2027-03-29");
         }),
       ).toBe(true);
     });

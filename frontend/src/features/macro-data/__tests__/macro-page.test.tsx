@@ -27,6 +27,7 @@ describe("MacroDataPage", () => {
     expect(screen.getByRole("link", { name: "外贸" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "物价" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "货币" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "就业" })).toBeInTheDocument();
     expect(await screen.findByText("名义与实际GDP总量")).toBeInTheDocument();
     expect(await screen.findByText(/名义GDP \/ 实际GDP/)).toBeInTheDocument();
     expect(await screen.findByText("GDP增速")).toBeInTheDocument();
@@ -98,6 +99,17 @@ describe("MacroDataPage", () => {
     expect(screen.getAllByRole("button", { name: "月度" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "季度" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "年度" }).length).toBeGreaterThan(0);
+  });
+
+  it("renders employment tab with unemployment insurance expense chart", async () => {
+    installWorkbenchFetchMock();
+
+    renderMacroApp("/macro-data?tab=employment");
+
+    expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "就业" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByText("中国社会保险基金支出:失业保险:累计值")).toBeInTheDocument();
+    expect(screen.getAllByText(/中国社会保险基金支出:失业保险:累计值/).length).toBeGreaterThan(0);
   });
 
   it("triggers a per-chart refresh via the sync API", async () => {
