@@ -128,7 +128,7 @@ uv run python main.py macro-sync
 - 景气 PMI：制造业 PMI、非制造业 PMI 与综合 PMI 分别写入独立事实表。
 - 信贷细分：人民银行贷款余额表按列序修正 10 月列，避免 Excel `2025.1` 显示导致 10 月被误解析为 1 月；`new_rmb_loans` 图表返回总量虚线 + 四项细分堆叠柱和同名虚线折线。
 - 居民存款：`household_demand_deposits` 图表读取 `macro_household_deposits`、`macro_household_demand_deposits`、`macro_household_time_deposits` 三张事实表；同步优先解析人民银行 2000 年以来归档 HTML 与 2015 年以来年度 Excel，覆盖近 30 年窗口中的月度余额。
-- 就业：`unemployment_insurance_fund_expense` 图表读取 `macro_unemployment_insurance_fund_expense` 年度事实表；2005-2010 年点位来自国家统计局《中国统计年鉴 2011》21-37 表，2011-2023 年点位来自《中国统计年鉴 2024》24-24 表，2024 年点位来自财政部《2024年全国社会保险基金支出决算表》。
+- 就业：`unemployment_insurance_fund_expense` 图表读取 `macro_unemployment_insurance_fund_expense` 年度事实表；2005-2010 年点位来自国家统计局《中国统计年鉴 2011》21-37 表，2011-2023 年点位来自《中国统计年鉴 2024》24-24 表，2024 年点位采用人社部《2024年度人力资源和社会保障事业发展统计公报》的 `1842` 亿元。财政部《2024年全国社会保险基金支出决算表》披露同项决算数为 `1842.21` 亿元，仅作为精度更高的交叉校验来源。
 
 成功：`200`
 

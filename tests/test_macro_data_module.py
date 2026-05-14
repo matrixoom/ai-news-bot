@@ -193,9 +193,42 @@ class MacroDataRepositoryTests(unittest.TestCase):
         self.assertEqual(points[0].value, 206.9)
         self.assertEqual(points[1].value, 198.0)
         self.assertEqual(points[-2].value, 1485.2)
-        self.assertEqual(points[-1].value, 1842.21)
+        self.assertEqual(points[-1].value, 1842.0)
         self.assertIsNotNone(sync_state)
         self.assertEqual(sync_state.status, "live")
+
+    def test_repository_repairs_stale_unemployment_insurance_seed_values(self) -> None:
+        """校验旧版官方手工种子的 2024 精度差异会被启动修复。"""
+        repository = MacroDataRepository(self.db_path)
+        stale_points = [
+            {
+                "period_end": f"{year}-12-31",
+                "period_label": str(year),
+                "value": 1842.21 if year == 2024 else float(year),
+                "unit": "亿元",
+                "frequency": "yearly",
+                "provider_key": "official_unemployment_insurance_fund_expense_manual",
+                "source_url": "https://example.com/stale",
+                "released_at": "",
+            }
+            for year in range(2005, 2025)
+        ]
+        repository.replace_points(
+            "unemployment_insurance_fund_expense",
+            stale_points,
+            status="live",
+            warning_message="stale official seed",
+        )
+
+        reopened = MacroDataRepository(self.db_path)
+        points = reopened.load_points(
+            indicator_id="unemployment_insurance_fund_expense",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            frequency="yearly",
+        )
+
+        self.assertEqual(points[0].value, 1842.0)
 
 
 class MacroDataApiTests(unittest.TestCase):
