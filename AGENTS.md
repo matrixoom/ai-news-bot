@@ -156,3 +156,4 @@
 
 ## 10. 验证后提交
 After every complete file edit, check if the test suite passes. If all tests pass, stage all changed files, generate a conventional commit message summarizing the changes: what was changed, why, and which files were affected. If tests fail, analyze the failure output, fix the code, and re-run tests up to 3 times before asking for help.
+.data/*.db 存储的是历史数据，也需要提交
