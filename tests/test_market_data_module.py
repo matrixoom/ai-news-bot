@@ -6,8 +6,12 @@ from unittest.mock import Mock, patch
 
 import pandas as pd
 
+from src.domain.external_data import MarketIndexHistoryPoint, MarketIndexSnapshot
+from src.domain.market_monitoring import TrackedIndexDefinition
+from src.providers.contracts import ProviderAvailability, ProviderStatus
 from src.providers.live_data import AkshareMarketDataProvider
 from src.services.market_history_store import MarketHistoryStore
+from src.services.market_monitoring_service import MarketMonitoringService
 from src.services.market_data_repository import MarketDataRepository
 from src.services.market_data_service import MarketDataService
 from src.services.market_data_sync_service import (
@@ -144,6 +148,25 @@ class MarketIndexVolumeTests(unittest.TestCase):
         self.assertEqual(records[0]["volume"], 1234500.0)
         self.assertEqual(records[1]["volume"], 2234500.0)
 
+    def test_cn_index_history_prefers_stable_sina_endpoint(self) -> None:
+        """校验国内宽基指数优先使用稳定的新浪日线，避免主刷新被慢端点阻塞。"""
+        frame = pd.DataFrame([{"date": "2026-05-29", "close": 3825.0, "volume": 2234500}])
+        fake_akshare = SimpleNamespace(
+            stock_zh_index_daily=Mock(return_value=frame),
+            stock_zh_index_daily_em=Mock(side_effect=RuntimeError("eastmoney should remain fallback only")),
+        )
+
+        result = AkshareMarketDataProvider()._load_market_frame(
+            akshare=fake_akshare,
+            symbol="CSI300",
+            trade_date=date(2026, 5, 29),
+        )
+
+        self.assertIs(result, frame)
+        fake_akshare.stock_zh_index_daily.assert_called_once()
+        self.assertEqual(fake_akshare.stock_zh_index_daily.call_args.kwargs["symbol"], "sh000300")
+        fake_akshare.stock_zh_index_daily_em.assert_not_called()
+
     def test_market_history_store_round_trips_daily_volume(self) -> None:
         """校验本地市场历史库会持久化并读取每日成交量。"""
         store = MarketHistoryStore(self.db_path)
@@ -166,6 +189,171 @@ class MarketIndexVolumeTests(unittest.TestCase):
         points = store.load_points(symbol="CSI300", end_date=pd.Timestamp("2026-03-25").date(), window_days=10)
 
         self.assertEqual([point.volume for point in points], [1000.0, 2000.0])
+
+    def test_market_history_store_replaces_recent_window_instead_of_leaving_stale_rows(self) -> None:
+        """校验全量刷新会移除最近窗口内上游不再返回的旧点。"""
+        store = MarketHistoryStore(self.db_path)
+        seed_points = [
+            MarketIndexHistoryPoint(date(2025, 12, 1), 3800.0),
+            MarketIndexHistoryPoint(date(2026, 3, 20), 3900.0),
+            MarketIndexHistoryPoint(date(2026, 3, 23), 3910.0),
+        ]
+        store.upsert_symbol_history(
+            symbol="CSI300",
+            display_name="沪深300",
+            currency="CNY",
+            provider_key="unit-test",
+            source_url="https://example.com",
+            points=seed_points,
+            status="live",
+            window_label="近6个月",
+            warning_message="",
+        )
+
+        store.upsert_symbol_history(
+            symbol="CSI300",
+            display_name="沪深300",
+            currency="CNY",
+            provider_key="unit-test",
+            source_url="https://example.com",
+            points=[MarketIndexHistoryPoint(date(2026, 3, 23), 3950.0)],
+            status="live",
+            window_label="近3个月",
+            warning_message="",
+            replace_from=date(2026, 3, 1),
+        )
+
+        points = store.load_points(symbol="CSI300", end_date=date(2026, 3, 31), window_days=180)
+
+        self.assertEqual(
+            [(point.trade_date, point.close_price) for point in points],
+            [(date(2025, 12, 1), 3800.0), (date(2026, 3, 23), 3950.0)],
+        )
+
+    def test_market_refresh_rebuilds_recent_window_and_reports_symbol_progress(self) -> None:
+        """校验专用全量刷新逐指数汇报进度，并替换最近三个月窗口。"""
+
+        class RecordingProvider:
+            """返回一条完整历史帧，模拟宽基指数实时数据源。"""
+
+            provider_key = "unit-test"
+
+            def healthcheck(self) -> ProviderStatus:
+                """返回可用状态。"""
+                return ProviderStatus("unit-test", ProviderAvailability.LIVE, "", "2026-05-29T08:00:00Z")
+
+            def fetch_index_snapshots(self, *, symbols, trade_date):
+                """为请求指数返回覆盖三个月以上的日线序列。"""
+                points = tuple(
+                    MarketIndexHistoryPoint(date(2026, 1, 1) + pd.Timedelta(days=offset), 4000.0 + offset)
+                    for offset in range(149)
+                )
+                return [
+                    MarketIndexSnapshot(
+                        provider="unit-test",
+                        symbol=symbols[0],
+                        display_name="沪深300",
+                        trade_date=trade_date,
+                        close_price=4148.0,
+                        currency="CNY",
+                        source_url="https://example.com",
+                        history_points=points,
+                    )
+                ]
+
+        store = MarketHistoryStore(self.db_path)
+        store.upsert_symbol_history(
+            symbol="CSI300",
+            display_name="沪深300",
+            currency="CNY",
+            provider_key="unit-test",
+            source_url="https://example.com",
+            points=[MarketIndexHistoryPoint(date(2026, 3, 15), 9999.0)],
+            status="live",
+            window_label="近3个月",
+            warning_message="",
+        )
+        progress_events = []
+        service = MarketMonitoringService(
+            market_provider=RecordingProvider(),
+            store=store,
+            registry={"CSI300": TrackedIndexDefinition("CSI300", "沪深300", "unit-test", "CNY")},
+        )
+
+        service.refresh_store(
+            symbols=["CSI300"],
+            trade_date=date(2026, 5, 29),
+            replace_recent_window=True,
+            progress_callback=progress_events.append,
+        )
+
+        points = store.load_points(symbol="CSI300", end_date=date(2026, 5, 29), window_days=180)
+        self.assertNotIn(9999.0, [point.close_price for point in points])
+        self.assertEqual(progress_events[-1]["status"], "completed")
+        self.assertEqual(progress_events[-1]["completed"], 1)
+        self.assertEqual(progress_events[-1]["total"], 1)
+
+    def test_market_refresh_keeps_existing_window_when_provider_history_is_too_short(self) -> None:
+        """校验上游短序列不会清空本地仍可展示的三个月历史。"""
+
+        class ShortHistoryProvider:
+            """返回不足一个月的短序列，模拟上游降级响应。"""
+
+            provider_key = "unit-test"
+
+            def healthcheck(self) -> ProviderStatus:
+                """返回可用状态，让用例聚焦历史完整性校验。"""
+                return ProviderStatus("unit-test", ProviderAvailability.LIVE, "", "2026-05-29T08:00:00Z")
+
+            def fetch_index_snapshots(self, *, symbols, trade_date):
+                """仅返回五个日线点。"""
+                points = tuple(
+                    MarketIndexHistoryPoint(date(2026, 5, 25) + pd.Timedelta(days=offset), 4100.0 + offset)
+                    for offset in range(5)
+                )
+                return [
+                    MarketIndexSnapshot(
+                        provider="unit-test",
+                        symbol=symbols[0],
+                        display_name="沪深300",
+                        trade_date=trade_date,
+                        close_price=4104.0,
+                        currency="CNY",
+                        source_url="https://example.com",
+                        history_points=points,
+                    )
+                ]
+
+        store = MarketHistoryStore(self.db_path)
+        store.upsert_symbol_history(
+            symbol="CSI300",
+            display_name="沪深300",
+            currency="CNY",
+            provider_key="unit-test",
+            source_url="https://example.com",
+            points=[MarketIndexHistoryPoint(date(2026, 3, 15), 3999.0)],
+            status="live",
+            window_label="近3个月",
+            warning_message="",
+        )
+        progress_events = []
+        service = MarketMonitoringService(
+            market_provider=ShortHistoryProvider(),
+            store=store,
+            registry={"CSI300": TrackedIndexDefinition("CSI300", "沪深300", "unit-test", "CNY")},
+        )
+
+        service.refresh_store(
+            symbols=["CSI300"],
+            trade_date=date(2026, 5, 29),
+            replace_recent_window=True,
+            progress_callback=progress_events.append,
+        )
+
+        points = store.load_points(symbol="CSI300", end_date=date(2026, 5, 29), window_days=180)
+        self.assertEqual([(point.trade_date, point.close_price) for point in points], [(date(2026, 3, 15), 3999.0)])
+        self.assertEqual(progress_events[-1]["status"], "failed")
+        self.assertIn("保留上次可用", progress_events[-1]["message"])
 
 
 class MarketDataSyncTests(unittest.TestCase):

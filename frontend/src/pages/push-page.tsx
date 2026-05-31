@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { previewPush } from "../features/push/api/preview-push";
+import { getPushMarketChartRefresh, startPushMarketChartRefresh } from "../features/push/api/refresh-push-market-charts";
 import { triggerPush } from "../features/push/api/trigger-push";
 import { updatePushConfig } from "../features/push/api/update-push-config";
 import { PushConfigForm } from "../features/push/components/push-config-form";
@@ -9,8 +10,8 @@ import { PushPreviewPanel } from "../features/push/components/push-preview-panel
 import { PushRunHistory } from "../features/push/components/push-run-history";
 import { PushSchedulesEditor } from "../features/push/components/push-schedules-editor";
 import { usePushModuleQuery } from "../features/push/hooks/use-push-module-query";
-import { adaptPushModule, adaptPushPreview, adaptPushRecentRun } from "../features/push/model/push-module-adapter";
-import { PUSH_MODULE_TABS, type PushConfig, type PushModuleTab, type PushWorkspaceViewModel } from "../features/push/model/push-module.types";
+import { adaptPushMarketChartRefreshJob, adaptPushModule, adaptPushPreview, adaptPushRecentRun } from "../features/push/model/push-module-adapter";
+import { PUSH_MODULE_TABS, type PushConfig, type PushMarketChartRefreshJobRaw, type PushModuleTab, type PushWorkspaceViewModel } from "../features/push/model/push-module.types";
 import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
 import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
@@ -29,6 +30,7 @@ export function PushPage() {
   const [preview, setPreview] = useState<PushWorkspaceViewModel["preview"] | null>(null);
   const [recentRuns, setRecentRuns] = useState<PushWorkspaceViewModel["recentRuns"]>([]);
   const [flash, setFlash] = useState<FlashState>(null);
+  const [chartRefreshJob, setChartRefreshJob] = useState<ReturnType<typeof adaptPushMarketChartRefreshJob> | null>(null);
 
   useEffect(() => {
     if (!query.data) {
@@ -85,6 +87,52 @@ export function PushPage() {
     },
   });
 
+  const chartRefreshMutation = useMutation({
+    mutationFn: async () => startPushMarketChartRefresh(mustDraft(draft)),
+    onSuccess: (response) => {
+      applyChartRefreshJob(response.job);
+    },
+    onError: (error) => {
+      setFlash({ tone: "error", message: error instanceof Error ? error.message : "Chart refresh failed." });
+    },
+  });
+
+  useEffect(() => {
+    if (!chartRefreshJob || isTerminalChartRefreshStatus(chartRefreshJob.status)) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void getPushMarketChartRefresh(chartRefreshJob.id)
+        .then((response) => {
+          applyChartRefreshJob(response.job);
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : "Chart refresh status failed.";
+          setChartRefreshJob((current) => current ? {
+            ...current,
+            status: "failed",
+            message,
+            errors: [message],
+          } : current);
+        });
+    }, 350);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [chartRefreshJob]);
+
+  useEffect(() => {
+    if (chartRefreshJob?.status !== "completed") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setChartRefreshJob(null);
+    }, 900);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [chartRefreshJob?.status]);
+
   const triggerMutation = useMutation({
     mutationFn: async () => triggerPush(mustDraft(draft), preview),
     onSuccess: (response) => {
@@ -104,6 +152,21 @@ export function PushPage() {
     setPreview(model.preview);
     setRecentRuns(model.recentRuns);
     queryClient.setQueryData(["push-module", activeTab !== "history"], model);
+  }
+
+  function applyChartRefreshJob(rawJob: PushMarketChartRefreshJobRaw) {
+    const nextJob = adaptPushMarketChartRefreshJob(rawJob);
+    setChartRefreshJob(nextJob);
+    if (!isTerminalChartRefreshStatus(nextJob.status)) {
+      return;
+    }
+    if (nextJob.preview) {
+      setPreview(nextJob.preview);
+    }
+    setFlash({
+      tone: nextJob.status === "completed" ? "success" : "neutral",
+      message: nextJob.message,
+    });
   }
 
   if (query.isPending) {
@@ -163,7 +226,18 @@ export function PushPage() {
 
   const workspace = query.data;
   const showPreview = activeTab !== "history";
-  const side = showPreview ? <PushPreviewPanel preview={preview} refreshAfterMs={workspace.refreshAfterMs} /> : null;
+  const side = showPreview ? (
+    <PushPreviewPanel
+      chartRefreshJob={chartRefreshJob}
+      onDismissChartRefresh={() => setChartRefreshJob(null)}
+      onRefreshCharts={() => {
+        setFlash(null);
+        void chartRefreshMutation.mutateAsync();
+      }}
+      preview={preview}
+      refreshAfterMs={workspace.refreshAfterMs}
+    />
+  ) : null;
   const contentLayoutClassName = showPreview
     ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
     : "grid gap-6";
@@ -258,4 +332,8 @@ function mustDraft(draft: PushConfig | null): PushConfig {
     throw new Error("push draft unavailable");
   }
   return draft;
+}
+
+function isTerminalChartRefreshStatus(status: ReturnType<typeof adaptPushMarketChartRefreshJob>["status"]): boolean {
+  return status === "completed" || status === "completed_with_warnings" || status === "failed";
 }

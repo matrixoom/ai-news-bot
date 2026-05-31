@@ -8,7 +8,7 @@ import logging
 import os
 import threading
 import time
-from typing import List
+from typing import Any, Callable, List
 
 from ..domain.external_data import NewsCategory
 from ..providers import (
@@ -352,6 +352,29 @@ class DashboardService:
             force_refresh=force_refresh,
         )
 
+    def rebuild_market_module(
+        self,
+        *,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> tuple[str, List[MarketCard]]:
+        """全量重建宽基指数最近三个月历史，并更新模块缓存。
+
+        Args:
+            progress_callback: 可选逐指数进度回调。
+
+        Returns:
+            最新生成时间与市场卡片列表。
+        """
+        return self._get_or_build_module(
+            "module:market",
+            lambda: self._build_market_module_uncached(
+                force_refresh=True,
+                replace_recent_window=True,
+                progress_callback=progress_callback,
+            ),
+            force_refresh=True,
+        )
+
     def build_events_module(self, *, force_refresh: bool = False) -> tuple[str, List[EventSectionView]]:
         """Build one frontend-ready events module."""
         return self._get_or_build_module(
@@ -424,9 +447,20 @@ class DashboardService:
         macro_snapshot = self._build_macro_service_snapshot(force_refresh=force_refresh)
         return generated_at, self._build_macro_sections_from_snapshot(macro_snapshot)
 
-    def _build_market_module_uncached(self, *, force_refresh: bool = False) -> tuple[str, List[MarketCard]]:
+    def _build_market_module_uncached(
+        self,
+        *,
+        force_refresh: bool = False,
+        replace_recent_window: bool = False,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> tuple[str, List[MarketCard]]:
+        """构建未缓存市场模块，可选执行三个月历史窗口重建。"""
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        market_snapshot = self._build_market_service_snapshot(force_refresh=force_refresh)
+        market_snapshot = self._build_market_service_snapshot(
+            force_refresh=force_refresh,
+            replace_recent_window=replace_recent_window,
+            progress_callback=progress_callback,
+        )
         return generated_at, self._build_market_sections_from_snapshot(market_snapshot)
 
     def _build_macro_service_snapshot(self, *, force_refresh: bool):
@@ -710,11 +744,25 @@ class DashboardService:
             for item in market_snapshot.items
         ]
 
-    def _build_market_service_snapshot(self, *, force_refresh: bool):
+    def _build_market_service_snapshot(
+        self,
+        *,
+        force_refresh: bool,
+        replace_recent_window: bool = False,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ):
+        """调用市场服务，并兼容尚未接入新参数的测试替身。"""
         try:
-            return self._market_service.build_snapshot(refresh_store=force_refresh)
+            return self._market_service.build_snapshot(
+                refresh_store=force_refresh,
+                replace_recent_window=replace_recent_window,
+                progress_callback=progress_callback,
+            )
         except TypeError as error:
-            if "refresh_store" not in str(error):
+            if not any(
+                parameter in str(error)
+                for parameter in ("refresh_store", "replace_recent_window", "progress_callback")
+            ):
                 raise
             return self._market_service.build_snapshot()
 

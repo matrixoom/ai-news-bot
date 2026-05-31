@@ -125,6 +125,33 @@ describe("PushPage", () => {
     expect(screen.getByText("Preview for briefing")).toBeInTheDocument();
   });
 
+  it("refreshes all market charts with progress and redraws the preview", async () => {
+    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
+    const user = userEvent.setup();
+
+    renderPushApp("/push?tab=schedules");
+
+    await user.click(await screen.findByRole("button", { name: "全量刷新图表" }));
+
+    expect(await screen.findByRole("dialog", { name: "宽基指数图表刷新进度" })).toBeInTheDocument();
+    expect(screen.getByText("正在刷新 中证500。")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) => String(input).includes("/api/push/market-chart-refresh") && init?.method === "POST",
+        ),
+      ).toBe(true);
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) => String(input).includes("/api/push/market-chart-refresh/market-chart-refresh-1")
+            && (init?.method ?? "GET") === "GET",
+        ),
+      ).toBe(true);
+    });
+    expect(await screen.findByText("Charts refreshed")).toBeInTheDocument();
+  });
+
   it("triggers a manual push from the schedules controls", async () => {
     const fetchMock = installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
     const user = userEvent.setup();

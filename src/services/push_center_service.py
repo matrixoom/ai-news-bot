@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import threading
 from typing import Any, Iterable, Mapping
+from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..notifiers import EmailNotifier
@@ -83,6 +84,8 @@ STYLE_OPTIONS = (
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 MAX_RECENT_RUNS = 12
 MAX_SCHEDULER_HISTORY = 128
+DEFAULT_MARKET_CHART_REFRESH_TOTAL = 6
+MARKET_CHART_REFRESH_TERMINAL_STATUSES = {"completed", "completed_with_warnings", "failed"}
 DEFAULT_PUSH_CONFIG = {
     "selected_module_ids": ["market"],
     "report_style": "newspaper",
@@ -157,6 +160,9 @@ class PushCenterService:
         )
         self._scheduler_stop_event = threading.Event()
         self._scheduler_thread: threading.Thread | None = None
+        self._market_chart_refresh_lock = threading.Lock()
+        self._market_chart_refresh_jobs: dict[str, dict[str, Any]] = {}
+        self._market_chart_refresh_thread: threading.Thread | None = None
         self._ensure_config_file()
         if enable_scheduler:
             self.start_scheduler()
@@ -245,6 +251,64 @@ class PushCenterService:
             "preview": self._build_preview(normalized, force_refresh=True),
         }
 
+    def start_market_chart_refresh(self, payload: Mapping[str, Any] | None) -> dict[str, Any]:
+        """启动宽基指数三个月历史重建任务。
+
+        Args:
+            payload: 当前 Push Center 草稿配置，可带 `config` 包装层。
+
+        Returns:
+            可供前端轮询的刷新任务摘要。
+        """
+        payload = self._unwrap_payload(payload)
+        existing = self._load_config()
+        normalized = self._normalize_config(payload or {}, base=existing)
+        with self._market_chart_refresh_lock:
+            for existing_job in self._market_chart_refresh_jobs.values():
+                if existing_job["status"] not in MARKET_CHART_REFRESH_TERMINAL_STATUSES:
+                    return {"job": self._public_market_chart_refresh_job(existing_job)}
+            job_id = uuid4().hex
+            job = {
+                "id": job_id,
+                "status": "pending",
+                "completed": 0,
+                "total": DEFAULT_MARKET_CHART_REFRESH_TOTAL,
+                "percentage": 0,
+                "current_symbol": "",
+                "current_label": "",
+                "message": "刷新任务已创建，正在准备拉取宽基指数历史。",
+                "errors": [],
+                "preview": None,
+                "_config": normalized,
+            }
+            self._market_chart_refresh_jobs[job_id] = job
+            self._market_chart_refresh_thread = threading.Thread(
+                target=self._run_market_chart_refresh,
+                args=(job_id,),
+                name=f"push-market-chart-refresh-{job_id[:8]}",
+                daemon=True,
+            )
+            self._market_chart_refresh_thread.start()
+            return {"job": self._public_market_chart_refresh_job(job)}
+
+    def get_market_chart_refresh(self, job_id: str) -> dict[str, Any]:
+        """读取宽基指数图表刷新任务状态。
+
+        Args:
+            job_id: 启动接口返回的任务标识。
+
+        Returns:
+            可公开给前端的任务状态。
+
+        Raises:
+            KeyError: 任务不存在。
+        """
+        with self._market_chart_refresh_lock:
+            job = self._market_chart_refresh_jobs.get(job_id)
+            if job is None:
+                raise KeyError(job_id)
+            return {"job": self._public_market_chart_refresh_job(job)}
+
     def trigger_push(self, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """触发手动发送；若请求携带了与当前配置一致的预览，则直接复用该预览。"""
         request_payload = payload
@@ -308,6 +372,9 @@ class PushCenterService:
         if self._scheduler_thread is not None:
             self._scheduler_thread.join(timeout=2.0)
             self._scheduler_thread = None
+        if self._market_chart_refresh_thread is not None:
+            self._market_chart_refresh_thread.join(timeout=2.0)
+            self._market_chart_refresh_thread = None
 
     def _scheduler_loop(self) -> None:
         while not self._scheduler_stop_event.wait(self._scheduler_check_seconds):
@@ -315,6 +382,66 @@ class PushCenterService:
                 self.run_due_jobs()
             except Exception as error:  # pragma: no cover - defensive background logging
                 logger.warning("push-center scheduler loop failed: %s", error)
+
+    def _run_market_chart_refresh(self, job_id: str) -> None:
+        """执行宽基指数全量刷新，并基于新缓存重绘当前预览。"""
+        with self._market_chart_refresh_lock:
+            job = self._market_chart_refresh_jobs[job_id]
+            config = deepcopy(job["_config"])
+            job["status"] = "running"
+        try:
+            rebuild_market_module = getattr(self._dashboard_service, "rebuild_market_module", None)
+            if callable(rebuild_market_module):
+                rebuild_market_module(
+                    progress_callback=lambda event: self._update_market_chart_refresh_progress(job_id, event)
+                )
+            else:
+                self._dashboard_service.build_market_module(force_refresh=True)
+            preview = self._build_preview(config, force_refresh=False)
+            with self._market_chart_refresh_lock:
+                job = self._market_chart_refresh_jobs[job_id]
+                job["preview"] = preview
+                job["completed"] = job["total"]
+                job["percentage"] = 100
+                if job["errors"]:
+                    job["status"] = "completed_with_warnings"
+                    job["message"] = "图表已重绘，但部分指数刷新失败，已保留上次可用历史。"
+                else:
+                    job["status"] = "completed"
+                    job["message"] = "最近三个月宽基指数历史已刷新，预览图已重绘。"
+        except Exception as error:  # pragma: no cover - defensive background logging
+            logger.exception("push market chart refresh failed", extra={"job_id": job_id})
+            with self._market_chart_refresh_lock:
+                job = self._market_chart_refresh_jobs[job_id]
+                job["status"] = "failed"
+                job["message"] = f"图表刷新失败：{error}"
+                job["errors"].append(str(error))
+
+    def _update_market_chart_refresh_progress(self, job_id: str, event: Mapping[str, Any]) -> None:
+        """接收市场服务逐指数事件，并更新可轮询任务状态。"""
+        with self._market_chart_refresh_lock:
+            job = self._market_chart_refresh_jobs[job_id]
+            completed = max(0, int(event.get("completed") or 0))
+            total = max(1, int(event.get("total") or job["total"]))
+            job["status"] = "running"
+            job["completed"] = min(completed, total)
+            job["total"] = total
+            job["percentage"] = round((job["completed"] / total) * 100)
+            job["current_symbol"] = str(event.get("symbol") or "")
+            job["current_label"] = str(event.get("label") or "")
+            job["message"] = str(event.get("message") or "正在刷新宽基指数历史。")
+            if event.get("status") == "failed":
+                error_message = f"{job['current_label'] or job['current_symbol']}: {job['message']}"
+                if error_message not in job["errors"]:
+                    job["errors"].append(error_message)
+
+    def _public_market_chart_refresh_job(self, job: Mapping[str, Any]) -> dict[str, Any]:
+        """移除内部草稿配置，仅返回前端需要的任务字段。"""
+        return {
+            key: deepcopy(value)
+            for key, value in job.items()
+            if not str(key).startswith("_")
+        }
 
     def _legacy_broken_build_preview(
         self,

@@ -195,6 +195,36 @@ export type PushPreviewResponseRaw = {
   preview: PushPreviewRaw;
 };
 
+export type PushMarketChartRefreshJobRaw = {
+  id: string;
+  status: "pending" | "running" | "completed" | "completed_with_warnings" | "failed";
+  completed: number;
+  total: number;
+  percentage: number;
+  current_symbol: string;
+  current_label: string;
+  message: string;
+  errors: string[];
+  preview?: PushPreviewRaw | null;
+};
+
+export type PushMarketChartRefreshResponseRaw = {
+  job: PushMarketChartRefreshJobRaw;
+};
+
+export type PushMarketChartRefreshJob = {
+  id: string;
+  status: PushMarketChartRefreshJobRaw["status"];
+  completed: number;
+  total: number;
+  percentage: number;
+  currentSymbol: string;
+  currentLabel: string;
+  message: string;
+  errors: string[];
+  preview?: PushPreview;
+};
+
 export type TriggerPushResponseRaw = {
   ok: boolean;
   preview: PushPreviewRaw;

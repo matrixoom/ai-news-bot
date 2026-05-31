@@ -465,24 +465,24 @@ class AkshareMarketDataProvider:
     provider_key = "akshare-market"
     _SYMBOL_CONFIG: dict[str, tuple[tuple[str, dict[str, str]], ...]] = {
         "CSI300": (
-            ("stock_zh_index_daily_em", {"symbol": "sh000300"}),
             ("stock_zh_index_daily", {"symbol": "sh000300"}),
+            ("stock_zh_index_daily_em", {"symbol": "sh000300"}),
         ),
         "CSI500": (
-            ("stock_zh_index_daily_em", {"symbol": "sh000905"}),
             ("stock_zh_index_daily", {"symbol": "sh000905"}),
+            ("stock_zh_index_daily_em", {"symbol": "sh000905"}),
         ),
         "CSI1000": (
-            ("stock_zh_index_daily_em", {"symbol": "sh000852"}),
             ("stock_zh_index_daily", {"symbol": "sh000852"}),
+            ("stock_zh_index_daily_em", {"symbol": "sh000852"}),
         ),
         "SSE": (
-            ("stock_zh_index_daily_em", {"symbol": "sh000001"}),
             ("stock_zh_index_daily", {"symbol": "sh000001"}),
+            ("stock_zh_index_daily_em", {"symbol": "sh000001"}),
         ),
         "CHINEXT": (
-            ("stock_zh_index_daily_em", {"symbol": "sz399006"}),
             ("stock_zh_index_daily", {"symbol": "sz399006"}),
+            ("stock_zh_index_daily_em", {"symbol": "sz399006"}),
         ),
         "HSTECH": (
             ("stock_hk_index_daily_sina", {"symbol": "HSTECH"}),
@@ -515,7 +515,12 @@ class AkshareMarketDataProvider:
                 continue
 
             records = self._extract_market_records(frame)
-            eligible = [record for record in records if record["trade_date"] <= trade_date]
+            history_start = trade_date - timedelta(days=180)
+            eligible = [
+                record
+                for record in records
+                if history_start <= record["trade_date"] <= trade_date
+            ]
             if not eligible:
                 continue
 

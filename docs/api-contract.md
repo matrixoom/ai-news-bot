@@ -400,7 +400,45 @@ uv run python main.py macro-sync
 {"error":"push_preview_failed"}
 ```
 
-### 5.3 `POST /api/push/trigger`
+### 5.3 `POST /api/push/market-chart-refresh`
+
+用途：启动 Push preview 宽基指数图表全量刷新。服务会逐指数拉取最近三个月收盘数据，在历史帧完整时替换本地窗口，并基于刷新后的 MA20 重绘预览。
+
+请求体：同 `config` 包装结构。
+
+成功：`202`
+
+```json
+{
+  "job": {
+    "id": "f89f...",
+    "status": "running",
+    "completed": 2,
+    "total": 6,
+    "percentage": 33,
+    "current_symbol": "CSI500",
+    "current_label": "中证 500",
+    "message": "正在刷新 中证 500。",
+    "errors": [],
+    "preview": null
+  }
+}
+```
+
+失败：`400`
+
+### 5.4 `GET /api/push/market-chart-refresh/{job_id}`
+
+用途：查询宽基指数图表刷新进度。任务完成后 `preview` 返回重绘后的预览；部分指数上游异常时，状态为 `completed_with_warnings`，并保留对应指数上次可用历史。
+
+成功：`200`
+
+失败：
+
+- `404`：任务不存在
+- `400`：状态读取失败
+
+### 5.5 `POST /api/push/trigger`
 
 用途：触发一次推送发送。
 
