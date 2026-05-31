@@ -694,6 +694,8 @@ class AkshareMarketDataProvider:
         shanghai_now = datetime.now(UTC).astimezone(ZoneInfo("Asia/Shanghai"))
         if trade_date != shanghai_now.date():
             return False
+        if shanghai_now.weekday() >= 5:
+            return False
         minutes = shanghai_now.hour * 60 + shanghai_now.minute
         if market == "cn":
             return (11 * 60 + 30) <= minutes < (13 * 60) or minutes >= (15 * 60)

@@ -212,6 +212,33 @@ uv run python main.py macro-sync
 - `{city} 环比`：`二手住宅价格指数-环比 - 100`，单位 `%`
 - `{city} 全局走势`：从历史首期前值 `100` 起，用环比百分比逐月复合得到的全局房价走势指数，单位 `指数`
 
+#### 4.4.1 `POST /api/frontend/modules/market-data/sync/{chart_id}`
+
+用途：手动刷新一张 Market Data 图表对应的历史数据。接口仅同步 `{chart_id}` 指定指标，不会连带刷新同分类其他图表，避免单个上游波动阻断仍可用指标。
+
+全球期货同步策略：
+
+- 布伦特、黄金、白银、铜优先读取东方财富全球期货历史，收盘价按字段名解析。
+- 东方财富端点异常时，分别回退新浪外盘日线 `OIL`、`XAU`、`XAG`、`CAD`。
+- 铜的新浪 `CAD` 回退序列从美元/公吨换算为美元/磅。
+- 外部数据源返回空结果时快速失败，保留 `.data/market_data.db` 内上一次可展示历史。
+
+成功：`200`
+
+```json
+{
+  "ok": true,
+  "point_counts": {
+    "wti_crude_oil": 7687
+  }
+}
+```
+
+失败：
+
+- `400`：`invalid_market_data_chart_id`
+- `503`：`frontend_market_data_sync_failed`
+
 ### 4.5 Event Outlook 时间轴接口
 
 #### 4.5.1 `GET /api/frontend/modules/event-outlook`
