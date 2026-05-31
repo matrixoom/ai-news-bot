@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import logging
 from typing import Any, Callable
 
 from .market_data_repository import MarketDataRepository
 
 
 CommodityLoader = Callable[[], list[dict[str, Any]]]
+logger = logging.getLogger(__name__)
 
 
 class MarketDataSyncService:
@@ -47,14 +49,10 @@ class MarketDataSyncService:
             每个指标本次写入的点位数量。
         """
 
-        wti_points = self._wti_loader()
-        brent_points = self._brent_loader()
-        for indicator_id, points in [
-            ("wti_crude_oil", wti_points),
-            ("brent_crude_oil", brent_points),
-        ]:
-            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
-        return {"wti_crude_oil": len(wti_points), "brent_crude_oil": len(brent_points)}
+        result: dict[str, int] = {}
+        for indicator_id in ("wti_crude_oil", "brent_crude_oil"):
+            result.update(self.sync_indicator_history(indicator_id))
+        return result
 
     def sync_precious_metals_history(self) -> dict[str, int]:
         """同步贵金属类（黄金、白银、铜）历史数据。
@@ -63,20 +61,10 @@ class MarketDataSyncService:
             每个指标本次写入的点位数量。
         """
 
-        gold_points = self._gold_loader()
-        silver_points = self._silver_loader()
-        copper_points = self._copper_loader()
-        for indicator_id, points in [
-            ("gold_spot", gold_points),
-            ("silver_spot", silver_points),
-            ("copper", copper_points),
-        ]:
-            self._repository.replace_points(indicator_id, points, status="live", warning_message="")
-        return {
-            "gold_spot": len(gold_points),
-            "silver_spot": len(silver_points),
-            "copper": len(copper_points),
-        }
+        result: dict[str, int] = {}
+        for indicator_id in ("gold_spot", "silver_spot", "copper"):
+            result.update(self.sync_indicator_history(indicator_id))
+        return result
 
     def sync_real_estate_history(self) -> dict[str, int]:
         """同步房地产类（70 城二手房价格指数）历史数据。
@@ -86,6 +74,8 @@ class MarketDataSyncService:
         """
 
         housing_points = self._housing_loader()
+        if not housing_points:
+            raise ValueError("market indicator returned no data: second_hand_housing")
         self._repository.replace_housing_points(
             "second_hand_housing", housing_points, status="live", warning_message=""
         )
@@ -103,6 +93,35 @@ class MarketDataSyncService:
         result["precious_metals"] = self.sync_precious_metals_history()
         result["real_estate"] = self.sync_real_estate_history()
         return result
+
+    def sync_indicator_history(self, indicator_id: str) -> dict[str, int]:
+        """仅同步指定图表的历史数据，避免单图刷新被同分类其他上游拖累。
+
+        Args:
+            indicator_id: Market Data 图表指标 ID。
+
+        Returns:
+            当前指标本次写入的点位数量。
+        """
+
+        loaders: dict[str, CommodityLoader] = {
+            "wti_crude_oil": self._wti_loader,
+            "brent_crude_oil": self._brent_loader,
+            "gold_spot": self._gold_loader,
+            "silver_spot": self._silver_loader,
+            "copper": self._copper_loader,
+        }
+        if indicator_id == "second_hand_housing":
+            return self.sync_real_estate_history()
+        loader = loaders.get(indicator_id)
+        if loader is None:
+            raise ValueError(f"unknown market indicator: {indicator_id}")
+
+        points = loader()
+        if not points:
+            raise ValueError(f"market indicator returned no data: {indicator_id}")
+        self._repository.replace_points(indicator_id, points, status="live", warning_message="")
+        return {indicator_id: len(points)}
 
 
 def _load_wti_rows() -> list[dict[str, Any]]:
@@ -127,28 +146,13 @@ def _load_brent_rows() -> list[dict[str, Any]]:
 
     import akshare as ak
 
-    frame = ak.futures_global_hist_em(symbol="B00Y")
-    points: list[dict[str, Any]] = []
-    for _, row in frame.iterrows():
-        raw_date = row.iloc[0]
-        value = _optional_float(row.iloc[3])  # 收盘价
-        if value is None:
-            continue
-        try:
-            date_str = str(raw_date)[:10]
-        except (TypeError, ValueError):
-            continue
-        points.append({
-            "period_end": date_str,
-            "period_label": date_str,
-            "value": value,
-            "unit": "美元/桶",
-            "frequency": "daily",
-            "provider_key": "akshare_brent",
-            "source_url": "https://data.eastmoney.com/",
-            "released_at": "",
-        })
-    return points
+    return _load_global_or_foreign_futures_points(
+        akshare=ak,
+        eastmoney_symbol="B00Y",
+        sina_symbol="OIL",
+        unit="美元/桶",
+        provider_key="akshare_brent",
+    )
 
 
 def _load_gold_rows() -> list[dict[str, Any]]:
@@ -160,8 +164,13 @@ def _load_gold_rows() -> list[dict[str, Any]]:
 
     import akshare as ak
 
-    daily_frame = ak.futures_global_hist_em(symbol="GC00Y")
-    daily_points = _global_futures_points(daily_frame, "美元/盎司", "akshare_gold")
+    daily_points = _load_global_or_foreign_futures_points(
+        akshare=ak,
+        eastmoney_symbol="GC00Y",
+        sina_symbol="XAU",
+        unit="美元/盎司",
+        provider_key="akshare_gold",
+    )
     monthly_points = _world_bank_commodity_points("Gold", "美元/盎司", "world_bank_gold")
     return daily_points + monthly_points
 
@@ -175,8 +184,13 @@ def _load_silver_rows() -> list[dict[str, Any]]:
 
     import akshare as ak
 
-    daily_frame = ak.futures_global_hist_em(symbol="SI00Y")
-    daily_points = _global_futures_points(daily_frame, "美元/盎司", "akshare_silver")
+    daily_points = _load_global_or_foreign_futures_points(
+        akshare=ak,
+        eastmoney_symbol="SI00Y",
+        sina_symbol="XAG",
+        unit="美元/盎司",
+        provider_key="akshare_silver",
+    )
     monthly_points = _world_bank_commodity_points("Silver", "美元/盎司", "world_bank_silver")
     return daily_points + monthly_points
 
@@ -190,15 +204,21 @@ def _load_copper_rows() -> list[dict[str, Any]]:
 
     import akshare as ak
 
-    daily_frame = ak.futures_global_hist_em(symbol="HG00Y")
-    daily_points = _global_futures_points(daily_frame, "美元/磅", "akshare_copper")
+    daily_points = _load_global_or_foreign_futures_points(
+        akshare=ak,
+        eastmoney_symbol="HG00Y",
+        sina_symbol="CAD",
+        unit="美元/磅",
+        provider_key="akshare_copper",
+        sina_scale=1 / 2204.6226218488,
+    )
     # World Bank 铜价单位为美元/公吨，需转换为美元/磅（1 mt ≈ 2204.62 lb）
     wb_points = _world_bank_commodity_points("Copper", "美元/磅", "world_bank_copper", scale=1 / 2204.6226218488)
     return daily_points + wb_points
 
 
 def _futures_points(
-    frame, unit: str, provider_key: str
+    frame, unit: str, provider_key: str, *, scale: float = 1.0
 ) -> list[dict[str, Any]]:
     """将 futures_foreign_hist 返回的 DataFrame 转为标准化点位。
 
@@ -206,6 +226,7 @@ def _futures_points(
         frame: AkShare 返回的 DataFrame。
         unit: 单位。
         provider_key: 数据来源标识。
+        scale: 数值缩放系数；默认保持原值。
 
     Returns:
         标准化点位列表。
@@ -214,7 +235,8 @@ def _futures_points(
     points: list[dict[str, Any]] = []
     for _, row in frame.iterrows():
         raw_date = row["date"]
-        value = _optional_float(row.get("close"))
+        raw_value = _optional_float(row.get("close"))
+        value = raw_value * scale if raw_value is not None else None
         if value is None:
             continue
         try:
@@ -256,7 +278,11 @@ def _global_futures_points(
     points: list[dict[str, Any]] = []
     for _, row in frame.iterrows():
         raw_date = row.iloc[0]
-        value = _optional_float(row.iloc[3])  # 收盘价
+        # AkShare 全球期货表的第 3 列是最高价；优先按字段名读取收盘价，
+        # 再兼容旧 DataFrame 的固定列序，避免趋势图把最高价误当收盘价。
+        value = _optional_float(row.get("收盘", row.get("close")))
+        if value is None and len(row) > 2:
+            value = _optional_float(row.iloc[2])
         if value is None:
             continue
         try:
@@ -274,6 +300,55 @@ def _global_futures_points(
             "released_at": "",
         })
     return points
+
+
+def _load_global_or_foreign_futures_points(
+    *,
+    akshare: Any,
+    eastmoney_symbol: str,
+    sina_symbol: str,
+    unit: str,
+    provider_key: str,
+    sina_scale: float = 1.0,
+) -> list[dict[str, Any]]:
+    """优先读取东方财富全球期货，失败时切换新浪外盘日线。
+
+    Args:
+        akshare: 已导入的 AkShare 模块。
+        eastmoney_symbol: 东方财富全球期货代码。
+        sina_symbol: 新浪外盘期货代码。
+        unit: 标准化后的展示单位。
+        provider_key: 主数据源标识。
+        sina_scale: 新浪回退值的缩放系数。
+
+    Returns:
+        标准化后的日度期货点位列表。
+    """
+
+    try:
+        frame = akshare.futures_global_hist_em(symbol=eastmoney_symbol)
+        points = _global_futures_points(frame, unit, provider_key)
+        if points:
+            return points
+        logger.warning(
+            "Eastmoney futures history returned no rows for %s; falling back to Sina %s",
+            eastmoney_symbol,
+            sina_symbol,
+        )
+    except Exception as error:
+        logger.warning(
+            "Eastmoney futures history failed for %s; falling back to Sina %s: %s",
+            eastmoney_symbol,
+            sina_symbol,
+            error,
+        )
+    frame = akshare.futures_foreign_hist(symbol=sina_symbol)
+    return _futures_points(
+        frame,
+        unit,
+        f"{provider_key}_sina",
+        scale=sina_scale,
+    )
 
 
 def _world_bank_commodity_points(

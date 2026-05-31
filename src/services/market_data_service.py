@@ -47,18 +47,12 @@ class MarketDataService:
         self._repository = repository or MarketDataRepository()
 
     def sync_chart(self, chart_id: str) -> dict[str, Any]:
-        group = _CHART_SYNC_GROUPS.get(chart_id)
-        if group is None:
+        if chart_id not in _CHART_SYNC_GROUPS:
             raise MarketDataValidationError("unknown chart id for sync")
         from .market_data_sync_service import MarketDataSyncService
 
         syncer = MarketDataSyncService(repository=self._repository)
-        sync_methods: dict[str, Any] = {
-            "commodities": syncer.sync_commodities_history,
-            "precious_metals": syncer.sync_precious_metals_history,
-            "real_estate": syncer.sync_real_estate_history,
-        }
-        point_counts = sync_methods[group]()
+        point_counts = syncer.sync_indicator_history(chart_id)
         return {"ok": True, "point_counts": point_counts}
 
     def build_module_payload(self, tab: str = "commodities") -> dict[str, Any]:

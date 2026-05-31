@@ -19,6 +19,7 @@
 - provider 合同与降级策略
 - dashboard service 聚合逻辑
 - macro data SQLite 分表、时间范围解析与 API 契约
+- market data 单图刷新隔离、全球期货收盘列解析与双源回退
 - push center 配置、预览、触发逻辑
 - 历史文档校验类 / demo 类测试已归档到 `to_delete/tests/`
 
@@ -62,6 +63,7 @@ uv run python -m pytest tests/test_task02_provider_strategy.py tests/test_task04
 
 ```powershell
 uv run python -m pytest tests/test_macro_data_module.py -q
+uv run python -m pytest tests/test_market_data_module.py -q
 uv run python -m pytest tests/test_task05_macro_monitoring.py tests/test_task06_market_models.py tests/test_task07_events_outlook.py -q
 ```
 
@@ -96,6 +98,8 @@ cmd /c npm run build
    - 失业保险基金支出累计值默认种子应覆盖 2005-2024 年 20 个年度点，状态为 `live`
    - `uv run python main.py macro-sync` 后检查 `.data/macro_data.db` 中 `macro_nominal_gdp`、`macro_real_gdp`、`macro_nominal_gdp_growth`、`macro_real_gdp_growth` 的同步状态为 `live`
    - GDP 年度与季度一致性：同一年四个 `quarterly` 点位之和应等于对应 `yearly` 点位；事实表主键应为 `(period_end, frequency)`
+   - `POST /api/frontend/modules/market-data/sync/wti_crude_oil` 仅刷新 WTI，不应被布伦特上游失败拖累
+   - 全球期货历史解析使用收盘列；东方财富异常时布伦特、黄金、白银、铜可回退新浪外盘日线
    - `/api/frontend/modules/push`
 5. 推送链路抽查（本地或测试环境）：
    - 更新配置
