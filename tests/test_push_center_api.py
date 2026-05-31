@@ -1,4 +1,5 @@
 import json
+import time
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
@@ -101,6 +102,40 @@ class ModuleOnlyDashboardService:
 
     def stop_background_refresh(self):
         return None
+
+
+class ChartRefreshDashboardService(ModuleOnlyDashboardService):
+    """模拟逐指数刷新，并记录推送中心是否使用专用重建入口。"""
+
+    def __init__(self):
+        super().__init__()
+        self.rebuild_market_module_calls = 0
+
+    def rebuild_market_module(self, *, progress_callback=None):
+        """汇报两项进度后返回刷新后的市场模块。"""
+        self.rebuild_market_module_calls += 1
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "symbol": "CSI300",
+                    "label": "沪深300",
+                    "status": "completed",
+                    "completed": 1,
+                    "total": 2,
+                    "message": "沪深300 刷新完成。",
+                }
+            )
+            progress_callback(
+                {
+                    "symbol": "CSI500",
+                    "label": "中证500",
+                    "status": "completed",
+                    "completed": 2,
+                    "total": 2,
+                    "message": "中证500 刷新完成。",
+                }
+            )
+        return self.build_market_module(force_refresh=True)
 
 
 class PushCenterModuleTests(unittest.TestCase):
@@ -399,6 +434,47 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertNotIn("组合图与市场模型保持一致", preview_json["preview"]["html_body"])
         self.assertIn("## 市场模型", preview_json["preview"]["text_body"])
         self.assertIn("### 近3个月趋势", preview_json["preview"]["text_body"])
+
+    def test_market_chart_refresh_endpoint_reports_progress_and_returns_redrawn_preview(self):
+        """校验专用图表刷新任务会异步返回进度与刷新后的预览。"""
+        dashboard_service = ChartRefreshDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "chart-refresh.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        client = TestClient(
+            create_fastapi_app(
+                dashboard_service=dashboard_service,
+                push_center_service=push_service,
+            )
+        )
+        try:
+            start_response = client.post(
+                "/api/push/market-chart-refresh",
+                json={"config": {"selected_module_ids": ["market"], "schedules": []}},
+            )
+
+            self.assertEqual(start_response.status_code, 202)
+            job_id = start_response.json()["job"]["id"]
+            result = None
+            for _ in range(30):
+                result = client.get(f"/api/push/market-chart-refresh/{job_id}").json()["job"]
+                if result["status"] == "completed":
+                    break
+                time.sleep(0.01)
+
+            self.assertIsNotNone(result)
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(result["completed"], 2)
+            self.assertEqual(result["total"], 2)
+            self.assertTrue(result["preview"]["ok"])
+            self.assertEqual(dashboard_service.rebuild_market_module_calls, 1)
+        finally:
+            client.close()
+            push_service.stop_scheduler()
 
     def test_manual_trigger_uses_email_notifier_and_records_run(self):
         payload = {

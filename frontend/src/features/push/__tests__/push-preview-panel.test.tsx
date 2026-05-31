@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { PushPreviewPanel } from "../components/push-preview-panel";
 
 describe("PushPreviewPanel", () => {
@@ -34,5 +35,65 @@ describe("PushPreviewPanel", () => {
     await waitFor(() => {
       expect(iframe).toHaveStyle({ height: "1648px" });
     });
+  });
+
+  it("opens a progress dialog while all market charts are being refreshed", async () => {
+    const onRefreshCharts = vi.fn();
+    const user = userEvent.setup();
+
+    const { rerender } = render(
+      <PushPreviewPanel
+        onDismissChartRefresh={() => undefined}
+        onRefreshCharts={onRefreshCharts}
+        preview={{
+          ok: true,
+          generatedAt: "2026-04-14T08:00:00Z",
+          subject: "Market Daily",
+          textBody: "",
+          htmlBody: "<html><body>preview</body></html>",
+          style: "newspaper",
+          selectedModuleIds: ["market"],
+          error: "",
+        }}
+        refreshAfterMs={30000}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "全量刷新图表" }));
+
+    expect(onRefreshCharts).toHaveBeenCalledTimes(1);
+    rerender(
+      <PushPreviewPanel
+        chartRefreshJob={{
+          id: "job-1",
+          status: "running",
+          completed: 2,
+          total: 6,
+          percentage: 33,
+          currentSymbol: "CSI500",
+          currentLabel: "中证500",
+          message: "正在刷新中证500。",
+          errors: [],
+        }}
+        onDismissChartRefresh={() => undefined}
+        onRefreshCharts={onRefreshCharts}
+        preview={{
+          ok: true,
+          generatedAt: "2026-04-14T08:00:00Z",
+          subject: "Market Daily",
+          textBody: "",
+          htmlBody: "<html><body>preview</body></html>",
+          style: "newspaper",
+          selectedModuleIds: ["market"],
+          error: "",
+        }}
+        refreshAfterMs={30000}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "宽基指数图表刷新进度" })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "33");
+    expect(screen.getByText("2 / 6")).toBeInTheDocument();
+    expect(screen.getByText("正在刷新中证500。")).toBeInTheDocument();
   });
 });

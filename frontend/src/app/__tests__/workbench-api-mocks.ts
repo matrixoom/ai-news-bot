@@ -1077,6 +1077,45 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
       });
     }
 
+    if (url.pathname === "/api/push/market-chart-refresh" && method === "POST") {
+      return jsonResponse({
+        job: {
+          id: "market-chart-refresh-1",
+          status: "running",
+          completed: 2,
+          total: 6,
+          percentage: 33,
+          current_symbol: "CSI500",
+          current_label: "中证500",
+          message: "正在刷新 中证500。",
+          errors: [],
+        },
+      });
+    }
+
+    if (url.pathname === "/api/push/market-chart-refresh/market-chart-refresh-1" && method === "GET") {
+      const preview = {
+        ...pushState.module.details[0].section.preview,
+        generated_at: "2026-03-30T09:13:00Z",
+        subject: "Charts refreshed",
+        html_body: "<html><body><h1>Charts refreshed</h1></body></html>",
+      };
+      return jsonResponse({
+        job: {
+          id: "market-chart-refresh-1",
+          status: "completed",
+          completed: 6,
+          total: 6,
+          percentage: 100,
+          current_symbol: "HSTECH",
+          current_label: "恒生科技指数",
+          message: "最近三个月宽基指数历史已刷新，预览图已重绘。",
+          errors: [],
+          preview,
+        },
+      });
+    }
+
     if (url.pathname === "/api/push/trigger" && method === "POST") {
       const nextConfig = await readJsonBody(input, init?.body);
       const unwrapped = typeof nextConfig?.config === "object" && nextConfig?.config ? nextConfig.config : nextConfig;

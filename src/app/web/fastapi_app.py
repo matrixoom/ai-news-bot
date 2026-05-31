@@ -346,6 +346,26 @@ def create_fastapi_app(
                 status_code=400,
             )
 
+    @app.post("/api/push/market-chart-refresh")
+    def start_push_market_chart_refresh(payload: dict | None = None) -> JSONResponse:
+        """启动 Push preview 宽基指数三个月历史重建任务。"""
+        try:
+            return JSONResponse(push_service.start_market_chart_refresh(payload), status_code=202)
+        except Exception:
+            logger.exception("push market chart refresh start failed")
+            return JSONResponse({"error": "push_market_chart_refresh_start_failed"}, status_code=400)
+
+    @app.get("/api/push/market-chart-refresh/{job_id}")
+    def get_push_market_chart_refresh(job_id: str) -> JSONResponse:
+        """返回 Push preview 宽基指数历史重建进度。"""
+        try:
+            return JSONResponse(push_service.get_market_chart_refresh(job_id))
+        except KeyError:
+            return JSONResponse({"error": "push_market_chart_refresh_not_found"}, status_code=404)
+        except Exception:
+            logger.exception("push market chart refresh status failed", extra={"job_id": job_id})
+            return JSONResponse({"error": "push_market_chart_refresh_status_failed"}, status_code=400)
+
     @app.post("/api/push/trigger")
     def trigger_push(payload: dict | None = None) -> JSONResponse:
         try:

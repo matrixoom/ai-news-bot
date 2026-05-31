@@ -2,6 +2,8 @@ import type {
   PushConfig,
   PushConfigRaw,
   PushModuleRawPayload,
+  PushMarketChartRefreshJob,
+  PushMarketChartRefreshJobRaw,
   PushPreview,
   PushPreviewRaw,
   PushRecentRun,
@@ -133,6 +135,21 @@ export function adaptPushPreview(preview: PushPreviewRaw): PushPreview {
     style: preview.style,
     selectedModuleIds: preview.selected_module_ids,
     error: preview.error ?? "",
+  };
+}
+
+export function adaptPushMarketChartRefreshJob(job: PushMarketChartRefreshJobRaw): PushMarketChartRefreshJob {
+  return {
+    id: job.id,
+    status: job.status,
+    completed: job.completed,
+    total: job.total,
+    percentage: job.percentage,
+    currentSymbol: job.current_symbol,
+    currentLabel: job.current_label,
+    message: job.message,
+    errors: job.errors,
+    preview: job.preview ? adaptPushPreview(job.preview) : undefined,
   };
 }
 
