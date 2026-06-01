@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 import unittest
 from datetime import UTC, datetime
@@ -230,6 +231,23 @@ class PushCenterModuleTests(unittest.TestCase):
 
                 self.assertEqual(response.status_code, 400)
                 self.assertEqual(response.json(), {"error": "push_config_update_failed"})
+
+    def test_push_config_invalid_market_chart_range_does_not_leak_into_logs(self):
+        """校验非法范围不会通过异常链污染 API 日志。"""
+        marker = "push_range_log_injection_marker"
+        invalid_range = f"5y\n{marker}"
+
+        with self.assertLogs("src.app.web.fastapi_app", level="ERROR") as captured:
+            response = self.client.put(
+                "/api/push/config",
+                json={"config": {"market_chart_range": invalid_range}},
+            )
+
+        logs = "\n".join(logging.Formatter().format(record) for record in captured.records)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "push_config_update_failed"})
+        self.assertNotIn(marker, logs)
+        self.assertNotIn(invalid_range, logs)
 
     def test_frontend_push_module_refresh_forces_latest_preview(self):
         dashboard_service = RecordingDashboardService()
@@ -757,6 +775,8 @@ class PushCenterModuleTests(unittest.TestCase):
             email_notifier_factory=RecordingEmailNotifier,
         )
         try:
+            marker = "push_preview_range_log_injection_marker"
+            invalid_range = f"5y\n{marker}"
             preview_payload = {
                 "ok": True,
                 "generated_at": "2026-03-24T09:00:00Z",
@@ -764,30 +784,32 @@ class PushCenterModuleTests(unittest.TestCase):
                 "text_body": "broken-preview-text",
                 "html_body": "<p>broken-preview-html</p>",
                 "style": "newspaper",
-                "market_chart_range": "5y",
+                "market_chart_range": invalid_range,
                 "selected_module_ids": ["market"],
             }
-            result = push_service.trigger_push(
-                {
-                    "config": {
-                        "selected_module_ids": ["market"],
-                        "report_style": "newspaper",
-                        "market_chart_range": "1y",
-                        "email": {
-                            "smtp_server": "smtp.example.com",
-                            "smtp_port": 587,
-                            "username": "bot@example.com",
-                            "password": "secret",
-                            "from_address": "bot@example.com",
-                            "to_addresses": "desk@example.com",
-                            "use_tls": True,
+            with self.assertLogs("src.services.push_center_service", level="WARNING") as captured:
+                result = push_service.trigger_push(
+                    {
+                        "config": {
+                            "selected_module_ids": ["market"],
+                            "report_style": "newspaper",
+                            "market_chart_range": "1y",
+                            "email": {
+                                "smtp_server": "smtp.example.com",
+                                "smtp_port": 587,
+                                "username": "bot@example.com",
+                                "password": "secret",
+                                "from_address": "bot@example.com",
+                                "to_addresses": "desk@example.com",
+                                "use_tls": True,
+                            },
+                            "schedules": [],
                         },
-                        "schedules": [],
-                    },
-                    "preview": preview_payload,
-                }
-            )
+                        "preview": preview_payload,
+                    }
+                )
 
+            logs = "\n".join(logging.Formatter().format(record) for record in captured.records)
             self.assertTrue(result["ok"])
             self.assertEqual(dashboard_service.force_refresh_calls, [True])
             self.assertNotEqual(
@@ -795,6 +817,9 @@ class PushCenterModuleTests(unittest.TestCase):
                 preview_payload["html_body"],
             )
             self.assertEqual(result["preview"]["market_chart_range"], "1y")
+            self.assertIn("ignored requested preview with invalid market_chart_range", logs)
+            self.assertNotIn(marker, logs)
+            self.assertNotIn(invalid_range, logs)
         finally:
             push_service.stop_scheduler()
 
