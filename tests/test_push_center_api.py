@@ -465,6 +465,7 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertEqual(preview_response.status_code, 200)
         preview_json = preview_response.json()
         self.assertTrue(preview_json["preview"]["ok"])
+        self.assertEqual(preview_json["preview"]["market_chart_range"], "1y")
         self.assertIn("市场日报", preview_json["preview"]["html_body"])
         self.assertIn("Fishbowl Summary", preview_json["preview"]["html_body"])
         self.assertIn("3M Trend", preview_json["preview"]["html_body"])
@@ -655,6 +656,7 @@ class PushCenterModuleTests(unittest.TestCase):
                 "text_body": "preview-text",
                 "html_body": "<p>preview-html</p>",
                 "style": "newspaper",
+                "market_chart_range": "1y",
                 "selected_module_ids": ["market"],
             }
             result = push_service.trigger_push(
@@ -688,6 +690,111 @@ class PushCenterModuleTests(unittest.TestCase):
                 preview_payload["text_body"],
             )
             self.assertEqual(result["preview"]["subject"], preview_payload["subject"])
+            self.assertEqual(result["preview"]["market_chart_range"], "1y")
+        finally:
+            push_service.stop_scheduler()
+
+    def test_manual_trigger_rebuilds_preview_when_market_chart_range_does_not_match(self):
+        """校验预览范围与当前配置不一致时放弃复用并重新构建。"""
+        dashboard_service = RecordingDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "manual-preview-range-mismatch.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        try:
+            preview_payload = {
+                "ok": True,
+                "generated_at": "2026-03-24T09:00:00Z",
+                "subject": "stale-preview-subject",
+                "text_body": "stale-preview-text",
+                "html_body": "<p>stale-preview-html</p>",
+                "style": "newspaper",
+                "market_chart_range": "3y",
+                "selected_module_ids": ["market"],
+            }
+            result = push_service.trigger_push(
+                {
+                    "config": {
+                        "selected_module_ids": ["market"],
+                        "report_style": "newspaper",
+                        "market_chart_range": "1y",
+                        "email": {
+                            "smtp_server": "smtp.example.com",
+                            "smtp_port": 587,
+                            "username": "bot@example.com",
+                            "password": "secret",
+                            "from_address": "bot@example.com",
+                            "to_addresses": "desk@example.com",
+                            "use_tls": True,
+                        },
+                        "schedules": [],
+                    },
+                    "preview": preview_payload,
+                }
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(dashboard_service.force_refresh_calls, [True])
+            self.assertNotEqual(
+                RecordingEmailNotifier.sent_messages[0]["html_content"],
+                preview_payload["html_body"],
+            )
+            self.assertEqual(result["preview"]["market_chart_range"], "1y")
+        finally:
+            push_service.stop_scheduler()
+
+    def test_manual_trigger_rebuilds_preview_when_market_chart_range_is_invalid(self):
+        """校验损坏的可选预览范围只会触发重建，不会阻断正常发送。"""
+        dashboard_service = RecordingDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "manual-preview-range-invalid.json",
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        try:
+            preview_payload = {
+                "ok": True,
+                "generated_at": "2026-03-24T09:00:00Z",
+                "subject": "broken-preview-subject",
+                "text_body": "broken-preview-text",
+                "html_body": "<p>broken-preview-html</p>",
+                "style": "newspaper",
+                "market_chart_range": "5y",
+                "selected_module_ids": ["market"],
+            }
+            result = push_service.trigger_push(
+                {
+                    "config": {
+                        "selected_module_ids": ["market"],
+                        "report_style": "newspaper",
+                        "market_chart_range": "1y",
+                        "email": {
+                            "smtp_server": "smtp.example.com",
+                            "smtp_port": 587,
+                            "username": "bot@example.com",
+                            "password": "secret",
+                            "from_address": "bot@example.com",
+                            "to_addresses": "desk@example.com",
+                            "use_tls": True,
+                        },
+                        "schedules": [],
+                    },
+                    "preview": preview_payload,
+                }
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(dashboard_service.force_refresh_calls, [True])
+            self.assertNotEqual(
+                RecordingEmailNotifier.sent_messages[0]["html_content"],
+                preview_payload["html_body"],
+            )
+            self.assertEqual(result["preview"]["market_chart_range"], "1y")
         finally:
             push_service.stop_scheduler()
 

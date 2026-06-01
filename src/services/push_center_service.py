@@ -801,7 +801,11 @@ class PushCenterService:
 
         preview_modules = self._normalize_module_ids(raw_preview.get("selected_module_ids"))
         preview_style = self._normalize_style(raw_preview.get("style"))
-        preview_range = resolve_push_market_chart_range(raw_preview.get("market_chart_range")).value
+        try:
+            preview_range = resolve_push_market_chart_range(raw_preview.get("market_chart_range")).value
+        except ValueError:
+            logger.warning("push-center ignored requested preview with invalid market_chart_range")
+            return None
         config_modules = self._normalize_module_ids(config.get("selected_module_ids"))
         config_style = self._normalize_style(config.get("report_style"))
         config_range = resolve_push_market_chart_range(config.get("market_chart_range")).value
