@@ -187,11 +187,26 @@ class PushCenterModuleTests(unittest.TestCase):
 
     def test_push_config_defaults_market_chart_range_to_one_year(self):
         """校验旧配置缺少范围字段时自动兼容为近一年。"""
+        saved = self._read_json(self.config_path)
+        saved.pop("market_chart_range")
+        self.config_path.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
+
         payload = self.client.get("/api/frontend/modules/push").json()
 
         config = payload["module"]["details"][0]["section"]["config"]
 
         self.assertEqual(config["market_chart_range"], "1y")
+
+    def test_push_config_defaults_blank_market_chart_range_to_one_year(self):
+        """校验空白范围按兼容规则回退为近一年。"""
+        response = self.client.put(
+            "/api/push/config",
+            json={"config": {"market_chart_range": "   "}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        saved = self._read_json(self.config_path)
+        self.assertEqual(saved["market_chart_range"], "1y")
 
     def test_push_config_persists_market_chart_range(self):
         """校验合法范围会写入配置文件并返回给前端。"""
@@ -206,13 +221,15 @@ class PushCenterModuleTests(unittest.TestCase):
 
     def test_push_config_rejects_invalid_market_chart_range(self):
         """校验非法范围快速失败，避免静默回退到错误推送区间。"""
-        response = self.client.put(
-            "/api/push/config",
-            json={"config": {"market_chart_range": "5y"}},
-        )
+        for invalid_range in ("5y", False, 0):
+            with self.subTest(invalid_range=invalid_range):
+                response = self.client.put(
+                    "/api/push/config",
+                    json={"config": {"market_chart_range": invalid_range}},
+                )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {"error": "push_config_update_failed"})
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json(), {"error": "push_config_update_failed"})
 
     def test_frontend_push_module_refresh_forces_latest_preview(self):
         dashboard_service = RecordingDashboardService()
