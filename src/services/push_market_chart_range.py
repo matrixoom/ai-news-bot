@@ -26,7 +26,12 @@ DEFAULT_PUSH_MARKET_CHART_RANGE = "1y"
 
 def resolve_push_market_chart_range(value: object) -> PushMarketChartRange:
     """返回合法范围；非法值直接失败，避免推送区间静默漂移。"""
-    normalized = str(value or DEFAULT_PUSH_MARKET_CHART_RANGE).strip().lower()
+    if value is None:
+        normalized = DEFAULT_PUSH_MARKET_CHART_RANGE
+    else:
+        normalized = str(value).strip().lower()
+        if isinstance(value, str) and not normalized:
+            normalized = DEFAULT_PUSH_MARKET_CHART_RANGE
     try:
         return PUSH_MARKET_CHART_RANGES[normalized]
     except KeyError as error:
