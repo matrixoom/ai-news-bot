@@ -42,7 +42,6 @@ def resolve_push_market_chart_range(value: object) -> PushMarketChartRange:
         normalized = str(value).strip().lower()
         if isinstance(value, str) and not normalized:
             normalized = DEFAULT_PUSH_MARKET_CHART_RANGE
-    try:
-        return PUSH_MARKET_CHART_RANGES[normalized]
-    except KeyError as error:
-        raise ValueError(f"unsupported market_chart_range: {normalized}") from error
+    if normalized not in PUSH_MARKET_CHART_RANGES:
+        raise ValueError("unsupported market_chart_range") from None
+    return PUSH_MARKET_CHART_RANGES[normalized]
