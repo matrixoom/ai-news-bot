@@ -3,6 +3,7 @@
     "market"
   ],
   "report_style": "newspaper",
+  "market_chart_range": "1y",
   "email": {
     "enabled": true,
     "label": "Primary Email",

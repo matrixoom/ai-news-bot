@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..notifiers import EmailNotifier
 from .dashboard_service import DashboardSection, DashboardService, DashboardSnapshot, SummaryBlock
+from .push_market_chart_range import DEFAULT_PUSH_MARKET_CHART_RANGE, resolve_push_market_chart_range
 from .push_report_service import PushReportService
 
 
@@ -89,6 +90,7 @@ MARKET_CHART_REFRESH_TERMINAL_STATUSES = {"completed", "completed_with_warnings"
 DEFAULT_PUSH_CONFIG = {
     "selected_module_ids": ["market"],
     "report_style": "newspaper",
+    "market_chart_range": DEFAULT_PUSH_MARKET_CHART_RANGE,
     "email": {
         "enabled": True,
         "label": "Primary Email",
@@ -595,6 +597,7 @@ class PushCenterService:
                 "text_body": text_body,
                 "html_body": html_body,
                 "style": config.get("report_style") or "newspaper",
+                "market_chart_range": resolve_push_market_chart_range(config.get("market_chart_range")).value,
                 "selected_module_ids": selected_modules,
             }
         except Exception as error:
@@ -615,6 +618,7 @@ class PushCenterService:
             "text_body": "",
             "html_body": "",
             "style": config.get("report_style") or "newspaper",
+            "market_chart_range": resolve_push_market_chart_range(config.get("market_chart_range")).value,
             "selected_module_ids": selected_modules,
             "error": error,
         }
@@ -797,11 +801,13 @@ class PushCenterService:
 
         preview_modules = self._normalize_module_ids(raw_preview.get("selected_module_ids"))
         preview_style = self._normalize_style(raw_preview.get("style"))
+        preview_range = resolve_push_market_chart_range(raw_preview.get("market_chart_range")).value
         config_modules = self._normalize_module_ids(config.get("selected_module_ids"))
         config_style = self._normalize_style(config.get("report_style"))
+        config_range = resolve_push_market_chart_range(config.get("market_chart_range")).value
         if not bool(raw_preview.get("ok")):
             return None
-        if preview_modules != config_modules or preview_style != config_style:
+        if preview_modules != config_modules or preview_style != config_style or preview_range != config_range:
             return None
 
         return {
@@ -811,6 +817,7 @@ class PushCenterService:
             "text_body": str(raw_preview.get("text_body") or ""),
             "html_body": str(raw_preview.get("html_body") or ""),
             "style": preview_style,
+            "market_chart_range": preview_range,
             "selected_module_ids": preview_modules,
         }
     def _send_email(self, config: Mapping[str, Any], *, subject: str, text_body: str, html_body: str) -> bool | str:
@@ -911,6 +918,9 @@ class PushCenterService:
             merged["selected_module_ids"] = self._normalize_module_ids(merged.get("selected_module_ids"))
 
         merged["report_style"] = self._normalize_style(payload.get("report_style", merged.get("report_style")))
+        merged["market_chart_range"] = resolve_push_market_chart_range(
+            payload.get("market_chart_range", merged.get("market_chart_range"))
+        ).value
         merged["email"] = self._normalize_email_config(payload.get("email", merged.get("email")))
         merged["schedules"] = self._normalize_schedules(
             payload.get("schedules", merged.get("schedules")),
