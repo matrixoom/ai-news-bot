@@ -80,8 +80,8 @@ class ModuleOnlyDashboardService:
         self.build_snapshot_calls.append(force_refresh)
         raise AssertionError("full dashboard snapshot should not be used for module-scoped push preview")
 
-    def build_market_module(self, *, force_refresh=False):
-        self.build_market_module_calls.append(force_refresh)
+    def build_market_module(self, *, force_refresh=False, history_window_days=None):
+        self.build_market_module_calls.append((force_refresh, history_window_days))
         return (
             "2026-03-24T08:00:00Z",
             [
@@ -110,11 +110,11 @@ class ChartRefreshDashboardService(ModuleOnlyDashboardService):
 
     def __init__(self):
         super().__init__()
-        self.rebuild_market_module_calls = 0
+        self.rebuild_market_module_calls = []
 
-    def rebuild_market_module(self, *, progress_callback=None):
+    def rebuild_market_module(self, *, history_window_days=None, progress_callback=None):
         """汇报两项进度后返回刷新后的市场模块。"""
-        self.rebuild_market_module_calls += 1
+        self.rebuild_market_module_calls.append(history_window_days)
         if progress_callback is not None:
             progress_callback(
                 {
@@ -136,7 +136,7 @@ class ChartRefreshDashboardService(ModuleOnlyDashboardService):
                     "message": "中证500 刷新完成。",
                 }
             )
-        return self.build_market_module(force_refresh=True)
+        return self.build_market_module(force_refresh=True, history_window_days=history_window_days)
 
 
 class PushCenterModuleTests(unittest.TestCase):
@@ -333,7 +333,7 @@ class PushCenterModuleTests(unittest.TestCase):
 
             self.assertTrue(result["preview"]["ok"])
             self.assertEqual(dashboard_service.build_snapshot_calls, [])
-            self.assertEqual(dashboard_service.build_market_module_calls, [True])
+            self.assertEqual(dashboard_service.build_market_module_calls, [(True, 366)])
         finally:
             push_service.stop_scheduler()
 
@@ -347,8 +347,8 @@ class PushCenterModuleTests(unittest.TestCase):
                 self.build_snapshot_calls.append(force_refresh)
                 raise AssertionError("full dashboard snapshot should not be used for readable-title preview")
 
-            def build_market_module(self, *, force_refresh=False):
-                self.build_market_module_calls.append(force_refresh)
+            def build_market_module(self, *, force_refresh=False, history_window_days=None):
+                self.build_market_module_calls.append((force_refresh, history_window_days))
                 return (
                     "2026-03-24T08:00:00Z",
                     [
@@ -407,7 +407,7 @@ class PushCenterModuleTests(unittest.TestCase):
                 result["preview"]["html_body"],
             )
             self.assertEqual(dashboard_service.build_snapshot_calls, [])
-            self.assertEqual(dashboard_service.build_market_module_calls, [True])
+            self.assertEqual(dashboard_service.build_market_module_calls, [(True, 366)])
         finally:
             push_service.stop_scheduler()
 
@@ -536,9 +536,52 @@ class PushCenterModuleTests(unittest.TestCase):
             self.assertEqual(result["completed"], 2)
             self.assertEqual(result["total"], 2)
             self.assertTrue(result["preview"]["ok"])
-            self.assertEqual(dashboard_service.rebuild_market_module_calls, 1)
+            self.assertEqual(dashboard_service.rebuild_market_module_calls, [366])
         finally:
             client.close()
+            push_service.stop_scheduler()
+
+    def test_preview_can_redraw_selected_range_without_external_refresh(self):
+        """校验范围切换仅使用本地历史重绘，不触发外部市场刷新。"""
+        dashboard_service = ModuleOnlyDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "range-redraw.json",
+            enable_scheduler=False,
+        )
+        try:
+            result = push_service.build_preview_response(
+                {"config": {"market_chart_range": "2y"}, "refresh_data": False}
+            )
+            self.assertTrue(result["preview"]["ok"])
+            self.assertEqual(dashboard_service.build_market_module_calls, [(False, 731)])
+        finally:
+            push_service.stop_scheduler()
+
+    def test_market_chart_refresh_uses_selected_range(self):
+        """校验全量刷新按当前草稿范围获取历史。"""
+        dashboard_service = ChartRefreshDashboardService()
+        push_service = PushCenterService(
+            dashboard_service=dashboard_service,
+            report_service=StubPushReportService(),
+            config_path=self.temp_dir / "range-refresh.json",
+            enable_scheduler=False,
+        )
+        try:
+            response = push_service.start_market_chart_refresh(
+                {"config": {"market_chart_range": "3y"}}
+            )
+            job_id = response["job"]["id"]
+            job = response["job"]
+            for _ in range(30):
+                job = push_service.get_market_chart_refresh(job_id)["job"]
+                if job["status"] == "completed":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(dashboard_service.rebuild_market_module_calls, [1096])
+            self.assertIn("近3年", job["message"])
+        finally:
             push_service.stop_scheduler()
 
     def test_manual_trigger_uses_email_notifier_and_records_run(self):
