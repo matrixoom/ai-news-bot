@@ -20,7 +20,7 @@
 - dashboard service 聚合逻辑
 - macro data SQLite 分表、时间范围解析与 API 契约
 - market data 单图刷新隔离、全球期货收盘列解析与双源回退
-- push center 配置、预览、触发逻辑
+- push center 配置、预览、触发逻辑、宽基指数时间范围与历史保留
 - 历史文档校验类 / demo 类测试已归档到 `to_delete/tests/`
 
 ### 2.2 集成测试（后端 API）
@@ -41,7 +41,7 @@
 - 路由壳、query 参数与 `news_mode` 保留
 - 页面渲染和关键交互（包括侧栏折叠/导航折叠等）
 - Macro Data 分类子标签、图表卡片、自定义时间范围和就业年度指标页
-- push 页面行为（保存配置、预览、触发）
+- push 页面行为（设置弹窗、保存配置、范围切换本地重绘、全量刷新、预览、触发）
 
 ## 3. 回归门禁（建议最小集合）
 
@@ -70,7 +70,7 @@ uv run python -m pytest tests/test_task05_macro_monitoring.py tests/test_task06_
 ### 3.4 Push 相关改动
 
 ```powershell
-uv run python -m pytest tests/test_task08_push_workflow.py tests/test_push_center_module.py tests/test_email_notifier.py -q
+uv run python -m pytest tests/test_push_workflow.py tests/test_push_center_api.py tests/test_push_email_notifier.py -q
 ```
 
 ### 3.5 前端改动
@@ -80,6 +80,7 @@ uv run python -m pytest tests/test_task08_push_workflow.py tests/test_push_cente
 ```powershell
 cmd /c npm run test -- src/app/__tests__/router-shell.test.tsx --run
 cmd /c npm run test -- src/features/macro-data/__tests__/macro-page.test.tsx --run
+cmd /c npm run test -- src/features/push/__tests__/push-page.test.tsx src/features/push/__tests__/push-preview-panel.test.tsx --run
 cmd /c npm run build
 ```
 
@@ -101,6 +102,8 @@ cmd /c npm run build
    - `POST /api/frontend/modules/market-data/sync/wti_crude_oil` 仅刷新 WTI，不应被布伦特上游失败拖累
    - 全球期货历史解析使用收盘列；东方财富异常时布伦特、黄金、白银、铜可回退新浪外盘日线
    - `/api/frontend/modules/push`
+   - `POST /api/push/preview` 使用 `refresh_data=false` 时按所选 `market_chart_range` 从本地历史重绘
+   - `POST /api/push/market-chart-refresh` 按当前范围拉取并保留 SQLite 中更早历史
 5. 推送链路抽查（本地或测试环境）：
    - 更新配置
    - 预览

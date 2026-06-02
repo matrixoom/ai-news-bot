@@ -172,6 +172,9 @@ uv run python main.py push
 - The current default market-report schedule is `08:00`, `12:05`, and `17:00` in `Asia/Shanghai`.
 - The midday slot is intentionally `12:05` rather than `12:00` or `11:45`, so Hong Kong morning trading is closed before the report runs.
 - Push delivery always rebuilds the dashboard snapshot with `force_refresh=True`; it should use the freshest data available immediately before delivery instead of a stale cached dashboard snapshot.
+- The Push Center `Schedules` page is a full-width report preview. Use the gear icon to edit schedules and delivery settings; preview refresh, chart refresh, and manual send stay in the preview toolbar.
+- Broad-index charts support `3 months`, `6 months`, `1 year`, `2 years`, and `3 years`. The default push range is `1 year`.
+- Selecting a chart range redraws the preview from retained SQLite history. Full chart refresh fetches the selected window and upserts points by date without deleting older history.
 - Market cards are now session-aware for push refreshes:
   - Mainland broad indices use the latest closed session after `11:30` and `15:00`
   - Hong Kong indices such as `HSTECH` use the latest closed session after `12:00` and `16:15`

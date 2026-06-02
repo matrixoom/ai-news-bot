@@ -363,6 +363,7 @@ uv run python main.py macro-sync
   "config": {
     "selected_module_ids": ["market"],
     "report_style": "newspaper",
+    "market_chart_range": "1y",
     "email": {
       "enabled": true,
       "smtp_server": "smtp.gmail.com",
@@ -388,9 +389,20 @@ uv run python main.py macro-sync
 
 ### 5.2 `POST /api/push/preview`
 
-用途：按草稿配置生成预览，不要求持久化。
+用途：按草稿配置生成预览，不要求持久化。`refresh_data=false` 时只使用本地已保留历史重绘；`refresh_data=true` 时先刷新必要数据再重绘。
 
-请求体：同 `config` 包装结构。
+请求体：
+
+```json
+{
+  "config": {
+    "market_chart_range": "1y"
+  },
+  "refresh_data": false
+}
+```
+
+`market_chart_range` 支持 `3m`、`6m`、`1y`、`2y`、`3y`。旧配置缺少该字段时按 `1y` 处理。
 
 成功：`200`
 
@@ -402,7 +414,7 @@ uv run python main.py macro-sync
 
 ### 5.3 `POST /api/push/market-chart-refresh`
 
-用途：启动 Push preview 宽基指数图表全量刷新。服务会逐指数拉取最近三个月收盘数据，在历史帧完整时替换本地窗口，并基于刷新后的 MA20 重绘预览。
+用途：启动 Push preview 宽基指数图表全量刷新。服务会按草稿中的 `market_chart_range` 逐指数拉取所选窗口的收盘数据，按日期写入 SQLite 并保留既有历史，再基于刷新后的 MA20 重绘预览。
 
 请求体：同 `config` 包装结构。
 
@@ -429,7 +441,7 @@ uv run python main.py macro-sync
 
 ### 5.4 `GET /api/push/market-chart-refresh/{job_id}`
 
-用途：查询宽基指数图表刷新进度。任务完成后 `preview` 返回重绘后的预览；部分指数上游异常时，状态为 `completed_with_warnings`，并保留对应指数上次可用历史。
+用途：查询宽基指数图表刷新进度。任务完成后 `preview` 返回重绘后的预览；部分指数上游异常时，状态为 `completed_with_warnings`，并继续使用对应指数上次可用历史。
 
 成功：`200`
 
