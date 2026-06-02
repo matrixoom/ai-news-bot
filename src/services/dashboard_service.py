@@ -297,6 +297,8 @@ class DashboardService:
         if module_id == "news":
             effective_news_mode = self._resolve_news_mode(news_mode or self._news_mode)
             return f"module:{module_id}:{effective_news_mode}"
+        if module_id == "market":
+            return "module:market:default"
         return f"module:{module_id}"
 
     def get_module_bootstrap_state(self, module_id: str, *, news_mode: str | None = None) -> tuple[str, str]:
@@ -344,32 +346,43 @@ class DashboardService:
             force_refresh=force_refresh,
         )
 
-    def build_market_module(self, *, force_refresh: bool = False) -> tuple[str, List[MarketCard]]:
-        """Build one frontend-ready market module."""
+    def build_market_module(
+        self,
+        *,
+        force_refresh: bool = False,
+        history_window_days: int | None = None,
+    ) -> tuple[str, List[MarketCard]]:
+        """Build one frontend-ready market module for the requested history window."""
+        cache_key = f"module:market:{history_window_days or 'default'}"
         return self._get_or_build_module(
-            "module:market",
-            lambda: self._build_market_module_uncached(force_refresh=force_refresh),
+            cache_key,
+            lambda: self._build_market_module_uncached(
+                force_refresh=force_refresh,
+                history_window_days=history_window_days,
+            ),
             force_refresh=force_refresh,
         )
 
     def rebuild_market_module(
         self,
         *,
+        history_window_days: int | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> tuple[str, List[MarketCard]]:
-        """全量重建宽基指数最近三个月历史，并更新模块缓存。
+        """按请求窗口刷新宽基指数历史，并更新对应模块缓存。
 
         Args:
+            history_window_days: 可选历史窗口天数。
             progress_callback: 可选逐指数进度回调。
 
         Returns:
             最新生成时间与市场卡片列表。
         """
         return self._get_or_build_module(
-            "module:market",
+            f"module:market:{history_window_days or 'default'}",
             lambda: self._build_market_module_uncached(
                 force_refresh=True,
-                replace_recent_window=True,
+                history_window_days=history_window_days,
                 progress_callback=progress_callback,
             ),
             force_refresh=True,
@@ -451,14 +464,14 @@ class DashboardService:
         self,
         *,
         force_refresh: bool = False,
-        replace_recent_window: bool = False,
+        history_window_days: int | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> tuple[str, List[MarketCard]]:
-        """构建未缓存市场模块，可选执行三个月历史窗口重建。"""
+        """构建未缓存市场模块，可选按指定窗口刷新外部历史。"""
         generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         market_snapshot = self._build_market_service_snapshot(
             force_refresh=force_refresh,
-            replace_recent_window=replace_recent_window,
+            history_window_days=history_window_days,
             progress_callback=progress_callback,
         )
         return generated_at, self._build_market_sections_from_snapshot(market_snapshot)
@@ -518,7 +531,7 @@ class DashboardService:
         """Warm module caches so the frontend can switch views without live refetches."""
         tasks = [
             ("module:macro", lambda: self.build_macro_module(force_refresh=force_refresh)),
-            ("module:market", lambda: self.build_market_module(force_refresh=force_refresh)),
+            ("module:market:default", lambda: self.build_market_module(force_refresh=force_refresh)),
             ("module:events", lambda: self.build_events_module(force_refresh=force_refresh)),
         ]
 
@@ -564,7 +577,7 @@ class DashboardService:
             refresher=lambda: self.build_macro_module(force_refresh=True),
         )
         self._refresh_module_if_due(
-            cache_key="module:market",
+            cache_key="module:market:default",
             interval_key="market",
             refresher=lambda: self.build_market_module(force_refresh=True),
         )
@@ -748,20 +761,20 @@ class DashboardService:
         self,
         *,
         force_refresh: bool,
-        replace_recent_window: bool = False,
+        history_window_days: int | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ):
         """调用市场服务，并兼容尚未接入新参数的测试替身。"""
         try:
             return self._market_service.build_snapshot(
                 refresh_store=force_refresh,
-                replace_recent_window=replace_recent_window,
+                history_window_days=history_window_days,
                 progress_callback=progress_callback,
             )
         except TypeError as error:
             if not any(
                 parameter in str(error)
-                for parameter in ("refresh_store", "replace_recent_window", "progress_callback")
+                for parameter in ("refresh_store", "history_window_days", "progress_callback")
             ):
                 raise
             return self._market_service.build_snapshot()

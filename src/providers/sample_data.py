@@ -360,10 +360,17 @@ class SampleMacroProvider:
 class SampleMarketDataProvider:
     provider_key = "sample-market"
 
-    def _build_history_points(self, *, trade_date: date, start_value: float, drift: float) -> tuple[MarketIndexHistoryPoint, ...]:
+    def _build_history_points(
+        self,
+        *,
+        trade_date: date,
+        start_value: float,
+        drift: float,
+        history_window_days: int,
+    ) -> tuple[MarketIndexHistoryPoint, ...]:
         """生成带成交量的样例指数历史点，便于日报图表在离线环境展示。"""
         points: list[MarketIndexHistoryPoint] = []
-        cursor = trade_date - timedelta(days=210)
+        cursor = trade_date - timedelta(days=history_window_days + 30)
         value = start_value
         step = 0
         while cursor < trade_date:
@@ -381,14 +388,15 @@ class SampleMarketDataProvider:
             cursor += timedelta(days=1)
         return tuple(points)
 
-    def fetch_index_snapshots(self, *, symbols, trade_date: date):
+    def fetch_index_snapshots(self, *, symbols, trade_date: date, history_window_days: int = 180):
+        """按请求窗口生成离线样例指数历史。"""
         history = {
-            "CSI300": self._build_history_points(trade_date=trade_date, start_value=3520.0, drift=1.7),
-            "CSI500": self._build_history_points(trade_date=trade_date, start_value=5400.0, drift=2.0),
-            "CSI1000": self._build_history_points(trade_date=trade_date, start_value=5980.0, drift=2.4),
-            "SSE": self._build_history_points(trade_date=trade_date, start_value=3010.0, drift=1.0),
-            "CHINEXT": self._build_history_points(trade_date=trade_date, start_value=1830.0, drift=1.2),
-            "HSTECH": self._build_history_points(trade_date=trade_date, start_value=3720.0, drift=2.6),
+            "CSI300": self._build_history_points(trade_date=trade_date, start_value=3520.0, drift=1.7, history_window_days=history_window_days),
+            "CSI500": self._build_history_points(trade_date=trade_date, start_value=5400.0, drift=2.0, history_window_days=history_window_days),
+            "CSI1000": self._build_history_points(trade_date=trade_date, start_value=5980.0, drift=2.4, history_window_days=history_window_days),
+            "SSE": self._build_history_points(trade_date=trade_date, start_value=3010.0, drift=1.0, history_window_days=history_window_days),
+            "CHINEXT": self._build_history_points(trade_date=trade_date, start_value=1830.0, drift=1.2, history_window_days=history_window_days),
+            "HSTECH": self._build_history_points(trade_date=trade_date, start_value=3720.0, drift=2.6, history_window_days=history_window_days),
         }
         current = {
             "CSI300": 3632.0,

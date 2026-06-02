@@ -83,8 +83,9 @@ class MarketDataProvider(Protocol):
         *,
         symbols: Sequence[str],
         trade_date: date,
+        history_window_days: int = 180,
     ) -> Sequence[MarketIndexSnapshot]:
-        """Return normalized broad-index snapshots for one trade date."""
+        """Return normalized broad-index snapshots for the requested history window."""
 
     def healthcheck(self) -> ProviderStatus:
         """Return current provider availability."""

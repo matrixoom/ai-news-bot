@@ -68,9 +68,8 @@ class MarketHistoryStore:
         window_label: str,
         warning_message: str,
         synced_at: str | None = None,
-        replace_from: date | None = None,
     ) -> None:
-        """写入单个指数历史，并可在同一事务内替换指定日期后的窗口。
+        """写入单个指数历史，同日期点覆盖更新，其他历史完整保留。
 
         Args:
             symbol: 指数标识。
@@ -83,7 +82,6 @@ class MarketHistoryStore:
             window_label: 历史覆盖窗口标签。
             warning_message: 同步告警。
             synced_at: 可选同步时间。
-            replace_from: 可选窗口起点；传入时先删除该日期及之后的旧行。
 
         Returns:
             无返回值。
@@ -105,15 +103,6 @@ class MarketHistoryStore:
             for point in ordered_points
         ]
         with self._session() as connection:
-            if replace_from is not None:
-                connection.execute(
-                    """
-                    DELETE FROM market_index_daily
-                    WHERE symbol = ?
-                      AND trade_date >= ?
-                    """,
-                    (symbol, replace_from.isoformat()),
-                )
             if point_rows:
                 connection.executemany(
                     """
