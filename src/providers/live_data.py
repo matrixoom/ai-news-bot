@@ -502,12 +502,18 @@ class AkshareMarketDataProvider:
         *,
         symbols: Sequence[str],
         trade_date: date,
+        history_window_days: int = 180,
     ) -> Sequence[MarketIndexSnapshot]:
         akshare = self._load_akshare()
         snapshots: list[MarketIndexSnapshot] = []
         for symbol in symbols:
             try:
-                frame = self._load_market_frame(akshare=akshare, symbol=symbol, trade_date=trade_date)
+                frame = self._load_market_frame(
+                    akshare=akshare,
+                    symbol=symbol,
+                    trade_date=trade_date,
+                    history_window_days=history_window_days,
+                )
             except Exception as exc:
                 logger.warning("AKShare market fetch failed for %s: %s", symbol, exc)
                 continue
@@ -515,7 +521,7 @@ class AkshareMarketDataProvider:
                 continue
 
             records = self._extract_market_records(frame)
-            history_start = trade_date - timedelta(days=180)
+            history_start = trade_date - timedelta(days=history_window_days)
             eligible = [
                 record
                 for record in records
@@ -566,9 +572,10 @@ class AkshareMarketDataProvider:
             ) from exc
         return ak
 
-    def _load_market_frame(self, *, akshare, symbol: str, trade_date: date):
+    def _load_market_frame(self, *, akshare, symbol: str, trade_date: date, history_window_days: int = 180):
+        """按请求窗口加载 AKShare 指数日线。"""
         candidates = self._SYMBOL_CONFIG.get(symbol, ())
-        start_date = (trade_date - timedelta(days=180)).strftime("%Y%m%d")
+        start_date = (trade_date - timedelta(days=history_window_days)).strftime("%Y%m%d")
         end_date = trade_date.strftime("%Y%m%d")
 
         last_error: Exception | None = None
@@ -2278,12 +2285,31 @@ class FallbackMarketDataProvider(_FallbackStatusMixin):
         self._fallback = fallback
         self._primary_failed = False
 
-    def fetch_index_snapshots(self, *, symbols: Sequence[str], trade_date: date) -> Sequence[MarketIndexSnapshot]:
+    def fetch_index_snapshots(
+        self,
+        *,
+        symbols: Sequence[str],
+        trade_date: date,
+        history_window_days: int = 180,
+    ) -> Sequence[MarketIndexSnapshot]:
+        """优先返回实盘指数历史，缺失时按同一窗口回退样例数据。"""
         requested = list(symbols)
         if self._primary_failed:
-            return list(self._fallback.fetch_index_snapshots(symbols=requested, trade_date=trade_date))
+            return list(
+                self._fallback.fetch_index_snapshots(
+                    symbols=requested,
+                    trade_date=trade_date,
+                    history_window_days=history_window_days,
+                )
+            )
         try:
-            primary_items = list(self._primary.fetch_index_snapshots(symbols=requested, trade_date=trade_date))
+            primary_items = list(
+                self._primary.fetch_index_snapshots(
+                    symbols=requested,
+                    trade_date=trade_date,
+                    history_window_days=history_window_days,
+                )
+            )
         except Exception as exc:
             self._primary_failed = True
             logger.warning("Market provider fallback triggered: %s", exc)
@@ -2291,7 +2317,13 @@ class FallbackMarketDataProvider(_FallbackStatusMixin):
                 ProviderAvailability.DEGRADED,
                 f"实时市场数据不可用（{exc}）",
             )
-            return list(self._fallback.fetch_index_snapshots(symbols=requested, trade_date=trade_date))
+            return list(
+                self._fallback.fetch_index_snapshots(
+                    symbols=requested,
+                    trade_date=trade_date,
+                    history_window_days=history_window_days,
+                )
+            )
 
         primary_by_symbol = {item.symbol: item for item in primary_items}
         missing_symbols = [symbol for symbol in requested if symbol not in primary_by_symbol]
@@ -2299,7 +2331,13 @@ class FallbackMarketDataProvider(_FallbackStatusMixin):
             self._set_state(ProviderAvailability.LIVE, f"实时市场快照：{self._primary.provider_key}")
             return primary_items
 
-        fallback_items = list(self._fallback.fetch_index_snapshots(symbols=missing_symbols, trade_date=trade_date))
+        fallback_items = list(
+            self._fallback.fetch_index_snapshots(
+                symbols=missing_symbols,
+                trade_date=trade_date,
+                history_window_days=history_window_days,
+            )
+        )
         self._set_state(
             ProviderAvailability.DEGRADED,
             "缺少指数：" + ", ".join(missing_symbols),

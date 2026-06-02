@@ -190,11 +190,11 @@ class MarketIndexVolumeTests(unittest.TestCase):
 
         self.assertEqual([point.volume for point in points], [1000.0, 2000.0])
 
-    def test_market_history_store_replaces_recent_window_instead_of_leaving_stale_rows(self) -> None:
-        """校验全量刷新会移除最近窗口内上游不再返回的旧点。"""
+    def test_market_history_store_keeps_existing_rows_when_upserting_selected_window(self) -> None:
+        """校验刷新选中范围时只更新同日期点，不删除范围内外已有历史。"""
         store = MarketHistoryStore(self.db_path)
         seed_points = [
-            MarketIndexHistoryPoint(date(2025, 12, 1), 3800.0),
+            MarketIndexHistoryPoint(date(2024, 1, 1), 3600.0),
             MarketIndexHistoryPoint(date(2026, 3, 20), 3900.0),
             MarketIndexHistoryPoint(date(2026, 3, 23), 3910.0),
         ]
@@ -220,30 +220,37 @@ class MarketIndexVolumeTests(unittest.TestCase):
             status="live",
             window_label="近3个月",
             warning_message="",
-            replace_from=date(2026, 3, 1),
         )
 
-        points = store.load_points(symbol="CSI300", end_date=date(2026, 3, 31), window_days=180)
+        points = store.load_points(symbol="CSI300", end_date=date(2026, 3, 31), window_days=1096)
 
         self.assertEqual(
             [(point.trade_date, point.close_price) for point in points],
-            [(date(2025, 12, 1), 3800.0), (date(2026, 3, 23), 3950.0)],
+            [
+                (date(2024, 1, 1), 3600.0),
+                (date(2026, 3, 20), 3900.0),
+                (date(2026, 3, 23), 3950.0),
+            ],
         )
 
-    def test_market_refresh_rebuilds_recent_window_and_reports_symbol_progress(self) -> None:
-        """校验专用全量刷新逐指数汇报进度，并替换最近三个月窗口。"""
+    def test_market_refresh_uses_selected_window_and_reports_symbol_progress(self) -> None:
+        """校验专用全量刷新逐指数汇报进度，并保留本地已有历史。"""
 
         class RecordingProvider:
             """返回一条完整历史帧，模拟宽基指数实时数据源。"""
 
             provider_key = "unit-test"
 
+            def __init__(self):
+                self.requested_windows = []
+
             def healthcheck(self) -> ProviderStatus:
                 """返回可用状态。"""
                 return ProviderStatus("unit-test", ProviderAvailability.LIVE, "", "2026-05-29T08:00:00Z")
 
-            def fetch_index_snapshots(self, *, symbols, trade_date):
-                """为请求指数返回覆盖三个月以上的日线序列。"""
+            def fetch_index_snapshots(self, *, symbols, trade_date, history_window_days=180):
+                """记录窗口并为请求指数返回完整历史帧。"""
+                self.requested_windows.append(history_window_days)
                 points = tuple(
                     MarketIndexHistoryPoint(date(2026, 1, 1) + pd.Timedelta(days=offset), 4000.0 + offset)
                     for offset in range(149)
@@ -268,14 +275,15 @@ class MarketIndexVolumeTests(unittest.TestCase):
             currency="CNY",
             provider_key="unit-test",
             source_url="https://example.com",
-            points=[MarketIndexHistoryPoint(date(2026, 3, 15), 9999.0)],
+            points=[MarketIndexHistoryPoint(date(2025, 12, 15), 9999.0)],
             status="live",
-            window_label="近3个月",
+            window_label="近6个月",
             warning_message="",
         )
         progress_events = []
+        provider = RecordingProvider()
         service = MarketMonitoringService(
-            market_provider=RecordingProvider(),
+            market_provider=provider,
             store=store,
             registry={"CSI300": TrackedIndexDefinition("CSI300", "沪深300", "unit-test", "CNY")},
         )
@@ -283,12 +291,13 @@ class MarketIndexVolumeTests(unittest.TestCase):
         service.refresh_store(
             symbols=["CSI300"],
             trade_date=date(2026, 5, 29),
-            replace_recent_window=True,
+            history_window_days=731,
             progress_callback=progress_events.append,
         )
 
         points = store.load_points(symbol="CSI300", end_date=date(2026, 5, 29), window_days=180)
-        self.assertNotIn(9999.0, [point.close_price for point in points])
+        self.assertEqual(provider.requested_windows, [731])
+        self.assertIn(9999.0, [point.close_price for point in points])
         self.assertEqual(progress_events[-1]["status"], "completed")
         self.assertEqual(progress_events[-1]["completed"], 1)
         self.assertEqual(progress_events[-1]["total"], 1)
@@ -305,8 +314,9 @@ class MarketIndexVolumeTests(unittest.TestCase):
                 """返回可用状态，让用例聚焦历史完整性校验。"""
                 return ProviderStatus("unit-test", ProviderAvailability.LIVE, "", "2026-05-29T08:00:00Z")
 
-            def fetch_index_snapshots(self, *, symbols, trade_date):
+            def fetch_index_snapshots(self, *, symbols, trade_date, history_window_days=180):
                 """仅返回五个日线点。"""
+                _ = history_window_days
                 points = tuple(
                     MarketIndexHistoryPoint(date(2026, 5, 25) + pd.Timedelta(days=offset), 4100.0 + offset)
                     for offset in range(5)
@@ -346,14 +356,23 @@ class MarketIndexVolumeTests(unittest.TestCase):
         service.refresh_store(
             symbols=["CSI300"],
             trade_date=date(2026, 5, 29),
-            replace_recent_window=True,
+            history_window_days=180,
             progress_callback=progress_events.append,
         )
 
         points = store.load_points(symbol="CSI300", end_date=date(2026, 5, 29), window_days=180)
-        self.assertEqual([(point.trade_date, point.close_price) for point in points], [(date(2026, 3, 15), 3999.0)])
-        self.assertEqual(progress_events[-1]["status"], "failed")
-        self.assertIn("保留上次可用", progress_events[-1]["message"])
+        self.assertEqual(
+            [(point.trade_date, point.close_price) for point in points],
+            [
+                (date(2026, 3, 15), 3999.0),
+                (date(2026, 5, 25), 4100.0),
+                (date(2026, 5, 26), 4101.0),
+                (date(2026, 5, 27), 4102.0),
+                (date(2026, 5, 28), 4103.0),
+                (date(2026, 5, 29), 4104.0),
+            ],
+        )
+        self.assertEqual(progress_events[-1]["status"], "completed")
 
 
 class MarketDataSyncTests(unittest.TestCase):

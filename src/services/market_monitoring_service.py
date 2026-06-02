@@ -19,9 +19,6 @@ from .market_history_store import MarketHistoryStore, MarketSyncState, StoredMar
 
 
 logger = logging.getLogger(__name__)
-RECENT_CHART_WINDOW_DAYS = 92
-
-
 class MarketMonitoringService:
     """Compute reproducible market model states from persisted market history."""
 
@@ -48,7 +45,7 @@ class MarketMonitoringService:
         trade_date: date | None = None,
         *,
         refresh_store: bool = False,
-        replace_recent_window: bool = False,
+        history_window_days: int | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> MarketMonitoringSnapshot:
         """从本地历史库构建市场快照，并按需刷新外部日线。
@@ -57,7 +54,7 @@ class MarketMonitoringService:
             symbols: 可选指数列表。
             trade_date: 可选目标日期。
             refresh_store: 是否先刷新持久化历史。
-            replace_recent_window: 是否完整替换最近三个月窗口。
+            history_window_days: 可选历史窗口天数；未传入时使用服务默认值。
             progress_callback: 可选逐指数进度回调。
 
         Returns:
@@ -66,13 +63,14 @@ class MarketMonitoringService:
         current_time = self._now_factory()
         effective_symbols = list(symbols or self._registry.keys())
         effective_trade_date = trade_date or current_time.date()
+        effective_window_days = history_window_days or self._history_window_days
         self._repair_mixed_sample_history(symbols=effective_symbols)
 
         if refresh_store:
             self.refresh_store(
                 symbols=list(effective_symbols),
                 trade_date=effective_trade_date,
-                replace_recent_window=replace_recent_window,
+                history_window_days=effective_window_days,
                 progress_callback=progress_callback,
             )
 
@@ -82,7 +80,7 @@ class MarketMonitoringService:
                 points=self._store.load_points(
                     symbol=symbol,
                     end_date=effective_trade_date,
-                    window_days=self._history_window_days,
+                    window_days=effective_window_days,
                 ),
                 sync_state=self._store.get_sync_state(symbol),
                 trade_date=effective_trade_date,
@@ -99,15 +97,15 @@ class MarketMonitoringService:
         *,
         symbols: Sequence[str],
         trade_date: date,
-        replace_recent_window: bool = False,
+        history_window_days: int | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
-        """刷新指数历史；专用全量模式会事务性替换最近三个月窗口。
+        """按请求窗口刷新指数历史，仅覆盖同日期点并保留已有历史。
 
         Args:
             symbols: 待刷新指数列表。
             trade_date: 目标交易日期。
-            replace_recent_window: 是否清理并重建最近 92 天窗口。
+            history_window_days: 可选历史窗口天数；未传入时使用服务默认值。
             progress_callback: 可选逐指数进度回调。
 
         Returns:
@@ -117,6 +115,7 @@ class MarketMonitoringService:
         if not requested:
             return
 
+        effective_window_days = history_window_days or self._history_window_days
         synced_at = self._now_factory().isoformat(timespec="seconds").replace("+00:00", "Z")
         provider_status = self._market_provider.healthcheck()
         total = len(requested)
@@ -132,7 +131,11 @@ class MarketMonitoringService:
                 message=f"正在刷新 {definition.display_name}。",
             )
             try:
-                snapshots = self._market_provider.fetch_index_snapshots(symbols=[symbol], trade_date=trade_date)
+                snapshots = self._market_provider.fetch_index_snapshots(
+                    symbols=[symbol],
+                    trade_date=trade_date,
+                    history_window_days=effective_window_days,
+                )
             except Exception as error:
                 logger.warning("market history refresh failed for %s: %s", symbol, error)
                 snapshots = []
@@ -196,35 +199,10 @@ class MarketMonitoringService:
                 )
 
             points, normalization_warning = self._normalize_snapshot_points(snapshot)
-            replace_from = trade_date - timedelta(days=RECENT_CHART_WINDOW_DAYS)
-            if replace_recent_window and not self._can_replace_recent_window(
-                snapshot=snapshot,
-                points=points,
-                replace_from=replace_from,
-                trade_date=trade_date,
-            ):
-                warning_message = "历史窗口不完整，已保留上次可用的三个月日线。"
-                self._store.upsert_symbol_status(
-                    symbol=symbol,
-                    display_name=definition.display_name,
-                    currency=snapshot.currency or definition.currency,
-                    provider_key=snapshot.provider,
-                    source_url=snapshot.source_url,
-                    status="degraded",
-                    warning_message=warning_message,
-                    synced_at=synced_at,
-                )
-                self._report_refresh_progress(
-                    progress_callback,
-                    symbol=symbol,
-                    label=definition.display_name,
-                    status="failed",
-                    completed=index + 1,
-                    total=total,
-                    message=warning_message,
-                )
-                continue
-            window_label, coverage_warning = self._resolve_history_window(points)
+            window_label, coverage_warning = self._resolve_history_window(
+                points,
+                target_window_days=effective_window_days,
+            )
             warnings = [normalization_warning, coverage_warning]
             if provider_status.availability != ProviderAvailability.LIVE and provider_status.detail:
                 warnings.append(provider_status.detail)
@@ -245,7 +223,6 @@ class MarketMonitoringService:
                 window_label=window_label,
                 warning_message=warning_message,
                 synced_at=synced_at,
-                replace_from=replace_from if replace_recent_window else None,
             )
             self._report_refresh_progress(
                 progress_callback,
@@ -256,17 +233,6 @@ class MarketMonitoringService:
                 total=total,
                 message=f"{definition.display_name} 刷新完成。",
             )
-
-    def _can_replace_recent_window(self, *, snapshot, points, replace_from: date, trade_date: date) -> bool:
-        """判断新历史帧是否足够完整，避免上游短序列清空本地窗口。"""
-        if not getattr(snapshot, "history_points", ()):
-            return False
-        recent_points = [point for point in points if point.trade_date >= replace_from]
-        if len(recent_points) < 20:
-            return False
-        if not recent_points or recent_points[-1].trade_date < trade_date - timedelta(days=7):
-            return False
-        return (recent_points[-1].trade_date - recent_points[0].trade_date).days >= 75
 
     def _report_refresh_progress(
         self,
@@ -449,17 +415,26 @@ class MarketMonitoringService:
         provider_key = str(getattr(snapshot, "provider", "") or "").strip().lower()
         return provider_key.startswith("sample-")
 
-    def _resolve_history_window(self, points: Sequence[MarketIndexHistoryPoint]) -> tuple[str, str]:
+    def _resolve_history_window(
+        self,
+        points: Sequence[MarketIndexHistoryPoint],
+        *,
+        target_window_days: int,
+    ) -> tuple[str, str]:
+        """根据请求窗口汇报覆盖程度，不删除已存在历史。"""
         if not points:
             return "", "未拉取到可用历史序列。"
+        target_label = {
+            92: "近3个月",
+            183: "近6个月",
+            366: "近1年",
+            731: "近2年",
+            1096: "近3年",
+        }.get(target_window_days, f"近{target_window_days}天")
         coverage_days = (points[-1].trade_date - points[0].trade_date).days
-        if coverage_days >= self._history_window_days - 15:
-            return "近6个月", ""
-        if coverage_days >= 75:
-            return "近3个月", "仅拉取到近3个月数据，未完整覆盖近6个月。"
-        if coverage_days >= self._fallback_window_days - 10:
-            return "近1个月", "仅拉取到近1个月数据，未完整覆盖近3个月和近6个月。"
-        return f"近{coverage_days + 1}天", "历史窗口不足1个月，结果可能不稳定。"
+        if coverage_days >= target_window_days - 15:
+            return target_label, ""
+        return f"近{coverage_days + 1}天", f"历史窗口未完整覆盖目标 {target_label}。"
 
     def _resolve_snapshot_status(self, *, provider_status, point_count: int, warning_message: str) -> str:
         provider_key = getattr(provider_status, "provider_key", "")
