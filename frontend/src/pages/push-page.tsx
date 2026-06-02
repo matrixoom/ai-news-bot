@@ -5,13 +5,12 @@ import { previewPush } from "../features/push/api/preview-push";
 import { getPushMarketChartRefresh, startPushMarketChartRefresh } from "../features/push/api/refresh-push-market-charts";
 import { triggerPush } from "../features/push/api/trigger-push";
 import { updatePushConfig } from "../features/push/api/update-push-config";
-import { PushConfigForm } from "../features/push/components/push-config-form";
 import { PushPreviewPanel } from "../features/push/components/push-preview-panel";
 import { PushRunHistory } from "../features/push/components/push-run-history";
-import { PushSchedulesEditor } from "../features/push/components/push-schedules-editor";
+import { PushSettingsDialog } from "../features/push/components/push-settings-dialog";
 import { usePushModuleQuery } from "../features/push/hooks/use-push-module-query";
 import { adaptPushMarketChartRefreshJob, adaptPushModule, adaptPushPreview, adaptPushRecentRun } from "../features/push/model/push-module-adapter";
-import { PUSH_MODULE_TABS, type PushConfig, type PushMarketChartRefreshJobRaw, type PushModuleTab, type PushWorkspaceViewModel } from "../features/push/model/push-module.types";
+import { PUSH_MODULE_TABS, type PushConfig, type PushMarketChartRefreshJobRaw, type PushWorkspaceViewModel } from "../features/push/model/push-module.types";
 import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
 import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
@@ -31,6 +30,7 @@ export function PushPage() {
   const [recentRuns, setRecentRuns] = useState<PushWorkspaceViewModel["recentRuns"]>([]);
   const [flash, setFlash] = useState<FlashState>(null);
   const [chartRefreshJob, setChartRefreshJob] = useState<ReturnType<typeof adaptPushMarketChartRefreshJob> | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (!query.data) {
@@ -60,10 +60,6 @@ export function PushPage() {
       tabs={PUSH_MODULE_TABS}
     />
   );
-  const loadingSide = activeTab === "history"
-    ? null
-    : <LoadingPanelState title="Preview loading" description="Waiting for the push payload to arrive." />;
-
   const saveMutation = useMutation({
     mutationFn: async () => updatePushConfig(mustDraft(draft)),
     onSuccess: (payload) => {
@@ -77,7 +73,7 @@ export function PushPage() {
   });
 
   const previewMutation = useMutation({
-    mutationFn: async () => previewPush(mustDraft(draft)),
+    mutationFn: async ({ config, refreshData }: { config: PushConfig; refreshData: boolean }) => previewPush(config, { refreshData }),
     onSuccess: (response) => {
       setPreview(adaptPushPreview(response.preview));
       setFlash({ tone: "success", message: "Preview refreshed." });
@@ -175,7 +171,8 @@ export function PushPage() {
         description={frameDescription}
         lastUpdated={null}
         main={<LoadingPanelState title="Loading push workspace" description="Fetching the latest configuration, preview, and run history." />}
-        side={loadingSide}
+        contentLayoutClassName="grid gap-6"
+        side={null}
         title="Push Center"
         toolbar={toolbar}
       />
@@ -204,7 +201,8 @@ export function PushPage() {
             }
           />
         }
-        side={loadingSide}
+        contentLayoutClassName="grid gap-6"
+        side={null}
         title="Push Center"
         toolbar={toolbar}
       />
@@ -217,7 +215,8 @@ export function PushPage() {
         description={query.data.pageDescription}
         lastUpdated={<LastUpdatedBadge value={query.data.generatedAt} />}
         main={<EmptyPanelState title="Push workspace empty" description="The backend returned an empty push payload." />}
-        side={loadingSide}
+        contentLayoutClassName="grid gap-6"
+        side={null}
         title={query.data.pageTitle}
         toolbar={toolbar}
       />
@@ -226,104 +225,62 @@ export function PushPage() {
 
   const workspace = query.data;
   const showPreview = activeTab !== "history";
-  const side = showPreview ? (
+  const main = showPreview ? (
     <PushPreviewPanel
       chartRefreshJob={chartRefreshJob}
+      flash={isSettingsOpen ? null : flash}
+      isPreviewing={previewMutation.isPending}
+      isSending={triggerMutation.isPending}
+      marketChartRange={draft.marketChartRange}
       onDismissChartRefresh={() => setChartRefreshJob(null)}
+      onMarketChartRangeChange={(marketChartRange) => {
+        const nextDraft = { ...draft, marketChartRange };
+        setDraft(nextDraft);
+        void previewMutation.mutateAsync({ config: nextDraft, refreshData: false });
+      }}
+      onOpenSettings={() => setIsSettingsOpen(true)}
+      onPreview={() => {
+        void previewMutation.mutateAsync({ config: draft, refreshData: true });
+      }}
       onRefreshCharts={() => {
         setFlash(null);
         void chartRefreshMutation.mutateAsync();
       }}
+      onSend={() => {
+        void triggerMutation.mutateAsync();
+      }}
       preview={preview}
       refreshAfterMs={workspace.refreshAfterMs}
     />
-  ) : null;
-  const contentLayoutClassName = showPreview
-    ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
-    : "grid gap-6";
+  ) : <PushRunHistory runs={recentRuns} />;
 
   return (
-    <ModulePageFrame
-      contentLayoutClassName={contentLayoutClassName}
-      description={workspace.pageDescription}
-      lastUpdated={<LastUpdatedBadge value={workspace.generatedAt} />}
-      main={renderPushTab(activeTab, {
-        workspace,
-        draft,
-        recentRuns,
-        flash,
-        isPreviewing: previewMutation.isPending,
-        isSaving: saveMutation.isPending,
-        isSending: triggerMutation.isPending,
-        onDraftChange: setDraft,
-        onPreview: () => {
-          void previewMutation.mutateAsync();
-        },
-        onSave: () => {
-          void saveMutation.mutateAsync();
-        },
-        onSend: () => {
-          void triggerMutation.mutateAsync();
-        },
-      })}
-      side={side}
-      title={workspace.pageTitle}
-      toolbar={toolbar}
-    />
-  );
-}
-
-function renderPushTab(
-  activeTab: PushModuleTab,
-  props: {
-    workspace: PushWorkspaceViewModel;
-    draft: PushConfig;
-    recentRuns: PushWorkspaceViewModel["recentRuns"];
-    flash: FlashState;
-    isSaving: boolean;
-    isPreviewing: boolean;
-    isSending: boolean;
-    onDraftChange: (next: PushConfig) => void;
-    onSave: () => void;
-    onPreview: () => void;
-    onSend: () => void;
-  },
-) {
-  const { workspace, draft, flash, recentRuns, onDraftChange } = props;
-
-  if (activeTab === "history") {
-    return (
-      <div className="space-y-6">
-        <PushRunHistory runs={recentRuns} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <PushSchedulesEditor
-        channelTypeOptions={workspace.options.channelTypeOptions}
-        onSchedulesChange={(nextSchedules) => {
-          onDraftChange({ ...draft, schedules: nextSchedules });
-        }}
-        schedules={draft.schedules}
-        sourceModuleOptions={workspace.options.sourceModuleOptions}
+    <>
+      <ModulePageFrame
+        contentLayoutClassName="grid gap-6"
+        description={workspace.pageDescription}
+        lastUpdated={<LastUpdatedBadge value={workspace.generatedAt} />}
+        main={main}
+        side={null}
+        title={workspace.pageTitle}
+        toolbar={toolbar}
       />
-      <PushConfigForm
-        channelTypeOptions={workspace.options.channelTypeOptions}
-        draft={draft}
-        flash={flash}
-        isPreviewing={props.isPreviewing}
-        isSaving={props.isSaving}
-        isSending={props.isSending}
-        onDraftChange={props.onDraftChange}
-        onPreview={props.onPreview}
-        onSave={props.onSave}
-        onSend={props.onSend}
-        sourceModuleOptions={workspace.options.sourceModuleOptions}
-        styleOptions={workspace.options.styleOptions}
-      />
-    </div>
+      {activeTab === "schedules" && isSettingsOpen ? (
+        <PushSettingsDialog
+          channelTypeOptions={workspace.options.channelTypeOptions}
+          draft={draft}
+          flash={flash}
+          isSaving={saveMutation.isPending}
+          onClose={() => setIsSettingsOpen(false)}
+          onDraftChange={setDraft}
+          onSave={() => {
+            void saveMutation.mutateAsync();
+          }}
+          sourceModuleOptions={workspace.options.sourceModuleOptions}
+          styleOptions={workspace.options.styleOptions}
+        />
+      ) : null}
+    </>
   );
 }
 

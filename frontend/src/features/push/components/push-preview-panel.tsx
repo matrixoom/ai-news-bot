@@ -1,21 +1,49 @@
-import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  ArrowPathRoundedSquareIcon,
+  Cog6ToothIcon,
+  PaperAirplaneIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
-import type { PushMarketChartRefreshJob, PushPreview } from "../model/push-module.types";
+import {
+  PUSH_MARKET_CHART_RANGE_OPTIONS,
+  type PushMarketChartRange,
+  type PushMarketChartRefreshJob,
+  type PushPreview,
+} from "../model/push-module.types";
+import { PushFlashMessage } from "./push-flash-message";
 
 type PushPreviewPanelProps = {
   preview: PushPreview;
   refreshAfterMs: number;
   chartRefreshJob?: PushMarketChartRefreshJob | null;
+  flash?: { tone: "success" | "error" | "neutral"; message: string } | null;
+  marketChartRange?: PushMarketChartRange;
   onDismissChartRefresh?: () => void;
+  onMarketChartRangeChange?: (nextRange: PushMarketChartRange) => void;
+  onOpenSettings?: () => void;
+  onPreview?: () => void;
   onRefreshCharts?: () => void;
+  onSend?: () => void;
+  isPreviewing?: boolean;
+  isSending?: boolean;
 };
 
 export function PushPreviewPanel({
   preview,
   refreshAfterMs,
   chartRefreshJob = null,
+  flash = null,
+  marketChartRange = preview.marketChartRange,
   onDismissChartRefresh,
+  onMarketChartRangeChange,
+  onOpenSettings,
+  onPreview,
   onRefreshCharts,
+  onSend,
+  isPreviewing = false,
+  isSending = false,
 }: PushPreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [frameHeight, setFrameHeight] = useState(960);
@@ -51,18 +79,24 @@ export function PushPreviewPanel({
             Refresh interval {Math.round(refreshAfterMs / 1000)}s, rendered from the current draft.
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          {onRefreshCharts ? (
-            <button
-              className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isChartRefreshing}
-              onClick={onRefreshCharts}
-              type="button"
+        <div className="flex max-w-md flex-wrap items-center justify-end gap-2">
+          <label className="text-xs font-medium text-slate-700">
+            <span className="sr-only">宽基指数时间范围</span>
+            <select
+              aria-label="宽基指数时间范围"
+              className="rounded-full border border-slate-300 bg-white px-3 py-2"
+              onChange={(event) => onMarketChartRangeChange?.(event.target.value as PushMarketChartRange)}
+              value={marketChartRange}
             >
-              <ArrowPathIcon aria-hidden="true" className={["h-4 w-4", isChartRefreshing ? "animate-spin" : ""].join(" ")} />
-              全量刷新图表
-            </button>
-          ) : null}
+              {PUSH_MARKET_CHART_RANGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <IconAction label="打开推送设置" onClick={onOpenSettings} icon={<Cog6ToothIcon aria-hidden="true" className="h-4 w-4" />} />
+          <IconAction disabled={isChartRefreshing} label="全量刷新图表" onClick={onRefreshCharts} icon={<ArrowPathIcon aria-hidden="true" className={isChartRefreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />} />
+          <IconAction disabled={isPreviewing} label="刷新预览" onClick={onPreview} icon={<ArrowPathRoundedSquareIcon aria-hidden="true" className="h-4 w-4" />} />
+          <IconAction disabled={isSending} label="立即发送" onClick={onSend} icon={<PaperAirplaneIcon aria-hidden="true" className="h-4 w-4" />} />
           <span
             className={[
               "rounded-full border px-3 py-1 text-xs font-medium",
@@ -75,6 +109,8 @@ export function PushPreviewPanel({
           </span>
         </div>
       </div>
+
+      <div className="mt-5"><PushFlashMessage flash={flash} /></div>
 
       <div className="mt-5 space-y-3">
         <p className="text-sm font-medium text-slate-500">Subject</p>
@@ -110,6 +146,35 @@ export function PushPreviewPanel({
         />
       ) : null}
     </section>
+  );
+}
+
+/** 渲染带悬停提示和键盘焦点状态的紧凑图标按钮。 */
+function IconAction({
+  disabled = false,
+  icon,
+  label,
+  onClick,
+}: {
+  disabled?: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+}) {
+  if (!onClick) {
+    return null;
+  }
+  return (
+    <button
+      aria-label={label}
+      className="rounded-full border border-slate-300 bg-white p-2 text-slate-700 transition hover:border-slate-400 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled}
+      onClick={onClick}
+      title={label}
+      type="button"
+    >
+      {icon}
+    </button>
   );
 }
 

@@ -35,10 +35,11 @@ describe("PushPage", () => {
 
     renderPushApp("/push?tab=schedules");
 
-    expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
+    expect(await screen.findByTitle("Push preview")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Delivery configuration" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Schedule editor" })).not.toBeInTheDocument();
     expect(screen.queryByText("Config path")).not.toBeInTheDocument();
     expect(screen.queryByText(/\.data[\\/]push_center\.json/)).not.toBeInTheDocument();
-    expect(screen.getByLabelText("SMTP server")).toHaveValue("smtp.example.com");
     expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
     expect(screen.getByTitle("Push preview")).toBeInTheDocument();
@@ -48,6 +49,17 @@ describe("PushPage", () => {
     expect(screen.getByTitle("Push preview")).toBeInTheDocument();
     expect(screen.queryByText("Manual runs and scheduled deliveries")).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "打开推送设置" }));
+
+    expect(screen.getByRole("dialog", { name: "推送设置" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Schedule editor" })).toBeInTheDocument();
+    expect(screen.getByLabelText("SMTP server")).toHaveValue("smtp.example.com");
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh preview" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send now" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "关闭推送设置" }));
     await user.click(screen.getByRole("link", { name: "History" }));
 
     expect(window.location.search).toContain("tab=history");
@@ -70,7 +82,7 @@ describe("PushPage", () => {
 
     renderPushApp("/push?tab=overview");
 
-    expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
+    expect(await screen.findByTitle("Push preview")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
   });
@@ -96,7 +108,8 @@ describe("PushPage", () => {
 
     renderPushApp("/push?tab=schedules");
 
-    const smtpServerInput = await screen.findByLabelText("SMTP server");
+    await user.click(await screen.findByRole("button", { name: "打开推送设置" }));
+    const smtpServerInput = screen.getByLabelText("SMTP server");
     await user.clear(smtpServerInput);
     await user.type(smtpServerInput, "smtp.internal.example");
     await user.selectOptions(screen.getByLabelText("Report style"), "briefing");
@@ -112,7 +125,8 @@ describe("PushPage", () => {
     });
     expect(await screen.findByText(/Saved to/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Refresh preview" }));
+    await user.click(screen.getByRole("button", { name: "关闭推送设置" }));
+    await user.click(screen.getByRole("button", { name: "刷新预览" }));
 
     await waitFor(() => {
       expect(
@@ -123,6 +137,22 @@ describe("PushPage", () => {
     });
     expect(await screen.findByText("Preview refreshed.")).toBeInTheDocument();
     expect(screen.getByText("Preview for briefing")).toBeInTheDocument();
+  });
+
+  it("keeps unsaved settings draft when the dialog closes and reopens", async () => {
+    installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
+    const user = userEvent.setup();
+
+    renderPushApp("/push?tab=schedules");
+
+    await user.click(await screen.findByRole("button", { name: "打开推送设置" }));
+    const smtpServerInput = screen.getByLabelText("SMTP server");
+    await user.clear(smtpServerInput);
+    await user.type(smtpServerInput, "smtp.unsaved.example");
+    await user.click(screen.getByRole("button", { name: "关闭推送设置" }));
+    await user.click(screen.getByRole("button", { name: "打开推送设置" }));
+
+    expect(screen.getByLabelText("SMTP server")).toHaveValue("smtp.unsaved.example");
   });
 
   it("refreshes all market charts with progress and redraws the preview", async () => {
@@ -149,7 +179,31 @@ describe("PushPage", () => {
         ),
       ).toBe(true);
     });
+    const requestCall = fetchMock.mock.calls.find(
+      ([input, init]) => String(input).includes("/api/push/market-chart-refresh") && init?.method === "POST",
+    );
+    expect(JSON.parse(String(requestCall?.[1]?.body))).toMatchObject({
+      config: { market_chart_range: "1y" },
+    });
     expect(await screen.findByText("Charts refreshed")).toBeInTheDocument();
+  });
+
+  it("redraws the preview locally when the market chart range changes", async () => {
+    const fetchMock = installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
+    const user = userEvent.setup();
+    renderPushApp("/push?tab=schedules");
+
+    await user.selectOptions(await screen.findByLabelText("宽基指数时间范围"), "2y");
+
+    await waitFor(() => {
+      const previewCall = fetchMock.mock.calls.find(
+        ([input, init]) => String(input).includes("/api/push/preview") && init?.method === "POST",
+      );
+      expect(JSON.parse(String(previewCall?.[1]?.body))).toMatchObject({
+        config: { market_chart_range: "2y" },
+        refresh_data: false,
+      });
+    });
   });
 
   it("triggers a manual push from the schedules controls", async () => {
@@ -158,7 +212,7 @@ describe("PushPage", () => {
 
     renderPushApp("/push?tab=schedules");
 
-    await user.click(await screen.findByRole("button", { name: "Send now" }));
+    await user.click(await screen.findByRole("button", { name: "立即发送" }));
 
     await waitFor(() => {
       expect(
@@ -166,6 +220,12 @@ describe("PushPage", () => {
           ([input, init]) => String(input).includes("/api/push/trigger") && init?.method === "POST",
         ),
       ).toBe(true);
+    });
+    const requestCall = fetchMock.mock.calls.find(
+      ([input, init]) => String(input).includes("/api/push/trigger") && init?.method === "POST",
+    );
+    expect(JSON.parse(String(requestCall?.[1]?.body))).toMatchObject({
+      config: { market_chart_range: "1y" },
     });
 
     expect(await screen.findByText("Manual push sent.")).toBeInTheDocument();

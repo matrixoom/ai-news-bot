@@ -99,4 +99,34 @@ describe("PushPreviewPanel", () => {
     expect(screen.getByText("2 / 6")).toBeInTheDocument();
     expect(screen.getByText("正在刷新中证500。")).toBeInTheDocument();
   });
+
+  it("renders compact accessible preview actions", () => {
+    render(
+      <PushPreviewPanel
+        marketChartRange="1y"
+        onMarketChartRangeChange={() => undefined}
+        onOpenSettings={() => undefined}
+        onPreview={() => undefined}
+        onRefreshCharts={() => undefined}
+        onSend={() => undefined}
+        preview={{
+          ok: true,
+          generatedAt: "2026-04-14T08:00:00Z",
+          subject: "Market Daily",
+          textBody: "",
+          htmlBody: "<html><body>preview</body></html>",
+          style: "newspaper",
+          marketChartRange: "1y",
+          selectedModuleIds: ["market"],
+          error: "",
+        }}
+        refreshAfterMs={30000}
+      />,
+    );
+
+    expect(screen.getByLabelText("宽基指数时间范围")).toHaveValue("1y");
+    for (const label of ["打开推送设置", "全量刷新图表", "刷新预览", "立即发送"]) {
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute("title", label);
+    }
+  });
 });
