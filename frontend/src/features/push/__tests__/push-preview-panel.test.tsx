@@ -14,6 +14,7 @@ describe("PushPreviewPanel", () => {
           textBody: "",
           htmlBody: "<html><body><div style='height: 1600px;'>preview</div></body></html>",
           style: "newspaper",
+          marketChartRange: "1y",
           selectedModuleIds: ["market"],
           error: "",
         }}
@@ -52,6 +53,7 @@ describe("PushPreviewPanel", () => {
           textBody: "",
           htmlBody: "<html><body>preview</body></html>",
           style: "newspaper",
+          marketChartRange: "1y",
           selectedModuleIds: ["market"],
           error: "",
         }}
@@ -84,6 +86,7 @@ describe("PushPreviewPanel", () => {
           textBody: "",
           htmlBody: "<html><body>preview</body></html>",
           style: "newspaper",
+          marketChartRange: "1y",
           selectedModuleIds: ["market"],
           error: "",
         }}

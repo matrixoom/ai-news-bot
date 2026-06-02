@@ -14,6 +14,7 @@ import type {
 const DEFAULT_CONFIG: PushConfig = {
   selectedModuleIds: ["market"],
   reportStyle: "newspaper",
+  marketChartRange: "1y",
   email: {
     enabled: true,
     label: "Primary Email",
@@ -60,6 +61,7 @@ export function adaptPushConfig(config: PushConfigRaw): PushConfig {
   return {
     selectedModuleIds: config.selected_module_ids ?? ["market"],
     reportStyle: config.report_style ?? "newspaper",
+    marketChartRange: config.market_chart_range ?? "1y",
     email: {
       enabled: Boolean(config.email?.enabled),
       label: config.email?.label ?? "Primary Email",
@@ -88,6 +90,7 @@ export function toPushConfigRaw(config: PushConfig): PushConfigRaw {
   return {
     selected_module_ids: config.selectedModuleIds,
     report_style: config.reportStyle,
+    market_chart_range: config.marketChartRange,
     email: {
       enabled: config.email.enabled,
       label: config.email.label,
@@ -120,6 +123,7 @@ export function toPushPreviewRaw(preview: PushPreview): PushPreviewRaw {
     text_body: preview.textBody,
     html_body: preview.htmlBody,
     style: preview.style,
+    market_chart_range: preview.marketChartRange,
     selected_module_ids: preview.selectedModuleIds,
     error: preview.error,
   };
@@ -133,6 +137,7 @@ export function adaptPushPreview(preview: PushPreviewRaw): PushPreview {
     textBody: preview.text_body,
     htmlBody: preview.html_body,
     style: preview.style,
+    marketChartRange: preview.market_chart_range ?? "1y",
     selectedModuleIds: preview.selected_module_ids,
     error: preview.error ?? "",
   };
@@ -175,6 +180,7 @@ function emptyPreview(generatedAt: string): PushPreview {
     textBody: "",
     htmlBody: "",
     style: "newspaper",
+    marketChartRange: "1y",
     selectedModuleIds: ["market"],
     error: "preview_unavailable",
   };

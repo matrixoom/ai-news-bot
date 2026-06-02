@@ -318,6 +318,7 @@ export const pushPayload: WorkbenchPayloads["push"] = {
           config: {
             selected_module_ids: ["market"],
             report_style: "newspaper",
+            market_chart_range: "1y",
             email: {
               enabled: true,
               label: "Primary Email",
@@ -349,6 +350,7 @@ export const pushPayload: WorkbenchPayloads["push"] = {
             text_body: "# Market Daily",
             html_body: "<html><body><h1>Market Daily</h1></body></html>",
             style: "newspaper",
+            market_chart_range: "1y",
             selected_module_ids: ["market"],
           },
           recent_runs: [
@@ -1049,6 +1051,7 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
         ...pushState.module.details[0].section.preview,
         generated_at: "2026-03-30T09:12:00Z",
         style: unwrapped.report_style ?? "newspaper",
+        market_chart_range: unwrapped.market_chart_range ?? "1y",
         subject: `Preview for ${unwrapped.report_style ?? "newspaper"}`,
         html_body: `<html><body><h1>${unwrapped.report_style ?? "newspaper"}</h1></body></html>`,
         selected_module_ids: unwrapped.selected_module_ids ?? ["market"],
