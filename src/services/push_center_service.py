@@ -244,17 +244,21 @@ class PushCenterService:
         return self.build_module_payload(force_refresh_preview=True)
 
     def build_preview_response(self, payload: Mapping[str, Any] | None) -> dict[str, Any]:
+        request_payload = payload
         payload = self._unwrap_payload(payload)
         existing = self._load_config()
         normalized = self._normalize_config(payload or {}, base=existing)
+        refresh_data = True
+        if isinstance(request_payload, Mapping) and "refresh_data" in request_payload:
+            refresh_data = bool(request_payload.get("refresh_data"))
         return {
             "generated_at": _utc_now_iso(),
             "config": self._public_config(normalized),
-            "preview": self._build_preview(normalized, force_refresh=True),
+            "preview": self._build_preview(normalized, force_refresh=refresh_data),
         }
 
     def start_market_chart_refresh(self, payload: Mapping[str, Any] | None) -> dict[str, Any]:
-        """启动宽基指数三个月历史重建任务。
+        """启动当前草稿范围对应的宽基指数历史刷新任务。
 
         Args:
             payload: 当前 Push Center 草稿配置，可带 `config` 包装层。
@@ -392,13 +396,18 @@ class PushCenterService:
             config = deepcopy(job["_config"])
             job["status"] = "running"
         try:
+            range_spec = resolve_push_market_chart_range(config.get("market_chart_range"))
             rebuild_market_module = getattr(self._dashboard_service, "rebuild_market_module", None)
             if callable(rebuild_market_module):
                 rebuild_market_module(
+                    history_window_days=range_spec.window_days,
                     progress_callback=lambda event: self._update_market_chart_refresh_progress(job_id, event)
                 )
             else:
-                self._dashboard_service.build_market_module(force_refresh=True)
+                self._dashboard_service.build_market_module(
+                    force_refresh=True,
+                    history_window_days=range_spec.window_days,
+                )
             preview = self._build_preview(config, force_refresh=False)
             with self._market_chart_refresh_lock:
                 job = self._market_chart_refresh_jobs[job_id]
@@ -410,7 +419,7 @@ class PushCenterService:
                     job["message"] = "图表已重绘，但部分指数刷新失败，已保留上次可用历史。"
                 else:
                     job["status"] = "completed"
-                    job["message"] = "最近三个月宽基指数历史已刷新，预览图已重绘。"
+                    job["message"] = f"{range_spec.label}宽基指数历史已刷新，预览图已重绘。"
         except Exception as error:  # pragma: no cover - defensive background logging
             logger.exception("push market chart refresh failed", extra={"job_id": job_id})
             with self._market_chart_refresh_lock:
@@ -454,9 +463,13 @@ class PushCenterService:
     ) -> dict[str, Any]:
         selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
         try:
-            snapshot = self._build_push_snapshot(selected_modules, force_refresh=force_refresh)
-            subject = self._build_subject(snapshot, config, selected_modules)
             market_chart_range = str(config.get("market_chart_range") or DEFAULT_PUSH_MARKET_CHART_RANGE)
+            snapshot = self._build_push_snapshot(
+                selected_modules,
+                force_refresh=force_refresh,
+                market_chart_range=market_chart_range,
+            )
+            subject = self._build_subject(snapshot, config, selected_modules)
             text_body = self._report_service.build_markdown(
                 snapshot,
                 module_ids=selected_modules,
@@ -513,6 +526,7 @@ class PushCenterService:
         selected_modules: Iterable[str],
         *,
         force_refresh: bool,
+        market_chart_range: str,
     ) -> DashboardSnapshot:
         # 鎺ㄩ€侀瑙堝彧闇€瑕佸凡閫夋ā鍧楋紝閬垮厤鏅€氶〉闈㈠姞杞借鏁村紶 dashboard 鐨勫叏閲忔瀯寤烘嫋鎱€?        module_ids = [str(module_id).strip().lower() for module_id in selected_modules if str(module_id).strip()]
         if not module_ids:
@@ -546,7 +560,11 @@ class PushCenterService:
                 sections.append(DashboardSection("macro", "宏观指标", "live", "push-preview"))
                 continue
             if module_id == "market":
-                _, market_sections = self._dashboard_service.build_market_module(force_refresh=force_refresh)
+                range_spec = resolve_push_market_chart_range(market_chart_range)
+                _, market_sections = self._dashboard_service.build_market_module(
+                    force_refresh=force_refresh,
+                    history_window_days=range_spec.window_days,
+                )
                 sections.append(DashboardSection("market", "市场模型", "live", "push-preview"))
                 continue
             if module_id == "events":
@@ -588,13 +606,23 @@ class PushCenterService:
     ) -> dict[str, Any]:
         selected_modules = list(module_ids or config.get("selected_module_ids") or ["market"])
         try:
-            snapshot = self._build_push_snapshot(selected_modules, force_refresh=force_refresh)
+            market_chart_range = str(config.get("market_chart_range") or DEFAULT_PUSH_MARKET_CHART_RANGE)
+            snapshot = self._build_push_snapshot(
+                selected_modules,
+                force_refresh=force_refresh,
+                market_chart_range=market_chart_range,
+            )
             subject = self._build_subject(snapshot, config, selected_modules)
-            text_body = self._report_service.build_markdown(snapshot, module_ids=selected_modules)
+            text_body = self._report_service.build_markdown(
+                snapshot,
+                module_ids=selected_modules,
+                market_chart_range=market_chart_range,
+            )
             html_body = self._report_service.build_email_html(
                 snapshot,
                 module_ids=selected_modules,
                 layout=str(config.get("report_style") or "newspaper"),
+                market_chart_range=market_chart_range,
             )
             return {
                 "ok": True,
@@ -634,6 +662,7 @@ class PushCenterService:
         selected_modules: Iterable[str],
         *,
         force_refresh: bool,
+        market_chart_range: str,
     ) -> DashboardSnapshot:
         module_ids = [str(module_id).strip().lower() for module_id in selected_modules if str(module_id).strip()]
         if not module_ids:
@@ -674,7 +703,11 @@ class PushCenterService:
                 sections.append(DashboardSection("macro", "\u5b8f\u89c2\u6307\u6807", "live", "push-preview"))
                 continue
             if module_id == "market":
-                _, market_sections = self._dashboard_service.build_market_module(force_refresh=force_refresh)
+                range_spec = resolve_push_market_chart_range(market_chart_range)
+                _, market_sections = self._dashboard_service.build_market_module(
+                    force_refresh=force_refresh,
+                    history_window_days=range_spec.window_days,
+                )
                 sections.append(DashboardSection("market", "\u5e02\u573a\u6a21\u578b", "live", "push-preview"))
                 continue
             if module_id == "events":

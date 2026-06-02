@@ -348,7 +348,7 @@ def create_fastapi_app(
 
     @app.post("/api/push/market-chart-refresh")
     def start_push_market_chart_refresh(payload: dict | None = None) -> JSONResponse:
-        """启动 Push preview 宽基指数三个月历史重建任务。"""
+        """启动 Push preview 当前选择范围的宽基指数历史刷新任务。"""
         try:
             return JSONResponse(push_service.start_market_chart_refresh(payload), status_code=202)
         except Exception:
@@ -357,7 +357,7 @@ def create_fastapi_app(
 
     @app.get("/api/push/market-chart-refresh/{job_id}")
     def get_push_market_chart_refresh(job_id: str) -> JSONResponse:
-        """返回 Push preview 宽基指数历史重建进度。"""
+        """返回 Push preview 宽基指数历史刷新进度。"""
         try:
             return JSONResponse(push_service.get_market_chart_refresh(job_id))
         except KeyError:
