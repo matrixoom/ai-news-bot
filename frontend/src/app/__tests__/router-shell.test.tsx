@@ -34,7 +34,7 @@ describe("Workbench shell", () => {
     cleanup();
     installWorkbenchFetchMock({ push: pushPayload });
     renderApp("/push");
-    expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
+    expect(await screen.findByTitle("Push preview")).toBeInTheDocument();
 
     cleanup();
     installWorkbenchFetchMock({ push: pushPayload });
@@ -51,7 +51,7 @@ describe("Workbench shell", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/push");
     });
-    expect(await screen.findByRole("heading", { name: "Delivery configuration" })).toBeInTheDocument();
+    expect(await screen.findByTitle("Push preview")).toBeInTheDocument();
   });
 
   it("ignores removed default routes and falls back to /push", async () => {

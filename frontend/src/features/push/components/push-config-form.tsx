@@ -5,21 +5,14 @@ import type {
   PushStyleOption,
 } from "../model/push-module.types";
 
-type FlashState = { tone: "success" | "error" | "neutral"; message: string } | null;
-
 type PushConfigFormProps = {
   draft: PushConfig;
   channelTypeOptions: PushChannelOption[];
   sourceModuleOptions: PushSourceModuleOption[];
   styleOptions: PushStyleOption[];
-  flash: FlashState;
   isSaving: boolean;
-  isPreviewing: boolean;
-  isSending: boolean;
   onDraftChange: (next: PushConfig) => void;
   onSave: () => void;
-  onPreview: () => void;
-  onSend: () => void;
 };
 
 export function PushConfigForm({
@@ -27,16 +20,11 @@ export function PushConfigForm({
   channelTypeOptions,
   sourceModuleOptions,
   styleOptions,
-  flash,
   isSaving,
-  isPreviewing,
-  isSending,
   onDraftChange,
   onSave,
-  onPreview,
-  onSend,
 }: PushConfigFormProps) {
-  const busy = isSaving || isPreviewing || isSending;
+  const busy = isSaving;
 
   return (
     <section className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
@@ -45,25 +33,10 @@ export function PushConfigForm({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuration</p>
           <h3 className="mt-2 text-xl font-semibold text-slate-950">Delivery configuration</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Tune the active modules, report style, and SMTP delivery profile before saving or sending.
+            Tune the active modules, report style, and SMTP delivery profile before saving.
           </p>
         </div>
       </div>
-
-      {flash ? (
-        <div
-          className={[
-            "rounded-2xl border px-4 py-3 text-sm",
-            flash.tone === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : flash.tone === "error"
-                ? "border-rose-200 bg-rose-50 text-rose-700"
-                : "border-slate-200 bg-slate-50 text-slate-700",
-          ].join(" ")}
-        >
-          {flash.message}
-        </div>
-      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-2 text-sm text-slate-700">
@@ -221,22 +194,6 @@ export function PushConfigForm({
           type="button"
         >
           {isSaving ? "Saving..." : "Save configuration"}
-        </button>
-        <button
-          className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
-          disabled={busy}
-          onClick={onPreview}
-          type="button"
-        >
-          {isPreviewing ? "Refreshing..." : "Refresh preview"}
-        </button>
-        <button
-          className="rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-medium text-cyan-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-          disabled={busy}
-          onClick={onSend}
-          type="button"
-        >
-          {isSending ? "Sending..." : "Send now"}
         </button>
       </div>
     </section>
