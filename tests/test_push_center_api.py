@@ -62,12 +62,12 @@ class StubPushReportService:
         _ = language
         return f"subject-{snapshot.generated_at}"
 
-    def build_markdown(self, snapshot, module_ids=None, language="en"):
-        _ = (module_ids, language)
+    def build_markdown(self, snapshot, module_ids=None, language="en", market_chart_range="1y"):
+        _ = (module_ids, language, market_chart_range)
         return f"text-{snapshot.generated_at}"
 
-    def build_email_html(self, snapshot, module_ids=None, layout="newspaper"):
-        _ = (module_ids, layout)
+    def build_email_html(self, snapshot, module_ids=None, layout="newspaper", market_chart_range="1y"):
+        _ = (module_ids, layout, market_chart_range)
         return f"<p>{snapshot.generated_at}</p>"
 
 
@@ -486,7 +486,7 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertEqual(preview_json["preview"]["market_chart_range"], "1y")
         self.assertIn("市场日报", preview_json["preview"]["html_body"])
         self.assertIn("Fishbowl Summary", preview_json["preview"]["html_body"])
-        self.assertIn("3M Trend", preview_json["preview"]["html_body"])
+        self.assertIn("1Y Trend", preview_json["preview"]["html_body"])
         self.assertIn("Close", preview_json["preview"]["html_body"])
         self.assertIn("M20", preview_json["preview"]["html_body"])
         self.assertIn("偏离", preview_json["preview"]["html_body"])
@@ -498,7 +498,7 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertIn("max-width:50%", preview_json["preview"]["html_body"])
         self.assertNotIn("组合图与市场模型保持一致", preview_json["preview"]["html_body"])
         self.assertIn("## 市场模型", preview_json["preview"]["text_body"])
-        self.assertIn("### 近3个月趋势", preview_json["preview"]["text_body"])
+        self.assertIn("### 近1年趋势", preview_json["preview"]["text_body"])
 
     def test_market_chart_refresh_endpoint_reports_progress_and_returns_redrawn_preview(self):
         """校验专用图表刷新任务会异步返回进度与刷新后的预览。"""

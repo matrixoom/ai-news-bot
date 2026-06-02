@@ -456,11 +456,17 @@ class PushCenterService:
         try:
             snapshot = self._build_push_snapshot(selected_modules, force_refresh=force_refresh)
             subject = self._build_subject(snapshot, config, selected_modules)
-            text_body = self._report_service.build_markdown(snapshot, module_ids=selected_modules)
+            market_chart_range = str(config.get("market_chart_range") or DEFAULT_PUSH_MARKET_CHART_RANGE)
+            text_body = self._report_service.build_markdown(
+                snapshot,
+                module_ids=selected_modules,
+                market_chart_range=market_chart_range,
+            )
             html_body = self._report_service.build_email_html(
                 snapshot,
                 module_ids=selected_modules,
                 layout=str(config.get("report_style") or "newspaper"),
+                market_chart_range=market_chart_range,
             )
             return {
                 "ok": True,

@@ -146,7 +146,7 @@ class PushWorkflowTests(unittest.TestCase):
             ],
         )
 
-        trend = service._build_market_trend_summary(card)
+        trend = service._build_market_trend_summary(card, market_chart_range="3m")
 
         self.assertEqual(trend["latest_label"], "3900.0")
         self.assertEqual(trend["chart_points"][-1]["trade_date"], "2026-03-26")
@@ -207,13 +207,57 @@ class PushWorkflowTests(unittest.TestCase):
             {"trade_date": "2026-03-26", "close_price": 3790.0, "ma20_price": 3805.0, "volume": 1500.0},
         ]
 
-        html = PushReportService()._render_market_combo_chart(points, label="沪深300")
+        html = PushReportService()._render_market_combo_chart(points, label="沪深300", market_chart_range="3m")
 
         self.assertIn("Volume", html)
         self.assertNotIn("Deviation</td>", html)
         self.assertIn('fill="#ff5f72"', html)
         self.assertIn('fill="#37c48d"', html)
         self.assertGreaterEqual(html.count("<rect "), 3)
+
+    def test_report_service_renders_selected_market_chart_range(self):
+        """校验报告按选择范围裁剪点位并同步更新所有范围文案。"""
+        service = PushReportService()
+        card = MarketCard(
+            key="csi300",
+            label="沪深300",
+            close_value="3900",
+            ma20_value="3850",
+            signal="neutral",
+            status="live",
+            trade_date="2026-03-26",
+            deviation_pct="+1.3%",
+            source_label="akshare",
+            explanation="说明",
+            chart_points=[
+                {"trade_date": "2024-03-20", "close_price": 3000.0, "ma20_price": 2990.0},
+                {"trade_date": "2025-03-26", "close_price": 3500.0, "ma20_price": 3490.0},
+                {"trade_date": "2026-03-26", "close_price": 3900.0, "ma20_price": 3850.0},
+            ],
+        )
+        snapshot = DashboardSnapshot(
+            generated_at="2026-03-26T08:00:00Z",
+            news_mode="hybrid",
+            title="日报",
+            summary="概览",
+            sections=[DashboardSection("market", "市场模型", "live", "desc")],
+            dashboard_summary=SummaryBlock("日报", "概览", "2026-03-26", "", []),
+            news_sections=[],
+            macro_sections=[],
+            market_sections=[card],
+            event_sections=[],
+            data_status=[DataStatusItem("market", "市场模型", "live", "ok")],
+        )
+
+        trend = service._build_market_trend_summary(card, market_chart_range="1y")
+        markdown = service.build_markdown(snapshot, module_ids=["market"], market_chart_range="1y")
+        html = service.build_email_html(snapshot, module_ids=["market"], market_chart_range="1y")
+
+        self.assertEqual(trend["chart_points"][0]["trade_date"], "2025-03-26")
+        self.assertIn("### 近1年趋势", markdown)
+        self.assertIn("1Y Trend", html)
+        self.assertIn("1Y 涨跌", html)
+        self.assertIn("沪深300 近1年组合趋势图", html)
 
     def test_report_service_shrinks_market_summary_table_on_mobile(self):
         """校验手机端市场日报指数表格使用更小字号，降低横向拥挤感。"""

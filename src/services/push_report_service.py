@@ -7,6 +7,7 @@ from html import escape
 import math
 
 from .dashboard_service import DashboardSnapshot
+from .push_market_chart_range import DEFAULT_PUSH_MARKET_CHART_RANGE, resolve_push_market_chart_range
 
 MARKET_SIGNAL_LABELS = {
     "breakout": "突破",
@@ -43,9 +44,11 @@ class PushReportService:
         language: str = "en",
         *,
         module_ids: Iterable[str] | None = None,
+        market_chart_range: str = DEFAULT_PUSH_MARKET_CHART_RANGE,
     ) -> str:
         _ = language
         selected = self._selected_modules(module_ids)
+        range_spec = resolve_push_market_chart_range(market_chart_range)
         lines: list[str] = [
             f"# {snapshot.title}",
             "",
@@ -92,14 +95,14 @@ class PushReportService:
             lines.extend(
                 [
                     "",
-                    "### 近3个月趋势",
+                    f"### {range_spec.label}趋势",
                     "",
                     "| 指数 | 区间涨跌 | 区间高低 | 最新收盘 |",
                     "| --- | --- | --- | --- |",
                 ]
             )
             for card in snapshot.market_sections:
-                trend = self._build_market_trend_summary(card)
+                trend = self._build_market_trend_summary(card, market_chart_range=market_chart_range)
                 lines.append(
                     f"| {card.label} | {trend['change_label']} | {trend['range_label']} | {trend['latest_label']} |"
                 )
@@ -125,12 +128,13 @@ class PushReportService:
         *,
         module_ids: Iterable[str] | None = None,
         layout: str = "newspaper",
+        market_chart_range: str = DEFAULT_PUSH_MARKET_CHART_RANGE,
     ) -> str:
         selected = self._selected_modules(module_ids)
         if layout == "briefing":
-            body = self._build_briefing_body(snapshot, selected)
+            body = self._build_briefing_body(snapshot, selected, market_chart_range=market_chart_range)
         else:
-            body = self._build_newspaper_body(snapshot, selected)
+            body = self._build_newspaper_body(snapshot, selected, market_chart_range=market_chart_range)
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
@@ -175,7 +179,13 @@ class PushReportService:
   </body>
 </html>"""
 
-    def _build_newspaper_body(self, snapshot: DashboardSnapshot, selected: set[str]) -> str:
+    def _build_newspaper_body(
+        self,
+        snapshot: DashboardSnapshot,
+        selected: set[str],
+        *,
+        market_chart_range: str,
+    ) -> str:
         header = f"""
 <header style="padding:0 0 18px;border-bottom:3px double #171717;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
@@ -200,7 +210,7 @@ class PushReportService:
 
         columns: list[str] = []
         if "market" in selected:
-            columns.append(self._build_market_column(snapshot))
+            columns.append(self._build_market_column(snapshot, market_chart_range=market_chart_range))
         if "macro" in selected:
             columns.append(self._build_macro_column(snapshot))
         if "news" in selected:
@@ -216,7 +226,13 @@ class PushReportService:
   {self._wrap_stacked_blocks(columns, top_padding=18)}
 </div>"""
 
-    def _build_briefing_body(self, snapshot: DashboardSnapshot, selected: set[str]) -> str:
+    def _build_briefing_body(
+        self,
+        snapshot: DashboardSnapshot,
+        selected: set[str],
+        *,
+        market_chart_range: str,
+    ) -> str:
         sections: list[str] = [
             f"""
 <header style="padding:0 0 16px;border-bottom:2px solid #171717;">
@@ -225,7 +241,7 @@ class PushReportService:
 </header>"""
         ]
         if "market" in selected:
-            sections.append(self._build_market_column(snapshot))
+            sections.append(self._build_market_column(snapshot, market_chart_range=market_chart_range))
         if "macro" in selected:
             sections.append(self._build_macro_column(snapshot))
         if "news" in selected:
@@ -234,7 +250,8 @@ class PushReportService:
             sections.append(self._build_events_column(snapshot))
         return self._wrap_stacked_blocks(sections, top_padding=18)
 
-    def _build_market_column(self, snapshot: DashboardSnapshot) -> str:
+    def _build_market_column(self, snapshot: DashboardSnapshot, *, market_chart_range: str) -> str:
+        range_spec = resolve_push_market_chart_range(market_chart_range)
         signal_header = self._market_signal_header_html()
         summary_rows = "".join(
             f"""
@@ -247,7 +264,10 @@ class PushReportService:
 </tr>"""
             for card in snapshot.market_sections
         )
-        trend_cards = [self._build_market_trend_block(card) for card in snapshot.market_sections]
+        trend_cards = [
+            self._build_market_trend_block(card, market_chart_range=market_chart_range)
+            for card in snapshot.market_sections
+        ]
         return f"""
 <section style="padding:0 14px 16px;border:1px solid #cdbf9d;background:#faf6eb;">
   <div style="padding:14px 0 10px;border-bottom:2px solid #171717;">
@@ -270,15 +290,16 @@ class PushReportService:
     </table>
   </div>
   <div style="padding-top:18px;">
-    <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#7a6b4d;">3M Trend</div>
+    <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#7a6b4d;">{range_spec.short_label} Trend</div>
     <div style="margin-top:10px;">
       {self._wrap_two_up_blocks(trend_cards or ['<p style="margin:0;">暂无趋势数据。</p>'], top_padding=12)}
     </div>
   </div>
 </section>"""
 
-    def _build_market_trend_block(self, card) -> str:
-        trend = self._build_market_trend_summary(card)
+    def _build_market_trend_block(self, card, *, market_chart_range: str) -> str:
+        range_spec = resolve_push_market_chart_range(market_chart_range)
+        trend = self._build_market_trend_summary(card, market_chart_range=market_chart_range)
         return f"""
 <article style="padding:12px;border:1px solid #d0c3a8;background:#fffdf7;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
@@ -287,10 +308,10 @@ class PushReportService:
       <td align="right" style="font-size:12px;letter-spacing:0.12em;color:#8b5e00;white-space:nowrap;">{escape(self._market_signal_label(card.signal))}</td>
     </tr>
   </table>
-  <div style="margin-top:10px;">{self._render_market_combo_chart(trend["chart_points"], label=card.label)}</div>
+  <div style="margin-top:10px;">{self._render_market_combo_chart(trend["chart_points"], label=card.label, market_chart_range=market_chart_range)}</div>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;">
     <tr>
-      <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;"><strong>3M 涨跌</strong><br />{escape(trend["change_label"])}</td>
+      <td width="50%" style="padding:0 8px 8px 0;vertical-align:top;"><strong>{range_spec.short_label} 涨跌</strong><br />{escape(trend["change_label"])}</td>
       <td width="50%" style="padding:0 0 8px 8px;vertical-align:top;"><strong>区间高低</strong><br />{escape(trend["range_label"])}</td>
     </tr>
     <tr>
@@ -326,8 +347,11 @@ class PushReportService:
             "cursor:help;vertical-align:middle;\">?</span>"
         )
 
-    def _build_market_trend_summary(self, card) -> dict[str, object]:
-        chart_points = self._normalize_market_chart_points(self._extract_recent_market_points(card))
+    def _build_market_trend_summary(self, card, *, market_chart_range: str) -> dict[str, object]:
+        """按选中范围汇总宽基指数图表和区间统计。"""
+        chart_points = self._normalize_market_chart_points(
+            self._extract_recent_market_points(card, market_chart_range=market_chart_range)
+        )
         closes = [point["close_price"] for point in chart_points]
         if not closes:
             return {
@@ -348,7 +372,8 @@ class PushReportService:
             "latest_label": f"{latest:.1f}",
         }
 
-    def _extract_recent_market_points(self, card) -> list[dict]:
+    def _extract_recent_market_points(self, card, *, market_chart_range: str) -> list[dict]:
+        """裁剪选中范围内的宽基指数历史点，供报告图表复用。"""
         raw_points = [
             dict(point)
             for point in list(getattr(card, "chart_points", []) or [])
@@ -366,7 +391,8 @@ class PushReportService:
             return []
         dated_points.sort(key=lambda item: item[0])
         latest_date = dated_points[-1][0]
-        threshold = latest_date - timedelta(days=92)
+        range_spec = resolve_push_market_chart_range(market_chart_range)
+        threshold = latest_date - timedelta(days=range_spec.window_days)
         filtered = [point for trade_date, point in dated_points if trade_date >= threshold]
         return filtered or [point for _, point in dated_points[-65:]]
 
@@ -451,7 +477,14 @@ class PushReportService:
             )
         return normalized
 
-    def _render_market_combo_chart(self, points: list[dict[str, object]], *, label: str) -> str:
+    def _render_market_combo_chart(
+        self,
+        points: list[dict[str, object]],
+        *,
+        label: str,
+        market_chart_range: str,
+    ) -> str:
+        """渲染带范围说明的宽基指数价格、均线和成交量组合图。"""
         if len(points) < 2:
             return (
                 '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
@@ -546,6 +579,7 @@ class PushReportService:
         last_ma20_y = to_price_y(last_ma20_value) if last_ma20_value is not None else None
         first_date = str(points[0].get("trade_date") or "")
         last_date = str(points[-1].get("trade_date") or "")
+        range_spec = resolve_push_market_chart_range(market_chart_range)
 
         return f"""
 <div style="max-width:344px;width:100%;">
@@ -556,7 +590,7 @@ class PushReportService:
       <td style="white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#ff5f72;vertical-align:middle;margin-right:6px;"></span>Volume</td>
     </tr>
   </table>
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="{width:.0f}" height="{height:.0f}" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%;min-height:{height:.0f}px;" role="img" aria-label="{escape(label)} 近3个月组合趋势图">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="{width:.0f}" height="{height:.0f}" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%;min-height:{height:.0f}px;" role="img" aria-label="{escape(label)} {range_spec.label}组合趋势图">
     <line x1="{left:.2f}" y1="{top:.2f}" x2="{width - right:.2f}" y2="{top:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
     <line x1="{left:.2f}" y1="{top + (price_height / 2):.2f}" x2="{width - right:.2f}" y2="{top + (price_height / 2):.2f}" stroke="#efe6d3" stroke-width="1" stroke-dasharray="3 3"></line>
     <line x1="{left:.2f}" y1="{top + price_height:.2f}" x2="{width - right:.2f}" y2="{top + price_height:.2f}" stroke="#e2d7c0" stroke-width="1"></line>
