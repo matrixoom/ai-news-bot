@@ -15,11 +15,16 @@ describe("SettingsPage", () => {
     render(<App />);
   }
 
-  it("removes the unused settings body cards", async () => {
+  it("renders the display-only llm settings workspace", async () => {
     installWorkbenchFetchMock({ push: pushPayload });
     renderSettingsApp("/settings");
 
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "大模型配置" })).toBeInTheDocument();
+    expect(screen.getAllByText("主分析模型").length).toBeGreaterThan(0);
+    expect(screen.getByText("任务默认模型")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "测试连接" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存配置" })).toBeDisabled();
     expect(screen.queryByText("Module workspace")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Workspace preferences" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Current defaults" })).not.toBeInTheDocument();
