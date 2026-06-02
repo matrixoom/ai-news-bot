@@ -53,6 +53,19 @@ export type PushStyleOption = {
   description: string;
 };
 
+export type PushMarketChartRange = "3m" | "6m" | "1y" | "2y" | "3y";
+
+export const PUSH_MARKET_CHART_RANGE_OPTIONS: ReadonlyArray<{
+  value: PushMarketChartRange;
+  label: string;
+}> = [
+  { value: "3m", label: "3个月" },
+  { value: "6m", label: "6个月" },
+  { value: "1y", label: "1年" },
+  { value: "2y", label: "2年" },
+  { value: "3y", label: "3年" },
+];
+
 export type PushEmailConfigRaw = {
   enabled: boolean;
   label: string;
@@ -79,6 +92,7 @@ export type PushScheduleRaw = {
 export type PushConfigRaw = {
   selected_module_ids: string[];
   report_style: string;
+  market_chart_range?: PushMarketChartRange;
   email: PushEmailConfigRaw;
   schedules: PushScheduleRaw[];
 };
@@ -90,6 +104,7 @@ export type PushPreviewRaw = {
   text_body: string;
   html_body: string;
   style: string;
+  market_chart_range?: PushMarketChartRange;
   selected_module_ids: string[];
   error?: string;
 };
@@ -137,6 +152,7 @@ export type PushSchedule = {
 export type PushConfig = {
   selectedModuleIds: string[];
   reportStyle: string;
+  marketChartRange: PushMarketChartRange;
   email: PushEmailConfig;
   schedules: PushSchedule[];
 };
@@ -148,6 +164,7 @@ export type PushPreview = {
   textBody: string;
   htmlBody: string;
   style: string;
+  marketChartRange: PushMarketChartRange;
   selectedModuleIds: string[];
   error: string;
 };
