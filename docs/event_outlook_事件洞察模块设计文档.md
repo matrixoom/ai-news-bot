@@ -2670,6 +2670,21 @@ POST /api/frontend/modules/event-insight/events/{eventId}/ignore
 ---
 
 ```http
+POST /api/frontend/modules/event-insight/topics
+```
+
+请求：
+
+```json
+{
+  "name": "内存涨价",
+  "summary": "围绕存储芯片供需和价格变化建立研究主题。"
+}
+```
+
+---
+
+```http
 POST /api/frontend/modules/event-insight/events/{eventId}/link-topic
 ```
 
@@ -2779,6 +2794,29 @@ POST /api/frontend/modules/event-insight/topics/analyze
 
 ---
 
+```http
+PUT /api/frontend/modules/event-insight/topics/{topicId}/events/{eventId}
+```
+
+请求：
+
+```json
+{
+  "roleInTopic": "key_catalyst",
+  "relevanceScore": 0.9
+}
+```
+
+---
+
+```http
+POST /api/frontend/modules/event-insight/topics/{topicId}/events/{eventId}/unlink
+```
+
+从主题中移除事件时保留操作日志。
+
+---
+
 ## 16.3 事件关系图
 
 ```http
@@ -2814,8 +2852,35 @@ GET /api/frontend/modules/event-insight/relations/{relationId}
 ---
 
 ```http
+POST /api/frontend/modules/event-insight/relations
+```
+
+请求：
+
+```json
+{
+  "sourceEventId": 1,
+  "targetEventId": 2,
+  "relationType": "support",
+  "relationSummary": "后续报价数据验证了供需改善。",
+  "strengthScore": 0.8,
+  "evidenceIds": [101, 205]
+}
+```
+
+---
+
+```http
 PUT /api/frontend/modules/event-insight/relations/{relationId}
 ```
+
+---
+
+```http
+POST /api/frontend/modules/event-insight/relations/{relationId}/archive
+```
+
+归档关系时保留关系证据和操作日志，不物理删除。
 
 ---
 
