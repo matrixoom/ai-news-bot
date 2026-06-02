@@ -63,6 +63,17 @@ describe("EventOutlookPage", () => {
     expect(await screen.findByText("FOMC 利率会议")).toBeInTheDocument();
   });
 
+  it("renders the event insight list without requesting the static calendar", async () => {
+    const fetchMock = installWorkbenchFetchMock();
+
+    renderEventOutlookApp("/event-outlook?tab=events");
+
+    expect(await screen.findByRole("heading", { name: "事件列表" })).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("/api/frontend/modules/event-outlook")),
+    ).toBe(false);
+  });
+
   it("zooms into a dragged canvas range", async () => {
     const fetchMock = installWorkbenchFetchMock();
 

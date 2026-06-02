@@ -80,6 +80,9 @@ describe("Workbench shell", () => {
     expect(screen.getByRole("link", { name: "Event Outlook" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Event Outlook > 国内" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Event Outlook > 国际" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Event Outlook > 事件列表" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Event Outlook > 主题溯源" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Event Outlook > 事件关系图" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Notes" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Market ticker" })).not.toBeInTheDocument();
