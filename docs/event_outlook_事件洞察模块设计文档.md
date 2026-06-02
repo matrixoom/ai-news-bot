@@ -6,6 +6,20 @@ TrendInsight 当前已经具备宏观数据、市场数据、趋势模型、推�
 
 现计划在 `Event Outlook` 模块下新增事件洞察能力，用于跟踪财经热点新闻、公告、财报、会议纪要、研报、行业报告等信息，从中抽取结构化事件，构建事件时间线和事件关系图，辅助用户还原热点主题的发酵路径，发现潜在投资研究线索。
 
+必须明确区分两个业务域：
+
+```text
+现有 Event Outlook 国内 / 国际页面：
+  面向未来将要发生的事件。
+  本质是静态日历，用于跟踪会议、政策窗口、宏观节点和科技活动。
+
+新增事件洞察页面：
+  面向已经发布、导入或扫描到的研究材料。
+  本质是证据发现与研究分析系统，用于抽取事实事件、构建主题时间线和关系图。
+```
+
+两者只共享左侧 `Event Outlook` 导航分组和整体视觉风格，不共享事件表、处理状态、Service、Repository 或 API 契约。新增能力不得改变现有静态日历的业务语义。
+
 本模块的目标不是做短线热点追涨工具，也不是自动荐股系统，而是建设一个本地运行的投资研究辅助工具，核心是：
 
 ```text
@@ -125,6 +139,8 @@ Redis
 ```text
 原始材料入库
   ↓
+创建可重试的处理任务
+  ↓
 全文检索 / 语义检索
   ↓
 事件抽取
@@ -145,6 +161,8 @@ Neo4j 图谱写入
   ↓
 事件列表 / 主题溯源 / 事件关系图展示
 ```
+
+耗时操作不得阻塞 HTTP 请求。导入、抽取、Embedding、聚类、主题分析、关系生成和图谱同步均通过本地异步任务执行，页面通过任务状态接口查询进度。
 
 第一阶段核心交付页面：
 
@@ -189,6 +207,20 @@ Event Outlook
 /event-outlook?tab=topic-trace
 /event-outlook?tab=event-graph
 ```
+
+其中：
+
+```text
+tab=domestic / tab=international：
+  继续渲染现有未来事件静态日历。
+  继续使用现有 /api/frontend/modules/event-outlook 契约。
+
+tab=events / tab=topic-trace / tab=event-graph：
+  渲染新增事件洞察工作区。
+  使用独立的 /api/frontend/modules/event-insight/* 契约。
+```
+
+`tab` 是页面工作区选择参数，不再等同于静态日历的 `region`。只有 `domestic` 和 `international` 两个工作区可以把 Tab 映射为日历 `region`。新增工作区不得把 `events`、`topic-trace` 或 `event-graph` 传入现有日历接口。
 
 如果当前项目内部已有其他路由约定，应优先遵守现有实现，不强行改造路由体系。
 
@@ -288,6 +320,30 @@ System
 机构观点
 市场异动
 ```
+
+本地文件存储就够了
+
+你不需要 MinIO。
+
+可以这样组织：
+
+data/
+├── raw/
+│   ├── html/
+│   ├── pdf/
+│   ├── txt/
+│   └── images/
+├── parsed/
+│   ├── markdown/
+│   └── json/
+├── exports/
+└── trendinsight.db
+
+数据库只存路径：
+
+local_file_path = data/raw/pdf/xxx.pdf
+
+这样简单、可备份、可迁移。
 
 第一阶段暂不处理：
 
@@ -414,20 +470,23 @@ other
 操作
 ```
 
-处理状态建议：
+列表需要区分三个维度，避免把材料解析、事件分析和图谱投影压成一个不可回退的状态字段：
 
 ```text
-raw              原始材料已入库
-parsed           文本已解析
-extracted        事件已抽取
-deduplicated     已去重
-clustered        已聚类
-topic_linked     已归入主题
-relation_built   已生成关系
-graphed          已同步 Neo4j
-ignored          已忽略
-failed           处理失败
+材料状态：
+  pending / running / succeeded / failed
+
+事件分析状态：
+  extracted / deduplicated / clustered / topic_linked / relation_built / failed
+
+图谱投影状态：
+  pending / synced / failed / not_applicable
+
+人工处置状态：
+  active / ignored
 ```
+
+列表默认展示事件分析状态；详情抽屉同时展示材料状态、图谱投影状态和最近失败原因。
 
 ---
 
@@ -830,8 +889,9 @@ cause
 support
 contradict
 follow_up
-supply_chain
 ```
+
+产业链关系通过实体筛选和实体边展示，不作为事件到事件的关系类型。
 
 ---
 
@@ -880,7 +940,7 @@ degree
 (:Event)-[:CONTRADICTS]->(:Event)
 (:Event)-[:FOLLOW_UP]->(:Event)
 (:Event)-[:SAME_TOPIC]->(:Event)
-(:Event)-[:SUPPLY_CHAIN]->(:Event)
+(:Entity)-[:SUPPLY_CHAIN]->(:Entity)
 ```
 
 边属性：
@@ -894,6 +954,8 @@ evidence
 generation_method
 manual_confirmed
 ```
+
+边详情中的 evidence 来自 `relation_evidence -> evidence`，必须展示可定位证据片段，不保存无法回溯的自由文本副本。
 
 `generation_method` 可取：
 
@@ -979,12 +1041,15 @@ hybrid
 Neo4j 查询示例：
 
 ```cypher
-MATCH path = (start:Event {id: $startEventId})-[*1..5]->(end:Event {id: $endEventId})
+MATCH path = (start:Event {id: $startEventId})
+  -[:CAUSES|SUPPORTS|CONTRADICTS|FOLLOW_UP*1..5]->
+  (end:Event {id: $endEventId})
+WHERE ALL(node IN nodes(path) WHERE single(other IN nodes(path) WHERE other = node))
 RETURN path
 LIMIT 10
 ```
 
-页面需要展示每一步的关系类型和证据。
+查询必须同时限制主题范围和 `maxDepth`。页面需要展示每一步的关系类型和证据。
 
 ---
 
@@ -1028,6 +1093,30 @@ baseUrl
 ```
 
 如果已有历史 LLM 接入方法，应优先复用或适配，不要直接新建一套完全独立的调用链。只有在现有实现无法满足事件洞察模块需求时，才新增统一封装层。
+
+当前仓库已经确认存在两条历史调用链，后续实现必须纳入迁移范围：
+
+```text
+通用新闻生成调用链：
+  src/llm_providers/base_provider.py
+  src/llm_providers/openai_provider.py
+  src/llm_providers/deepseek_provider.py
+  src/news/generator.py
+
+现有未来事件日历研究采集调用链：
+  src/providers/live_data.py
+  ArkResearchProvider
+```
+
+迁移顺序：
+
+```text
+1. 扩展现有 BaseLLMProvider 能力，支持 base_url、超时、结构化输出和 Embedding。
+2. 新增统一 LlmTaskRouter，承接事件洞察的任务级模型映射。
+3. 让 ArkResearchProvider 适配统一客户端工厂，但保持现有未来事件日历输出契约不变。
+4. 逐步让历史 NewsGenerator 复用统一客户端工厂。
+5. 禁止事件洞察业务代码直接实例化第三套 OpenAI 客户端。
+```
 
 ---
 
@@ -1352,6 +1441,141 @@ Qdrant
 
 ---
 
+## 10.4 领域边界
+
+现有静态日历和新增事件洞察必须保持独立：
+
+| 领域 | 业务含义 | SQLite 主表 | Service / Repository | 前端接口 |
+| --- | --- | --- | --- | --- |
+| 未来事件静态日历 | 跟踪未来会议、政策窗口、宏观节点和科技活动 | 现有 `timeline_events` | 现有 `EventsOutlookService`、`EventsOutlookStore` | 现有 `/api/frontend/modules/event-outlook` |
+| 事件洞察 | 从已发布材料中抽取事实事件并构建研究证据链 | 新增 `raw_document`、`event`、`topic`、`event_relation` 等表 | 新增 `EventInsightService`、`EventInsightRepository` | 新增 `/api/frontend/modules/event-insight/*` |
+
+不得把新增事件洞察字段写入现有 `timeline_events`，也不得让静态日历接口承担材料抽取、聚类或图谱同步职责。
+
+---
+
+## 10.5 本地异步任务
+
+第一阶段不引入 Kafka、Redis 或外部任务队列。使用 SQLite 持久化任务和应用内后台 worker：
+
+```text
+Controller
+  ↓ 创建 processing_job，返回 202 + jobId
+EventInsightJobWorker
+  ↓ 原子领取 pending 任务
+Service
+  ↓ 执行单个阶段
+Repository
+  ↓ 提交事实数据、任务状态和下一阶段任务
+```
+
+任务类型：
+
+```text
+parse_document
+extract_event
+generate_embedding
+deduplicate_event
+cluster_topic
+analyze_topic
+build_relation
+sync_graph
+rebuild_graph_projection
+```
+
+任务要求：
+
+```text
+1. 每个任务必须有 idempotency_key，客户端重试和 worker 重启不得生成重复事实。
+2. 任务状态统一为 pending / running / succeeded / failed / cancelled。
+3. 失败任务记录 error_code、error_message、attempt_count 和 next_retry_at。
+4. LLM 限流、超时和临时网络错误允许指数退避重试；JSON Schema 校验失败允许有限次数重试。
+5. 人工触发重新抽取或重新分析时创建新的 analysis_run，不直接覆盖历史结果。
+6. 应用重启后，超过租约时间的 running 任务可以重新领取。
+```
+
+---
+
+## 10.6 图谱投影一致性
+
+SQLite 是唯一事实主库。Neo4j 只保存可重建的关系投影，不得成为页面基础事实的唯一来源。
+
+```text
+SQLite 事实事务提交
+  ↓
+同一事务写入 graph_sync_outbox
+  ↓
+后台 worker 幂等消费 outbox
+  ↓
+写入 Neo4j
+  ↓
+更新投影版本和同步状态
+```
+
+降级要求：
+
+```text
+1. Neo4j 不可用时，事件列表、事件详情、主题时间线和人工校正仍可使用。
+2. 图谱页展示明确的降级提示，不返回伪造关系。
+3. 支持从 SQLite 全量重建 Neo4j 投影。
+4. 支持按 aggregate_type + aggregate_id + projection_version 巡检投影一致性。
+5. outbox 消费失败不得回滚已经提交的 SQLite 事实。
+```
+
+---
+
+## 10.7 时间与时区
+
+数据库时间字段统一保存 ISO 8601 UTC 时间；仅表示自然日的字段保存 `YYYY-MM-DD`。前端展示时间时必须转换为浏览器本地时区，优先复用：
+
+```text
+frontend/src/shared/utils/format-local-date-time.ts
+```
+
+---
+
+## 10.8 导入边界与本地文件安全
+
+第一阶段支持：
+
+```text
+URL 导入
+纯文本粘贴
+本地文件导入：HTML / PDF / TXT / Markdown
+扫描源批量导入
+```
+
+约束：
+
+```text
+1. 校验 MIME、文件扩展名、文件大小和内容哈希。
+2. 原始文件统一复制到受控的数据目录，数据库只保存相对路径。
+3. 禁止根据用户输入拼接任意本地路径，禁止路径穿越。
+4. 对 PDF 第一阶段只提取文本，不做复杂图表识别。
+5. source_url 规范化后参与去重；空 URL 不建立唯一约束。
+```
+
+---
+
+## 10.9 后端分层
+
+新增事件洞察必须遵守 Controller / Service / Repository 三层：
+
+```text
+Controller：
+  参数校验、错误码映射、traceId 注入、HTTP 响应转换
+
+Service：
+  材料导入、任务编排、事件抽取、证据绑定、聚类、人工修订、图谱投影协调
+
+Repository：
+  SQLite 事务、查询、migration、FTS5、sqlite-vec 和 outbox 持久化
+```
+
+Neo4j 单独封装为 `EventGraphProjectionRepository`，只能消费 SQLite outbox 或执行只读图谱查询，不得绕过 SQLite 直接成为事实写入入口。
+
+---
+
 # 11. 数据库设计
 
 ## 11.1 raw_document
@@ -1363,6 +1587,7 @@ CREATE TABLE IF NOT EXISTS raw_document (
     content TEXT,
     source_name TEXT,
     source_url TEXT,
+    normalized_source_url TEXT,
     source_type TEXT,
     material_type TEXT,
     publish_time TEXT,
@@ -1373,8 +1598,19 @@ CREATE TABLE IF NOT EXISTS raw_document (
     parse_status TEXT DEFAULT 'pending',
     extraction_status TEXT DEFAULT 'pending',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT
+    updated_at TEXT,
+    FOREIGN KEY(scan_batch_id) REFERENCES scan_batch(id),
+    CHECK (parse_status IN ('pending', 'running', 'succeeded', 'failed')),
+    CHECK (extraction_status IN ('pending', 'running', 'succeeded', 'failed'))
 );
+```
+
+`normalized_source_url` 仅在非空时参与唯一索引：
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_document_normalized_source_url
+ON raw_document(normalized_source_url)
+WHERE normalized_source_url IS NOT NULL AND normalized_source_url <> '';
 ```
 
 ---
@@ -1391,6 +1627,29 @@ CREATE VIRTUAL TABLE IF NOT EXISTS raw_document_fts USING fts5(
     tokenize='unicode61'
 );
 ```
+
+外部内容 FTS 表必须通过触发器与事实表同步：
+
+```sql
+CREATE TRIGGER IF NOT EXISTS raw_document_ai AFTER INSERT ON raw_document BEGIN
+    INSERT INTO raw_document_fts(rowid, title, content, source_name)
+    VALUES (new.id, new.title, new.content, new.source_name);
+END;
+
+CREATE TRIGGER IF NOT EXISTS raw_document_ad AFTER DELETE ON raw_document BEGIN
+    INSERT INTO raw_document_fts(raw_document_fts, rowid, title, content, source_name)
+    VALUES ('delete', old.id, old.title, old.content, old.source_name);
+END;
+
+CREATE TRIGGER IF NOT EXISTS raw_document_au AFTER UPDATE ON raw_document BEGIN
+    INSERT INTO raw_document_fts(raw_document_fts, rowid, title, content, source_name)
+    VALUES ('delete', old.id, old.title, old.content, old.source_name);
+    INSERT INTO raw_document_fts(rowid, title, content, source_name)
+    VALUES (new.id, new.title, new.content, new.source_name);
+END;
+```
+
+第一阶段必须先验证 `unicode61` 对中文标题和正文的召回效果。如果无法满足中文关键词搜索，优先增加应用层 n-gram 辅助索引或受控分词，不在第一阶段引入 Elasticsearch。
 
 ---
 
@@ -1418,11 +1677,22 @@ CREATE TABLE IF NOT EXISTS event (
     is_risk_event INTEGER DEFAULT 0,
     ignored INTEGER DEFAULT 0,
     ignore_reason TEXT,
-    manual_override INTEGER DEFAULT 0,
+    archived_at TEXT,
+    canonical_event_id INTEGER,
+    revision_no INTEGER DEFAULT 1,
+    score_version TEXT DEFAULT 'v1',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT
+    updated_at TEXT,
+    FOREIGN KEY(canonical_event_id) REFERENCES event(id),
+    CHECK (process_status IN ('extracted', 'deduplicated', 'clustered', 'topic_linked', 'relation_built', 'failed')),
+    CHECK (importance_score >= 0 AND importance_score <= 1),
+    CHECK (novelty_score >= 0 AND novelty_score <= 1),
+    CHECK (market_relevance_score >= 0 AND market_relevance_score <= 1),
+    CHECK (confidence_score >= 0 AND confidence_score <= 1)
 );
 ```
+
+`canonical_event_id` 用于表达已确认的重复事件归并。归并时不得删除原事件，确保可以撤销和追溯。
 
 ---
 
@@ -1439,6 +1709,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS event_fts USING fts5(
 );
 ```
 
+`event_fts` 同样必须配置插入、更新、删除触发器，触发器结构与 `raw_document_fts` 一致。
+
 ---
 
 ## 11.5 event_source
@@ -1448,18 +1720,61 @@ CREATE TABLE IF NOT EXISTS event_source (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id INTEGER NOT NULL,
     raw_document_id INTEGER NOT NULL,
-    evidence_text TEXT,
-    evidence_level TEXT,
     confidence_score REAL DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(event_id) REFERENCES event(id),
-    FOREIGN KEY(raw_document_id) REFERENCES raw_document(id)
+    FOREIGN KEY(raw_document_id) REFERENCES raw_document(id),
+    UNIQUE(event_id, raw_document_id)
 );
+```
+
+`event_source` 只表达事件与原始材料的来源关系。可定位的证据片段独立保存，避免关系证据退化成无法回溯的文本副本。
+
+---
+
+## 11.6 evidence
+
+```sql
+CREATE TABLE IF NOT EXISTS evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_document_id INTEGER NOT NULL,
+    evidence_text TEXT NOT NULL,
+    evidence_level TEXT NOT NULL,
+    text_hash TEXT NOT NULL,
+    page_number INTEGER,
+    paragraph_index INTEGER,
+    start_offset INTEGER,
+    end_offset INTEGER,
+    extraction_method TEXT NOT NULL,
+    analysis_run_id INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(raw_document_id) REFERENCES raw_document(id),
+    FOREIGN KEY(analysis_run_id) REFERENCES analysis_run(id),
+    CHECK (evidence_level IN ('A', 'B', 'C', 'D')),
+    UNIQUE(raw_document_id, text_hash, start_offset, end_offset)
+);
+
+CREATE TABLE IF NOT EXISTS event_evidence (
+    event_id INTEGER NOT NULL,
+    evidence_id INTEGER NOT NULL,
+    relevance_score REAL DEFAULT 0,
+    PRIMARY KEY(event_id, evidence_id),
+    FOREIGN KEY(event_id) REFERENCES event(id),
+    FOREIGN KEY(evidence_id) REFERENCES evidence(id)
+);
+```
+
+证据定位优先级：
+
+```text
+PDF：page_number + paragraph_index + 字符偏移
+HTML / TXT / Markdown：paragraph_index + 字符偏移
+无法可靠定位时：至少保存 evidence_text + text_hash + raw_document_id
 ```
 
 ---
 
-## 11.6 entity
+## 11.7 entity
 
 ```sql
 CREATE TABLE IF NOT EXISTS entity (
@@ -1469,6 +1784,23 @@ CREATE TABLE IF NOT EXISTS entity (
     entity_type TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT
+);
+```
+
+同一实体必须通过规范化名称和别名归并：
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_normalized_name_type
+ON entity(normalized_name, entity_type);
+
+CREATE TABLE IF NOT EXISTS entity_alias (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id INTEGER NOT NULL,
+    alias TEXT NOT NULL,
+    normalized_alias TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(entity_id) REFERENCES entity(id),
+    UNIQUE(normalized_alias, entity_id)
 );
 ```
 
@@ -1490,7 +1822,7 @@ macro_indicator
 
 ---
 
-## 11.7 event_entity
+## 11.8 event_entity
 
 ```sql
 CREATE TABLE IF NOT EXISTS event_entity (
@@ -1506,7 +1838,7 @@ CREATE TABLE IF NOT EXISTS event_entity (
 
 ---
 
-## 11.8 topic
+## 11.9 topic
 
 ```sql
 CREATE TABLE IF NOT EXISTS topic (
@@ -1518,6 +1850,7 @@ CREATE TABLE IF NOT EXISTS topic (
     momentum_score REAL DEFAULT 0,
     early_signal_score REAL DEFAULT 0,
     confidence_score REAL DEFAULT 0,
+    score_version TEXT DEFAULT 'v1',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT
 );
@@ -1525,7 +1858,7 @@ CREATE TABLE IF NOT EXISTS topic (
 
 ---
 
-## 11.9 topic_event
+## 11.10 topic_event
 
 ```sql
 CREATE TABLE IF NOT EXISTS topic_event (
@@ -1535,7 +1868,8 @@ CREATE TABLE IF NOT EXISTS topic_event (
     role_in_topic TEXT,
     PRIMARY KEY(topic_id, event_id),
     FOREIGN KEY(topic_id) REFERENCES topic(id),
-    FOREIGN KEY(event_id) REFERENCES event(id)
+    FOREIGN KEY(event_id) REFERENCES event(id),
+    CHECK (role_in_topic IN ('early_signal', 'key_catalyst', 'market_confirmation', 'supporting_event', 'risk_event', 'follow_up', 'noise'))
 );
 ```
 
@@ -1553,7 +1887,7 @@ noise
 
 ---
 
-## 11.10 event_relation
+## 11.11 event_relation
 
 ```sql
 CREATE TABLE IF NOT EXISTS event_relation (
@@ -1564,13 +1898,29 @@ CREATE TABLE IF NOT EXISTS event_relation (
     relation_summary TEXT,
     strength_score REAL DEFAULT 0,
     confidence_score REAL DEFAULT 0,
-    evidence TEXT,
     generation_method TEXT,
     manual_confirmed INTEGER DEFAULT 0,
+    revision_no INTEGER DEFAULT 1,
+    archived_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT,
     FOREIGN KEY(source_event_id) REFERENCES event(id),
-    FOREIGN KEY(target_event_id) REFERENCES event(id)
+    FOREIGN KEY(target_event_id) REFERENCES event(id),
+    UNIQUE(source_event_id, target_event_id, relation_type),
+    CHECK (source_event_id <> target_event_id),
+    CHECK (relation_type IN ('same_topic', 'cause', 'support', 'contradict', 'follow_up')),
+    CHECK (generation_method IN ('rule', 'llm', 'manual', 'hybrid')),
+    CHECK (strength_score >= 0 AND strength_score <= 1),
+    CHECK (confidence_score >= 0 AND confidence_score <= 1)
+);
+
+CREATE TABLE IF NOT EXISTS relation_evidence (
+    relation_id INTEGER NOT NULL,
+    evidence_id INTEGER NOT NULL,
+    relevance_score REAL DEFAULT 0,
+    PRIMARY KEY(relation_id, evidence_id),
+    FOREIGN KEY(relation_id) REFERENCES event_relation(id),
+    FOREIGN KEY(evidence_id) REFERENCES evidence(id)
 );
 ```
 
@@ -1582,12 +1932,13 @@ cause
 support
 contradict
 follow_up
-supply_chain
 ```
+
+`same_topic` 可以从 `topic_event` 推导，默认不主动写入；只有需要固定人工判断时才保存。产业链关系优先表达为实体之间的关系，避免事件图同时承担产业知识图谱职责。
 
 ---
 
-## 11.11 scan_batch
+## 11.12 scan_batch
 
 ```sql
 CREATE TABLE IF NOT EXISTS scan_batch (
@@ -1600,22 +1951,30 @@ CREATE TABLE IF NOT EXISTS scan_batch (
     success_count INTEGER DEFAULT 0,
     failed_count INTEGER DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT
+    updated_at TEXT,
+    CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled'))
 );
 ```
 
 ---
 
-## 11.12 event_operation_log
+## 11.13 event_operation_log
 
 ```sql
 CREATE TABLE IF NOT EXISTS event_operation_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id INTEGER,
     operation_type TEXT NOT NULL,
+    field_name TEXT,
+    before_value TEXT,
+    after_value TEXT,
     operation_detail TEXT,
+    reason TEXT,
+    analysis_run_id INTEGER,
     operator TEXT DEFAULT 'local_user',
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(event_id) REFERENCES event(id),
+    FOREIGN KEY(analysis_run_id) REFERENCES analysis_run(id)
 );
 ```
 
@@ -1637,7 +1996,7 @@ sync_graph
 
 ---
 
-## 11.13 graph_sync_outbox
+## 11.14 graph_sync_outbox
 
 ```sql
 CREATE TABLE IF NOT EXISTS graph_sync_outbox (
@@ -1645,18 +2004,33 @@ CREATE TABLE IF NOT EXISTS graph_sync_outbox (
     aggregate_type TEXT NOT NULL,
     aggregate_id INTEGER NOT NULL,
     operation TEXT NOT NULL,
+    projection_version INTEGER NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
     payload TEXT,
     status TEXT DEFAULT 'pending',
     retry_count INTEGER DEFAULT 0,
+    next_retry_at TEXT,
     error_message TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT
+    updated_at TEXT,
+    CHECK (status IN ('pending', 'running', 'succeeded', 'failed'))
+);
+
+CREATE TABLE IF NOT EXISTS graph_projection_state (
+    aggregate_type TEXT NOT NULL,
+    aggregate_id INTEGER NOT NULL,
+    projection_version INTEGER NOT NULL,
+    sync_status TEXT NOT NULL DEFAULT 'pending',
+    synced_at TEXT,
+    error_message TEXT,
+    PRIMARY KEY(aggregate_type, aggregate_id),
+    CHECK (sync_status IN ('pending', 'synced', 'failed'))
 );
 ```
 
 ---
 
-## 11.14 llm_provider_config
+## 11.15 llm_provider_config
 
 如果项目已有 LLM 配置表或配置文件，应优先复用或迁移，不强制新建。
 
@@ -1694,7 +2068,7 @@ custom
 
 ---
 
-## 11.15 llm_task_config
+## 11.16 llm_task_config
 
 ```sql
 CREATE TABLE IF NOT EXISTS llm_task_config (
@@ -1725,11 +2099,13 @@ embedding
 
 ---
 
-## 11.16 llm_call_log
+## 11.17 llm_call_log
 
 ```sql
 CREATE TABLE IF NOT EXISTS llm_call_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trace_id TEXT NOT NULL,
+    analysis_run_id INTEGER,
     task_type TEXT,
     provider_config_id INTEGER,
     model_name TEXT,
@@ -1739,12 +2115,188 @@ CREATE TABLE IF NOT EXISTS llm_call_log (
     total_tokens INTEGER,
     latency_ms INTEGER,
     success INTEGER,
+    error_code TEXT,
     error_message TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(analysis_run_id) REFERENCES analysis_run(id)
 );
 ```
 
 默认不要保存完整 prompt，避免数据库膨胀和敏感信息泄露。
+
+---
+
+## 11.18 analysis_run
+
+每次自动分析或人工触发的重新分析都创建独立批次，避免覆盖历史结果后无法追溯。
+
+```sql
+CREATE TABLE IF NOT EXISTS analysis_run (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_type TEXT NOT NULL,
+    trigger_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    prompt_version TEXT,
+    score_version TEXT DEFAULT 'v1',
+    trace_id TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    started_at TEXT,
+    completed_at TEXT,
+    CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled'))
+);
+```
+
+---
+
+## 11.19 processing_job
+
+```sql
+CREATE TABLE IF NOT EXISTS processing_job (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_type TEXT NOT NULL,
+    aggregate_type TEXT NOT NULL,
+    aggregate_id INTEGER NOT NULL,
+    analysis_run_id INTEGER,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    payload TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 3,
+    lease_expires_at TEXT,
+    next_retry_at TEXT,
+    error_code TEXT,
+    error_message TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT,
+    FOREIGN KEY(analysis_run_id) REFERENCES analysis_run(id),
+    CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled'))
+);
+
+CREATE TABLE IF NOT EXISTS processing_job_attempt (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    processing_job_id INTEGER NOT NULL,
+    attempt_no INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    success INTEGER,
+    error_code TEXT,
+    error_message TEXT,
+    FOREIGN KEY(processing_job_id) REFERENCES processing_job(id),
+    UNIQUE(processing_job_id, attempt_no)
+);
+```
+
+---
+
+## 11.20 人工修订与重复事件候选
+
+人工修订采用字段级覆盖，后续自动分析只能更新未锁定字段：
+
+```sql
+CREATE TABLE IF NOT EXISTS event_field_override (
+    event_id INTEGER NOT NULL,
+    field_name TEXT NOT NULL,
+    override_value TEXT,
+    operator TEXT DEFAULT 'local_user',
+    reason TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT,
+    PRIMARY KEY(event_id, field_name),
+    FOREIGN KEY(event_id) REFERENCES event(id)
+);
+
+CREATE TABLE IF NOT EXISTS duplicate_event_candidate (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_event_id INTEGER NOT NULL,
+    candidate_event_id INTEGER NOT NULL,
+    same_event_score REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    analysis_run_id INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT,
+    FOREIGN KEY(source_event_id) REFERENCES event(id),
+    FOREIGN KEY(candidate_event_id) REFERENCES event(id),
+    FOREIGN KEY(analysis_run_id) REFERENCES analysis_run(id),
+    UNIQUE(source_event_id, candidate_event_id),
+    CHECK (source_event_id <> candidate_event_id),
+    CHECK (status IN ('pending', 'confirmed', 'rejected'))
+);
+```
+
+确认合并后设置 `event.canonical_event_id`。原事件继续保留，人工可以撤销归并。
+
+---
+
+## 11.21 sqlite-vec 与 Embedding
+
+sqlite-vec 的加载方式和虚拟表语法需要在阶段 0 根据 Windows + Python 3.12 环境验证。概念模型如下：
+
+```text
+raw_document_embedding：
+  raw_document_id
+  embedding_model
+  embedding_dimension
+  content_hash
+  vector
+
+event_embedding：
+  event_id
+  embedding_model
+  embedding_dimension
+  content_hash
+  vector
+```
+
+向量记录必须带模型名称、维度和内容哈希。模型切换或正文变化后重新生成，不允许混用不同模型或不同维度的向量。
+
+---
+
+## 11.22 Schema 版本、外键与索引
+
+所有连接必须开启：
+
+```sql
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+```
+
+数据库必须提供显式 migration，不允许只依赖 Repository 初始化时零散执行 `CREATE TABLE IF NOT EXISTS`。
+
+```sql
+CREATE TABLE IF NOT EXISTS schema_migration (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+首批索引至少覆盖：
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_raw_document_publish_time
+ON raw_document(publish_time);
+
+CREATE INDEX IF NOT EXISTS idx_event_event_time_status
+ON event(event_time, process_status);
+
+CREATE INDEX IF NOT EXISTS idx_event_source_raw_document
+ON event_source(raw_document_id);
+
+CREATE INDEX IF NOT EXISTS idx_topic_event_event
+ON topic_event(event_id);
+
+CREATE INDEX IF NOT EXISTS idx_event_relation_source
+ON event_relation(source_event_id, relation_type);
+
+CREATE INDEX IF NOT EXISTS idx_event_relation_target
+ON event_relation(target_event_id, relation_type);
+
+CREATE INDEX IF NOT EXISTS idx_processing_job_status_retry
+ON processing_job(status, next_retry_at);
+
+CREATE INDEX IF NOT EXISTS idx_graph_sync_outbox_status_retry
+ON graph_sync_outbox(status, next_retry_at);
+```
 
 ---
 
@@ -1806,8 +2358,10 @@ CREATE TABLE IF NOT EXISTS llm_call_log (
 
 (:Event)-[:SAME_TOPIC {strength_score, confidence_score}]->(:Event)
 
-(:Event)-[:SUPPLY_CHAIN {strength_score, confidence_score}]->(:Event)
+(:Entity)-[:SUPPLY_CHAIN {relation_summary, confidence_score}]->(:Entity)
 ```
+
+`SAME_TOPIC` 默认由 SQLite `topic_event` 推导；仅在人工确认或性能验证确有必要时持久化。产业链关系属于实体知识，优先表达为 `Entity -> Entity`，不直接混入事件因果链。
 
 ---
 
@@ -1823,6 +2377,8 @@ FOR (t:Topic) REQUIRE t.id IS UNIQUE;
 CREATE CONSTRAINT entity_id_unique IF NOT EXISTS
 FOR (e:Entity) REQUIRE e.id IS UNIQUE;
 ```
+
+Neo4j 必须支持从 SQLite 全量重建。图谱查询失败时返回可识别的降级状态，不影响 SQLite 页面继续使用。
 
 ---
 
@@ -1858,7 +2414,10 @@ FOR (e:Entity) REQUIRE e.id IS UNIQUE;
       "evidence": [
         {
           "text": "多家存储原厂近期上调 DRAM 报价。",
-          "evidence_level": "B"
+          "evidence_level": "B",
+          "paragraph_index": 12,
+          "start_offset": 0,
+          "end_offset": 18
         }
       ],
       "importance_score": 0.78,
@@ -1881,11 +2440,11 @@ FOR (e:Entity) REQUIRE e.id IS UNIQUE;
   "relation_summary": "事件 B 进一步验证了事件 A 中提到的存储供需改善趋势。",
   "strength_score": 0.76,
   "confidence_score": 0.72,
-  "evidence": "两个事件均指向 DRAM/NAND 报价上涨和存储原厂供给策略变化。"
+  "evidence_refs": [101, 205]
 }
 ```
 
-大模型不得直接凭空生成关系。候选关系必须先由规则、实体重合、时间窗口、向量相似度等方式召回。
+大模型不得直接凭空生成关系。候选关系必须先由规则、实体重合、时间窗口、向量相似度等方式召回。关系结论必须绑定已有 `evidence` 记录，不接受无法回溯到原始材料的自由文本证据。
 
 ---
 
@@ -1941,7 +2500,7 @@ same_event_score =
 same_event_score >= 0.85
 ```
 
-则判定为重复事件，进行合并。
+则生成重复事件候选，等待规则确认或人工确认。确认后设置 `canonical_event_id`，保留原事件和操作日志，不执行破坏性删除。
 
 ---
 
@@ -1963,6 +2522,22 @@ same_event_score >= 0.85
 
 ---
 
+## 14.4 去重与聚类版本化
+
+每次自动判断必须记录：
+
+```text
+analysis_run_id
+algorithm_version
+embedding_model
+score_version
+threshold
+```
+
+阈值调整后允许重新计算候选，不得静默覆盖人工确认结果。
+
+---
+
 # 15. 评分模型
 
 ## 15.1 事件重要性评分
@@ -1977,6 +2552,8 @@ importance_score =
 + 0.10 * relation_centrality_score
 ```
 
+所有评分项必须归一化到 `[0, 1]`，并记录 `score_version`。第一阶段使用 `v1` 固定权重，调整权重时生成新版本，不覆盖历史分析批次。
+
 ---
 
 ## 15.2 主题热度评分
@@ -1989,6 +2566,8 @@ heat_score =
 + 高重要性事件数量
 + 图谱关系密度
 ```
+
+主题热度按滚动 7 天窗口计算，各分量归一化到 `[0, 1]` 后再加权汇总。
 
 ---
 
@@ -2003,16 +2582,32 @@ early_signal_score =
 + 尚未明显进入市场共识
 ```
 
+早期信号评分同样记录 `score_version` 和计算时间窗口。
+
 ---
 
 # 16. API 设计
 
-接口名称仅为建议，最终应按当前项目已有 API 风格调整。
+前端接口优先沿用当前项目 `/api/frontend/modules/*` 风格。新增事件洞察使用独立前缀：
+
+```text
+/api/frontend/modules/event-insight/*
+```
+
+现有未来事件静态日历继续使用：
+
+```text
+/api/frontend/modules/event-outlook
+/api/frontend/modules/event-outlook/events
+/api/frontend/modules/event-outlook/events/{event_id}
+```
+
+新增事件洞察不得修改现有静态日历接口契约。
 
 ## 16.1 事件列表
 
 ```http
-GET /api/event-insight/events
+GET /api/frontend/modules/event-insight/events
 ```
 
 参数：
@@ -2030,24 +2625,38 @@ minImportance
 minConfidence
 page
 pageSize
+sortBy
+sortOrder
+```
+
+成功响应：
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "pageSize": 20,
+  "total": 0,
+  "traceId": "trace-id"
+}
 ```
 
 ---
 
 ```http
-GET /api/event-insight/events/{eventId}
+GET /api/frontend/modules/event-insight/events/{eventId}
 ```
 
 ---
 
 ```http
-PUT /api/event-insight/events/{eventId}
+PUT /api/frontend/modules/event-insight/events/{eventId}
 ```
 
 ---
 
 ```http
-POST /api/event-insight/events/{eventId}/ignore
+POST /api/frontend/modules/event-insight/events/{eventId}/ignore
 ```
 
 请求：
@@ -2061,7 +2670,7 @@ POST /api/event-insight/events/{eventId}/ignore
 ---
 
 ```http
-POST /api/event-insight/events/{eventId}/link-topic
+POST /api/frontend/modules/event-insight/events/{eventId}/link-topic
 ```
 
 请求：
@@ -2076,7 +2685,7 @@ POST /api/event-insight/events/{eventId}/link-topic
 ---
 
 ```http
-POST /api/event-insight/events/batch-action
+POST /api/frontend/modules/event-insight/events/batch-action
 ```
 
 请求：
@@ -2092,12 +2701,27 @@ POST /api/event-insight/events/batch-action
 }
 ```
 
+批量操作必须逐项返回结果，不得因单条失败吞掉其他成功项：
+
+```json
+{
+  "succeededEventIds": [1, 2],
+  "failedItems": [
+    {
+      "eventId": 3,
+      "error": "event_not_found"
+    }
+  ],
+  "traceId": "trace-id"
+}
+```
+
 ---
 
 ## 16.2 主题溯源
 
 ```http
-GET /api/event-insight/topics/trace
+GET /api/frontend/modules/event-insight/topics/trace
 ```
 
 参数：
@@ -2129,7 +2753,7 @@ minConfidence
 ---
 
 ```http
-POST /api/event-insight/topics/analyze
+POST /api/frontend/modules/event-insight/topics/analyze
 ```
 
 请求：
@@ -2142,12 +2766,23 @@ POST /api/event-insight/topics/analyze
 }
 ```
 
+成功：`202`
+
+```json
+{
+  "jobId": 1001,
+  "analysisRunId": 2001,
+  "status": "pending",
+  "traceId": "trace-id"
+}
+```
+
 ---
 
 ## 16.3 事件关系图
 
 ```http
-GET /api/event-insight/graph/topic/{topicId}
+GET /api/frontend/modules/event-insight/graph/topic/{topicId}
 ```
 
 参数：
@@ -2173,19 +2808,19 @@ depth
 ---
 
 ```http
-GET /api/event-insight/relations/{relationId}
+GET /api/frontend/modules/event-insight/relations/{relationId}
 ```
 
 ---
 
 ```http
-PUT /api/event-insight/relations/{relationId}
+PUT /api/frontend/modules/event-insight/relations/{relationId}
 ```
 
 ---
 
 ```http
-GET /api/event-insight/graph/path
+GET /api/frontend/modules/event-insight/graph/path
 ```
 
 参数：
@@ -2195,6 +2830,8 @@ startEventId
 endEventId
 maxDepth
 ```
+
+`maxDepth` 第一阶段限制为 `1..5`。只允许遍历 `CAUSES | SUPPORTS | CONTRADICTS | FOLLOW_UP`，必须限制主题范围并避免环路。
 
 ---
 
@@ -2213,7 +2850,15 @@ PUT /api/system/llm/providers/{id}
 ```
 
 ```http
-DELETE /api/system/llm/providers/{id}
+POST /api/system/llm/providers/{id}/disable
+```
+
+禁用语义：
+
+```text
+如果 Provider 仍被 llm_task_config 引用，返回 409 provider_in_use。
+解除任务映射后允许禁用，并从新建任务的可选列表中隐藏。
+历史 llm_call_log 和既有分析批次保留。
 ```
 
 ```http
@@ -2226,6 +2871,58 @@ GET /api/system/llm/task-configs
 
 ```http
 PUT /api/system/llm/task-configs/{taskType}
+```
+
+---
+
+## 16.5 导入与任务状态
+
+```http
+POST /api/frontend/modules/event-insight/documents/import
+```
+
+支持 URL、纯文本或受控文件上传。成功返回 `202 + jobId`。
+
+```http
+GET /api/frontend/modules/event-insight/jobs/{jobId}
+```
+
+成功响应：
+
+```json
+{
+  "id": 1001,
+  "jobType": "extract_event",
+  "status": "running",
+  "attemptCount": 1,
+  "maxAttempts": 3,
+  "error": null,
+  "traceId": "trace-id"
+}
+```
+
+---
+
+## 16.6 错误、幂等与可观测性
+
+统一错误响应：
+
+```json
+{
+  "error": "machine_readable_error_code",
+  "message": "面向用户的简洁说明",
+  "traceId": "trace-id"
+}
+```
+
+要求：
+
+```text
+1. 可重试写接口支持 Idempotency-Key 请求头。
+2. Controller 只做参数校验和响应转换，业务逻辑进入 Service，SQL 进入 Repository。
+3. 日志包含 traceId、jobId、analysisRunId 和必要的业务主键。
+4. 日志禁止输出 API Key、完整请求头和完整 prompt。
+5. 400 表示输入错误，404 表示资源不存在，409 表示状态冲突，202 表示异步任务已受理，503 表示依赖不可用。
 ```
 
 ---
@@ -2315,6 +3012,8 @@ LlmCallLogPanel
 忽略事件
 ```
 
+“删除事件”在第一阶段统一实现为归档软删除，设置 `archived_at` 并记录操作日志，不物理删除历史事实。
+
 ---
 
 ## 18.2 关系校正
@@ -2337,18 +3036,46 @@ LlmCallLogPanel
 
 人工校正优先于模型生成。
 
-相关字段：
+相关数据：
 
 ```text
-manual_override
-manual_confirmed
+event_field_override：事件字段级人工覆盖
+manual_confirmed：人工确认关系
+event_operation_log：修订前后值、原因和操作人
 ```
 
-当人工确认后，后续自动分析不得直接覆盖人工结果。
+“删除关系”在第一阶段统一实现为归档软删除，设置 `archived_at` 并保留关系证据和操作日志。
+
+当人工确认后，后续自动分析不得直接覆盖人工结果。自动分析仍可更新未锁定字段，并创建新的 `analysis_run` 保留历史。
 
 ---
 
 # 19. 开发阶段规划
+
+## 阶段 0：技术验证与边界确认
+
+目标：
+
+```text
+确认现有未来事件静态日历的页面、API 和 timeline_events 表保持不变
+验证 Windows + Python 3.12 环境加载 sqlite-vec
+验证 FTS5 unicode61 对中文标题和正文的召回效果
+验证 Neo4j Community 本地启动、约束创建、全量重建和不可用降级
+对候选前端图库进行小规模性能验证
+确认现有 BaseLLMProvider 和 ArkResearchProvider 的统一迁移路径
+```
+
+验收：
+
+```text
+形成可执行验证记录
+明确 sqlite-vec 加载方式和虚拟表 DDL
+明确中文检索实现方案
+明确图谱组件选择
+确认静态日历回归测试继续通过
+```
+
+---
 
 ## 阶段 1：代码调研与页面骨架
 
@@ -2368,6 +3095,7 @@ System Settings 下新增大模型配置入口
 新增页面均可打开
 页面风格与当前项目一致
 不影响国内/国际页面
+国内/国际页面继续使用现有静态日历 API 和 timeline_events 表
 不重复新建已有 LLM 能力
 ```
 
@@ -2410,6 +3138,7 @@ event 入库
 事件忽略
 事件归入主题
 批量操作
+processing_job 入库和任务状态查询
 ```
 
 验收：
@@ -2432,6 +3161,7 @@ event 入库
 实体入库
 证据链入库
 FTS5 索引
+analysis_run 追溯
 ```
 
 验收：
@@ -2451,7 +3181,8 @@ FTS5 索引
 接入 sqlite-vec
 生成事件 embedding
 实现相似事件召回
-实现事件去重和聚类
+实现重复事件候选和人工确认归并
+实现主题聚类
 ```
 
 验收：
@@ -2496,6 +3227,8 @@ FTS5 索引
 ```text
 事件关系生成
 Neo4j 同步
+Neo4j 降级
+从 SQLite 全量重建图谱投影
 主题子图查询
 节点详情
 边详情
@@ -2521,26 +3254,88 @@ Codex 实现时必须遵守：
 1. 先调研当前项目结构，再实施新增页面。
 2. 新增页面必须适配当前项目已有风格，不要写死全新的 UI 体系。
 3. 不要破坏现有 Event Outlook 国内/国际页面。
-4. Event Outlook 下新增“事件列表”“主题溯源”“事件关系图”。
-5. System -> Settings 下新增“大模型配置”页面或 Tab。
-6. 项目中如已有历史 LLM 接入方法，必须优先复用或适配，不要重复造轮子。
-7. 如已有通用 API 客户端、配置加密、Settings 表单组件，应优先复用。
-8. SQLite 是事实主库，Neo4j 是关系投影库。
-9. 事件抽取、主题摘要、关系判断等模型调用必须通过统一 LLM 调用层。
-10. Prompt 必须集中管理，不要散落在业务代码中。
-11. API Key 必须加密保存、脱敏展示，日志不得输出明文。
-12. 大模型调用失败必须记录日志，并允许重试。
-13. 所有核心分析结果必须保留 evidence。
-14. 大模型输出必须经过 JSON Schema 校验。
-15. 人工校正结果优先于自动分析结果。
-16. 先实现 mock 数据页面，再逐步接入真实 API。
-17. 数据库变更必须提供 migration。
-18. 不引入 Kafka、Redis、ES、MinIO 等额外组件。
+4. 现有国内/国际页面是未来事件静态日历，继续使用现有 timeline_events、EventsOutlookService、EventsOutlookStore 和 /api/frontend/modules/event-outlook 契约。
+5. 新增事件洞察是独立研究域，不得复用静态日历表或把洞察工作区 Tab 传给静态日历 region。
+6. Event Outlook 下新增“事件列表”“主题溯源”“事件关系图”。
+7. System -> Settings 下新增“大模型配置”页面或 Tab。
+8. 项目中已有 BaseLLMProvider 和 ArkResearchProvider，必须按迁移顺序复用或适配，不要重复造轮子。
+9. 如已有通用 API 客户端、配置加密、Settings 表单组件，应优先复用。
+10. SQLite 是事实主库，Neo4j 是关系投影库。
+11. 事件抽取、主题摘要、关系判断等模型调用必须通过统一 LLM 调用层。
+12. Prompt 必须集中管理，不要散落在业务代码中。
+13. API Key 必须加密保存、脱敏展示，日志不得输出明文。
+14. 大模型调用失败必须记录日志，并允许重试。
+15. 所有核心分析结果必须保留可定位 evidence。
+16. 大模型输出必须经过 JSON Schema 校验。
+17. 人工校正结果优先于自动分析结果，使用字段级覆盖并记录修订日志。
+18. 耗时任务必须异步执行，支持幂等、重试、恢复和状态查询。
+19. 先实现 mock 数据页面，再逐步接入真实 API。
+20. 数据库变更必须提供 migration，SQLite 连接必须开启 foreign_keys 和 WAL。
+21. 不引入 Kafka、Redis、ES、MinIO 等额外组件。
+22. 新增接口、字段和行为变化必须同步更新 docs/api-contract.md、docs/architecture.md、docs/test-strategy.md 和 CHANGELOG.md。
 ```
 
 ---
 
-# 21. 第一阶段最终交付物
+# 21. 测试与回归矩阵
+
+## 21.1 后端 Repository
+
+```text
+静态日历 timeline_events 回归
+migration 可重复执行
+foreign_keys 生效
+FTS5 插入、更新、删除触发器同步
+中文标题和正文召回
+证据片段原文定位
+任务原子领取、租约恢复、幂等和重试
+字段级人工覆盖不会被自动分析覆盖
+重复事件候选确认和撤销
+outbox 幂等消费与失败重试
+```
+
+## 21.2 后端 Service 与 API
+
+```text
+现有 /api/frontend/modules/event-outlook 契约不变
+事件列表筛选、排序和分页
+导入接口返回 202 + jobId
+主题重新分析返回 202 + analysisRunId
+批量操作部分成功响应
+LLM 超时、限流、非 JSON 和 Schema 校验失败
+Provider 被任务映射引用时禁用返回 409
+Neo4j 不可用时列表和主题时间线仍可用
+图谱全量重建后投影一致
+错误响应包含 error、message 和 traceId
+```
+
+## 21.3 前端
+
+```text
+国内 / 国际继续渲染未来事件静态日历
+events / topic-trace / event-graph 不向静态日历接口发送非法 region
+事件列表加载、筛选、分页、批量操作和详情抽屉
+任务状态轮询、失败提示和重新触发
+证据链展开后可回到原始材料位置
+Neo4j 降级提示
+大模型配置脱敏展示和连接测试
+所有展示时间使用浏览器本地时区
+```
+
+## 21.4 发布门禁
+
+```text
+后端 pytest 全量通过
+前端 Vitest 全量通过
+前端 npm run build 通过
+静态日历现有回归通过
+使用固定测试材料跑通：导入 → 抽取 → 证据 → 主题 → 关系 → 图谱投影
+关闭 Neo4j 后验证降级页面
+```
+
+---
+
+# 22. 第一阶段最终交付物
 
 第一阶段完成后，系统应具备：
 
@@ -2613,9 +3408,11 @@ System Settings 下新增：
 
 ---
 
-# 22. 总结
+# 23. 总结
 
 本次新增的事件洞察模块不是简单的信息展示页，而是 TrendInsight 投资研究能力的重要入口。
+
+现有国内 / 国际未来事件静态日历继续承担“将要发生什么”的观察职责。新增事件洞察独立承担“已经出现了哪些证据、主题如何发酵”的研究职责。
 
 第一阶段目标是：
 
