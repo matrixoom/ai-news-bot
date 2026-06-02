@@ -139,9 +139,10 @@
 
 1. 前端请求 `/api/frontend/modules/push`
 2. 更新配置：`PUT /api/push/config`
-3. 预览：`POST /api/push/preview`
-4. 触发：`POST /api/push/trigger`
-5. 服务写入 `.data/logs/push_center/...` 日志
+3. 预览：`POST /api/push/preview`，按 `market_chart_range` 使用本地历史重绘或主动刷新后重绘
+4. 宽基指数全量刷新：`POST /api/push/market-chart-refresh`，按当前范围抓取并按日期 `upsert`，不删除更早历史
+5. 触发：`POST /api/push/trigger`
+6. 服务写入 `.data/logs/push_center/...` 日志
 
 ## 5. 模块边界清单
 
