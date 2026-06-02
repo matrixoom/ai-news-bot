@@ -48,8 +48,10 @@ cmd /c npm run build
 ## 2. Dependency Graph
 
 ```text
+P1 Workspace shell and mock pages
+  └── Visible frontend review baseline
+
 P0 Technical validation
-  ├── P1 Workspace shell and mock pages
   ├── P2 SQLite migration foundation
   └── P5 Unified LLM runtime and settings
 
@@ -77,13 +79,14 @@ P1 through P9
 Recommended execution:
 
 ```text
-1. Execute P0 first.
-2. Execute P1 and P2 next.
-3. After P2, P3, P4, and P5 can proceed independently.
-4. Execute P6 after P3 and P5.
-5. Execute P7 after P6.
-6. Execute P8 and P9 in parallel after P7.
-7. Finish with P10.
+1. Execute P1 first to deliver the reviewable Mock frontend workbench.
+2. Execute P0 before adding database, graph, or LLM production dependencies.
+3. Execute P2 after P0.
+4. After P2, P3, P4, and P5 can proceed independently.
+5. Execute P6 after P3 and P5.
+6. Execute P7 after P6.
+7. Execute P8 and P9 in parallel after P7.
+8. Finish with P10.
 ```
 
 ---
@@ -93,7 +96,7 @@ Recommended execution:
 | Package | Outcome | Depends On | Can Run In Parallel With |
 | --- | --- | --- | --- |
 | P0 | Verified local technical choices | None | None |
-| P1 | New navigation and mock research pages | P0 | P2, P5 |
+| P1 | New navigation and four mock workbench pages | None | None |
 | P2 | Separate SQLite database and migrations | P0 | P1 |
 | P3 | Durable local jobs and material import | P2 | P4, P5 |
 | P4 | Live event list workbench | P2 | P3, P5 |
@@ -157,7 +160,7 @@ docs: record event insight technical validation
 
 ## 5. P1: Workspace Shell And Mock Pages
 
-**Objective:** Add the three research workspace entries while keeping the two calendar tabs unchanged.
+**Objective:** Add the three research workspace entries and a display-only LLM settings page while keeping the two calendar tabs unchanged.
 
 **Scope:**
 
@@ -167,6 +170,7 @@ Add Event Outlook > 主题溯源.
 Add Event Outlook > 事件关系图.
 Route domestic and international to the existing timeline canvas.
 Route the three new tabs to mock-backed research page shells.
+Add a display-only Settings > 大模型配置 mock workspace.
 Do not call new backend APIs yet.
 ```
 
@@ -179,8 +183,11 @@ Do not call new backend APIs yet.
 - Create: `frontend/src/features/event-insight/components/event-list-workspace.tsx`
 - Create: `frontend/src/features/event-insight/components/topic-trace-workspace.tsx`
 - Create: `frontend/src/features/event-insight/components/event-graph-workspace.tsx`
+- Modify: `frontend/src/pages/settings-page.tsx`
+- Create: `frontend/src/features/settings/components/llm-settings-workspace.tsx`
 - Modify: `frontend/src/features/event-outlook/__tests__/event-outlook-page.test.tsx`
 - Modify: `frontend/src/app/__tests__/router-shell.test.tsx`
+- Modify: `frontend/src/features/settings/__tests__/settings-page.test.tsx`
 - Modify: `CHANGELOG.md`
 
 **Key design rule:**
@@ -195,7 +202,7 @@ events, topic-trace, and event-graph render event-insight components without inv
 
 ```powershell
 cd frontend
-cmd /c npm run test -- src/features/event-outlook/__tests__/event-outlook-page.test.tsx src/app/__tests__/router-shell.test.tsx --run
+cmd /c npm run test -- src/features/event-outlook/__tests__/event-outlook-page.test.tsx src/features/event-insight/__tests__/event-insight-workspaces.test.tsx src/features/settings/__tests__/settings-page.test.tsx src/app/__tests__/router-shell.test.tsx --run
 cmd /c npm run build
 ```
 
@@ -205,7 +212,7 @@ cmd /c npm run build
 feat: add event insight workspace shells
 ```
 
-**Stop condition:** Pages contain deterministic mock content only. Do not create SQLite tables or LLM calls.
+**Stop condition:** Pages contain deterministic mock content only. Settings actions are disabled. Do not create SQLite tables or LLM calls.
 
 ---
 
@@ -846,8 +853,8 @@ Checkpoint F: P10
   Confirm release readiness.
 ```
 
-The first implementation plan to write after roadmap approval is:
+The first implementation plan is:
 
 ```text
-docs/superpowers/plans/2026-06-02-event-insight-p0-technical-validation.md
+docs/superpowers/plans/2026-06-02-event-insight-i1-frontend-workbench.md
 ```
