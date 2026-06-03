@@ -1,0 +1,33 @@
+import type { LlmProviderConfig, LlmProviderPayload, LlmTaskConfig } from "../model/llm-settings.types";
+
+/** 拉取脱敏后的 LLM provider 列表。 */
+export async function getLlmProviders(signal?: AbortSignal): Promise<{ providers: LlmProviderConfig[] }> {
+  const response = await fetch("/api/system/llm/providers", { signal });
+  if (!response.ok) throw new Error("LLM providers request failed");
+  return (await response.json()) as { providers: LlmProviderConfig[] };
+}
+
+/** 创建 LLM provider 配置。 */
+export async function createLlmProvider(payload: LlmProviderPayload): Promise<{ provider: LlmProviderConfig }> {
+  const response = await fetch("/api/system/llm/providers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("LLM provider create request failed");
+  return (await response.json()) as { provider: LlmProviderConfig };
+}
+
+/** 测试 LLM provider 连接。 */
+export async function testLlmProvider(providerId: number): Promise<{ ok: boolean; detail: string }> {
+  const response = await fetch(`/api/system/llm/providers/${providerId}/test`, { method: "POST" });
+  if (!response.ok) throw new Error("LLM provider test request failed");
+  return (await response.json()) as { ok: boolean; detail: string };
+}
+
+/** 拉取 LLM 任务映射列表。 */
+export async function getLlmTaskConfigs(signal?: AbortSignal): Promise<{ taskConfigs: LlmTaskConfig[] }> {
+  const response = await fetch("/api/system/llm/task-configs", { signal });
+  if (!response.ok) throw new Error("LLM task configs request failed");
+  return (await response.json()) as { taskConfigs: LlmTaskConfig[] };
+}

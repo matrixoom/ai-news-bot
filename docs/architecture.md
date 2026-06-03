@@ -202,6 +202,7 @@ Event Insight P2 已建立独立 SQLite 地基：
   duplicate_event_candidate
   processing_job / processing_job_attempt
   graph_sync_outbox / graph_projection_state
+  llm_provider_config / llm_task_config / llm_call_log
 ```
 
 边界规则：
@@ -248,6 +249,40 @@ Repository:
 2. 文件导入只保存受控相对路径，禁止路径穿越。
 3. P3 创建 parse_document 任务，但不执行事件抽取、Embedding、聚类或图谱同步。
 4. 后续 worker 可以通过 claim_next_job 获取带租约的任务，超时后允许恢复领取。
+```
+
+P5 新增统一 LLM Runtime：
+
+```text
+Controller:
+  src/app/web/llm_settings_routes.py
+  - /api/system/llm/providers*
+  - /api/system/llm/task-configs*
+
+Service:
+  src/services/llm_config_service.py
+  - 保存 provider 配置
+  - 本地加密 API Key
+  - 对前端响应脱敏
+  - 阻止禁用已被任务映射引用的 provider
+
+  src/services/llm_task_router.py
+  - 按 task_type 解析 provider/model/temperature/max_tokens
+  - 后续 P6/P8/P9 必须通过该路由调用模型
+
+Provider:
+  src/llm_providers/openai_compatible_provider.py
+  - 统一 OpenAI-compatible Chat Completions / Embeddings 调用
+  - ArkResearchProvider 也通过该 factory 构建 client
+```
+
+安全边界：
+
+```text
+1. API Key 只在写入请求中出现，列表/详情/测试响应不返回明文。
+2. `llm_provider_config.encrypted_api_key` 存储本地加密密文。
+3. 禁止在日志中输出密钥或完整请求头。
+4. P5 不包含事件抽取 prompt，只建立模型配置和任务路由。
 ```
 
 ## 7. 状态与降级策略

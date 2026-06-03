@@ -7,6 +7,7 @@ from .deepseek_provider import DeepSeekProvider
 from .gemini_provider import GeminiProvider
 from .grok_provider import GrokProvider
 from .openai_provider import OpenAIProvider
+from .openai_compatible_provider import OpenAICompatibleProvider, create_openai_compatible_provider
 
 
 def get_llm_provider(provider_name: str, **kwargs) -> BaseLLMProvider:
@@ -29,6 +30,7 @@ def get_llm_provider(provider_name: str, **kwargs) -> BaseLLMProvider:
         'gemini': GeminiProvider,
         'grok': GrokProvider,
         'openai': OpenAIProvider,
+        'openai_compatible': OpenAICompatibleProvider,
     }
     
     provider_class = providers.get(provider_name.lower())
@@ -48,5 +50,7 @@ __all__ = [
     'GeminiProvider',
     'GrokProvider',
     'OpenAIProvider',
+    'OpenAICompatibleProvider',
+    'create_openai_compatible_provider',
     'get_llm_provider',
 ]

@@ -11,6 +11,8 @@ type WorkbenchPayloads = {
   macroChart: Record<string, unknown>;
   eventOutlook: Record<string, unknown>;
   eventInsight: Record<string, unknown>;
+  llmProviders: Record<string, unknown>;
+  llmTaskConfigs: Record<string, unknown>;
 };
 
 type WorkbenchOverrides = Partial<WorkbenchPayloads>;
@@ -603,6 +605,39 @@ export const eventInsightPayload: WorkbenchPayloads["eventInsight"] = {
   ],
 };
 
+export const llmProvidersPayload: WorkbenchPayloads["llmProviders"] = {
+  providers: [
+    {
+      id: 1,
+      name: "主分析模型",
+      providerType: "openai_compatible",
+      baseUrl: "https://api.example.com/v1",
+      modelName: "analysis-model",
+      timeoutSeconds: 90,
+      supportsStructuredOutput: true,
+      supportsEmbeddings: false,
+      enabled: true,
+      apiKeyConfigured: true,
+      apiKeyPreview: "sk-...alue",
+    },
+  ],
+};
+
+export const llmTaskConfigsPayload: WorkbenchPayloads["llmTaskConfigs"] = {
+  taskConfigs: [
+    {
+      taskType: "topic_summary",
+      providerId: 1,
+      providerName: "主分析模型",
+      providerType: "openai_compatible",
+      modelName: "analysis-model",
+      temperature: 0.2,
+      maxTokens: 800,
+      enabled: true,
+    },
+  ],
+};
+
 const employmentMacroDataPayload: WorkbenchPayloads["macroData"] = {
   generated_at: "2026-05-01T08:00:00Z",
   module: {
@@ -666,10 +701,13 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     macroChart: overrides.macroChart ?? macroChartPayload,
     eventOutlook: overrides.eventOutlook ?? eventOutlookPayload,
     eventInsight: overrides.eventInsight ?? eventInsightPayload,
+    llmProviders: overrides.llmProviders ?? llmProvidersPayload,
+    llmTaskConfigs: overrides.llmTaskConfigs ?? llmTaskConfigsPayload,
   };
 
   let pushState: any = clone(payloads.push);
   let eventOutlookState: any = clone(payloads.eventOutlook);
+  let llmProvidersState: any = clone(payloads.llmProviders);
 
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -678,6 +716,40 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
 
     if (url.pathname === "/api/frontend/modules/push") {
       return jsonResponse(pushState);
+    }
+
+    if (url.pathname === "/api/system/llm/providers" && method === "GET") {
+      return jsonResponse(llmProvidersState);
+    }
+
+    if (url.pathname === "/api/system/llm/providers" && method === "POST") {
+      const body = await readJsonBody(input, init?.body);
+      const apiKey = String(body.apiKey ?? "");
+      const provider = {
+        id: llmProvidersState.providers.length + 1,
+        name: body.name,
+        providerType: body.providerType ?? "openai_compatible",
+        baseUrl: body.baseUrl ?? "",
+        modelName: body.modelName,
+        timeoutSeconds: body.timeoutSeconds ?? 60,
+        supportsStructuredOutput: true,
+        supportsEmbeddings: false,
+        enabled: true,
+        apiKeyConfigured: Boolean(apiKey),
+        apiKeyPreview: apiKey ? `${apiKey.slice(0, 3)}...${apiKey.slice(-4)}` : "",
+      };
+      llmProvidersState = { providers: [...llmProvidersState.providers, provider] };
+      return jsonResponse({ provider });
+    }
+
+    if (url.pathname.match(/^\/api\/system\/llm\/providers\/\d+\/test$/) && method === "POST") {
+      const providerId = Number(url.pathname.split("/").at(-2));
+      const provider = llmProvidersState.providers.find((item: any) => item.id === providerId);
+      return jsonResponse({ ok: true, detail: `${provider?.name ?? "provider"} connected` });
+    }
+
+    if (url.pathname === "/api/system/llm/task-configs" && method === "GET") {
+      return jsonResponse(payloads.llmTaskConfigs);
     }
 
     if (url.pathname === "/api/frontend/modules/event-insight/events" && method === "GET") {

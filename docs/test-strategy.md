@@ -132,7 +132,26 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 8. Event Insight 与 Event Outlook 静态日历接口隔离。
 ```
 
-### 3.8 前端改动
+### 3.8 LLM Runtime 与 Settings 改动
+
+```powershell
+uv run python -m pytest tests/test_llm_task_router.py tests/test_llm_settings_api.py tests/test_event_outlook_timeline.py -q
+cmd /c npm --prefix frontend run test -- src/features/settings/__tests__/settings-page.test.tsx --run
+```
+
+覆盖点：
+
+```text
+1. API Key 加密入库，SQLite 中不出现明文。
+2. provider 列表和保存响应只返回 apiKeyConfigured/apiKeyPreview。
+3. LlmTaskRouter 按 task_type 调用配置的 provider 和模型参数。
+4. 被任务映射引用的 provider 禁用返回 409 provider_in_use。
+5. Settings 页面从真实 API 加载 provider 与任务映射。
+6. Settings 页面保存新 provider 后不展示明文密钥。
+7. ArkResearchProvider 保持 Event Outlook 静态日历契约不变。
+```
+
+### 3.9 前端改动
 
 在 `frontend/` 目录执行：
 

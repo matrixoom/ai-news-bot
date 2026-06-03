@@ -14,7 +14,13 @@ logger = setup_logger(__name__)
 class DeepSeekProvider(BaseLLMProvider):
     """DeepSeek LLM provider using OpenAI-compatible API"""
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+        timeout_seconds: int = 60,
+    ):
         """
         Initialize DeepSeek provider.
 
@@ -31,12 +37,13 @@ class DeepSeekProvider(BaseLLMProvider):
                 "DeepSeek API key must be provided or set in DEEPSEEK_API_KEY environment variable"
             )
 
-        super().__init__(api_key=api_key, model=model or self.default_model)
+        super().__init__(api_key=api_key, model=model or self.default_model, base_url=base_url, timeout_seconds=timeout_seconds)
 
         # Initialize OpenAI client with DeepSeek base URL
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url="https://api.deepseek.com"
+            base_url=base_url or "https://api.deepseek.com",
+            timeout=timeout_seconds,
         )
         logger.info(f"DeepSeek provider initialized with model: {self.model}")
 
