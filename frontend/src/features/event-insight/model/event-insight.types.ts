@@ -24,6 +24,86 @@ export type EventInsightEvent = {
   evidence: EventInsightEvidence[];
 };
 
+export type EventInsightTopic = {
+  id: number;
+  name: string;
+  summary?: string;
+  lifecycleStage?: string;
+  heatScore?: number;
+  roleInTopic?: string;
+  relevanceScore?: number;
+  manualLocked?: boolean;
+};
+
+export type EventInsightApiEvidence = {
+  id: number;
+  rawDocumentId?: number;
+  excerpt: string;
+  role?: string;
+  evidenceLevel?: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+  startOffset?: number;
+  endOffset?: number;
+};
+
+export type EventInsightApiEvent = {
+  id: number;
+  title: string;
+  summary: string;
+  eventTime: string;
+  publishedAt?: string | null;
+  eventType: string;
+  importanceScore?: number;
+  noveltyScore?: number;
+  marketRelevanceScore?: number;
+  confidenceScore: number;
+  evidenceLevel?: string;
+  analysisStatus?: string;
+  graphStatus?: string;
+  manualStatus: string;
+  sourceMethod?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  topics?: EventInsightTopic[];
+  evidence?: EventInsightApiEvidence[];
+};
+
+export type EventInsightEventsPayload = {
+  traceId: string;
+  items: EventInsightApiEvent[];
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+export type EventInsightEventDetailPayload = {
+  traceId: string;
+  event: EventInsightApiEvent;
+};
+
+export type EventInsightEventsQuery = {
+  keyword?: string;
+  status?: "active" | "ignored" | "archived" | "all";
+  topicId?: number;
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+};
+
+export type EventInsightBatchActionPayload = {
+  eventIds: number[];
+  action: "ignore" | "link_topic";
+  params?: Record<string, unknown>;
+};
+
+export type EventInsightBatchActionResult = {
+  traceId: string;
+  succeededEventIds: number[];
+  failedItems: Array<{ eventId: number; error: string }>;
+};
+
 export type TopicTraceMetric = {
   label: string;
   value: string;

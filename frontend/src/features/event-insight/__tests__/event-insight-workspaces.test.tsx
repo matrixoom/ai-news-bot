@@ -1,22 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { EventGraphWorkspace } from "../components/event-graph-workspace";
-import { EventListWorkspace } from "../components/event-list-workspace";
 import { TopicTraceWorkspace } from "../components/topic-trace-workspace";
 
 describe("Event insight mock workspaces", () => {
-  it("renders the event list and lets the user inspect another event", () => {
-    render(<EventListWorkspace />);
-
-    expect(screen.getByRole("heading", { name: "事件列表" })).toBeInTheDocument();
-    expect(screen.getAllByText("HBM4 量产节奏提前，先进封装产能继续吃紧")).toHaveLength(2);
-    expect(screen.getByRole("heading", { name: "事件详情" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "查看 欧洲云服务厂商扩大主权云采购规模" }));
-
-    expect(screen.getByRole("heading", { name: "欧洲云服务厂商扩大主权云采购规模" })).toBeInTheDocument();
-  });
-
   it("renders the topic trace metrics, current stage, and timeline", () => {
     render(<TopicTraceWorkspace />);
 

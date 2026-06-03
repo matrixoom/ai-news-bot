@@ -112,7 +112,27 @@ uv run python -m pytest tests/test_event_insight_jobs.py tests/test_event_insigh
 8. 新增 Event Insight API 不影响 Event Outlook 静态日历。
 ```
 
-### 3.7 前端改动
+### 3.7 Event Insight 事件工作台改动
+
+```powershell
+uv run python -m pytest tests/test_event_insight_api.py tests/test_event_insight_repository.py tests/test_event_outlook_timeline.py -q
+cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/event-list-workspace.test.tsx src/features/event-outlook/__tests__/event-outlook-page.test.tsx --run
+```
+
+覆盖点：
+
+```text
+1. 事件列表支持关键字、状态、主题、分页和排序基础参数。
+2. 事件详情返回主题归属与证据链。
+3. 人工编辑写入 event_field_override，不覆盖原始事实。
+4. 忽略事件会从默认列表移除，并记录操作日志。
+5. 主题创建、事件关联主题和批量操作返回稳定契约。
+6. 批量操作采用部分成功，不因单条失败吞掉成功项。
+7. 前端事件列表从真实 Event Insight API 加载，覆盖 loading、empty、选择详情。
+8. Event Insight 与 Event Outlook 静态日历接口隔离。
+```
+
+### 3.8 前端改动
 
 在 `frontend/` 目录执行：
 

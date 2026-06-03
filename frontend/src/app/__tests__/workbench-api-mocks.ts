@@ -10,6 +10,7 @@ type WorkbenchPayloads = {
   macroData: Record<string, unknown>;
   macroChart: Record<string, unknown>;
   eventOutlook: Record<string, unknown>;
+  eventInsight: Record<string, unknown>;
 };
 
 type WorkbenchOverrides = Partial<WorkbenchPayloads>;
@@ -565,6 +566,43 @@ export const eventOutlookPayload: WorkbenchPayloads["eventOutlook"] = {
   ],
 };
 
+export const eventInsightPayload: WorkbenchPayloads["eventInsight"] = {
+  traceId: "event-insight-events-mock",
+  page: 1,
+  pageSize: 20,
+  total: 2,
+  items: [
+    {
+      id: 1,
+      title: "HBM4 量产节奏提前",
+      summary: "先进封装产能继续吃紧，AI 加速卡供应链进入新一轮扩产窗口。",
+      eventTime: "2026-05-10T09:00:00+08:00",
+      eventType: "capacity",
+      confidenceScore: 0.86,
+      evidenceLevel: "B",
+      manualStatus: "active",
+      analysisStatus: "extracted",
+      graphStatus: "pending",
+      sourceMethod: "manual",
+      topics: [{ id: 1, name: "AI 存储与封装", roleInTopic: "key_catalyst" }],
+    },
+    {
+      id: 2,
+      title: "欧洲云服务厂商扩大主权云采购规模",
+      summary: "主权云采购规模上修，带动本地数据中心与安全合规方案需求。",
+      eventTime: "2026-05-11T10:00:00+08:00",
+      eventType: "supply_demand",
+      confidenceScore: 0.74,
+      evidenceLevel: "C",
+      manualStatus: "active",
+      analysisStatus: "extracted",
+      graphStatus: "pending",
+      sourceMethod: "manual",
+      topics: [],
+    },
+  ],
+};
+
 const employmentMacroDataPayload: WorkbenchPayloads["macroData"] = {
   generated_at: "2026-05-01T08:00:00Z",
   module: {
@@ -627,6 +665,7 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     macroData: overrides.macroData ?? macroDataPayload,
     macroChart: overrides.macroChart ?? macroChartPayload,
     eventOutlook: overrides.eventOutlook ?? eventOutlookPayload,
+    eventInsight: overrides.eventInsight ?? eventInsightPayload,
   };
 
   let pushState: any = clone(payloads.push);
@@ -639,6 +678,32 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
 
     if (url.pathname === "/api/frontend/modules/push") {
       return jsonResponse(pushState);
+    }
+
+    if (url.pathname === "/api/frontend/modules/event-insight/events" && method === "GET") {
+      return jsonResponse(payloads.eventInsight);
+    }
+
+    if (url.pathname.startsWith("/api/frontend/modules/event-insight/events/") && method === "GET") {
+      const eventId = Number(url.pathname.split("/").pop());
+      const events = payloads.eventInsight.items as Array<Record<string, unknown>>;
+      const event = events.find((item) => Number(item.id) === eventId) ?? events[0];
+      return jsonResponse({
+        traceId: "event-insight-event-mock",
+        event: {
+          ...event,
+          evidence: [
+            {
+              id: 1,
+              excerpt: "AI 加速卡供应链进入新一轮扩产窗口。",
+              sourceTitle: "Event Insight Mock",
+              sourceUrl: "https://example.com/event-insight",
+              evidenceLevel: "B",
+              role: "primary",
+            },
+          ],
+        },
+      });
     }
 
     if (url.pathname === "/api/frontend/modules/event-outlook") {
