@@ -577,6 +577,91 @@ Event Insight 事件工作台用于管理已经发生或正在被研究的事实
 
 失败：`503`，`frontend_push_module_unavailable`
 
+### 4.9 System LLM Settings 接口
+
+用途：统一管理事件洞察后续抽取、聚类、摘要和关系判断使用的模型配置。接口不会返回明文 API Key。
+
+#### 4.9.1 `GET /api/system/llm/providers`
+
+成功：`200`
+
+```json
+{
+  "providers": [
+    {
+      "id": 1,
+      "name": "主分析模型",
+      "providerType": "openai_compatible",
+      "baseUrl": "https://api.example.com/v1",
+      "modelName": "analysis-model",
+      "timeoutSeconds": 90,
+      "supportsStructuredOutput": true,
+      "supportsEmbeddings": false,
+      "enabled": true,
+      "apiKeyConfigured": true,
+      "apiKeyPreview": "sk-...alue"
+    }
+  ]
+}
+```
+
+#### 4.9.2 `POST /api/system/llm/providers`
+
+请求体：
+
+```json
+{
+  "name": "主分析模型",
+  "providerType": "openai_compatible",
+  "baseUrl": "https://api.example.com/v1",
+  "modelName": "analysis-model",
+  "apiKey": "sk-***",
+  "timeoutSeconds": 90
+}
+```
+
+成功：`201`，返回脱敏后的 `{ "provider": { ... } }`。
+
+失败：`400`，`invalid_llm_provider_payload`
+
+#### 4.9.3 `PUT /api/system/llm/providers/{id}`
+
+用途：更新 provider 配置；请求体缺少 `apiKey` 时保留旧密钥。
+
+成功：`200`
+
+失败：
+
+- `400`：`invalid_llm_provider_payload`
+- `404`：`llm_provider_not_found`
+
+#### 4.9.4 `POST /api/system/llm/providers/{id}/disable`
+
+用途：禁用 provider。若 provider 被任务映射引用，返回 `409 provider_in_use`。
+
+#### 4.9.5 `POST /api/system/llm/providers/{id}/test`
+
+用途：测试 provider 连接。成功返回 `{ "ok": true, "detail": "..." }`。
+
+#### 4.9.6 `GET /api/system/llm/task-configs`
+
+用途：读取任务到 provider/model 的映射。
+
+#### 4.9.7 `PUT /api/system/llm/task-configs/{taskType}`
+
+请求体：
+
+```json
+{
+  "providerId": 1,
+  "modelName": "analysis-model",
+  "temperature": 0.2,
+  "maxTokens": 800
+}
+```
+
+成功：`200`，返回 `{ "taskConfig": { ... } }`。
+
 ## 5. Push 控制接口
 
 ### 5.1 `PUT /api/push/config`

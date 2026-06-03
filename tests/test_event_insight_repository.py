@@ -21,7 +21,7 @@ class EventInsightRepositoryTests(unittest.TestCase):
         table_names = reopened.list_table_names()
         migrations = reopened.list_applied_migrations()
 
-        self.assertEqual(migrations, ["001_event_insight_core"])
+        self.assertEqual(migrations, ["001_event_insight_core", "002_llm_runtime"])
         self.assertIn("schema_migration", table_names)
         self.assertIn("scan_batch", table_names)
         self.assertIn("analysis_run", table_names)
@@ -46,7 +46,10 @@ class EventInsightRepositoryTests(unittest.TestCase):
         self.assertIn("processing_job_attempt", table_names)
         self.assertIn("graph_sync_outbox", table_names)
         self.assertIn("graph_projection_state", table_names)
-        self.assertEqual(repository.list_applied_migrations(), ["001_event_insight_core"])
+        self.assertIn("llm_provider_config", table_names)
+        self.assertIn("llm_task_config", table_names)
+        self.assertIn("llm_call_log", table_names)
+        self.assertEqual(repository.list_applied_migrations(), ["001_event_insight_core", "002_llm_runtime"])
 
     def test_connections_enable_foreign_keys_and_wal(self) -> None:
         """校验仓储连接默认启用外键约束和 WAL。"""

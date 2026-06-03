@@ -15,9 +15,9 @@ from urllib.parse import quote_plus, urljoin
 from zoneinfo import ZoneInfo
 
 import feedparser
-from openai import OpenAI
 import requests
 
+from ..llm_providers.openai_compatible_provider import create_openai_compatible_provider
 from ..domain.external_data import (
     ConfidenceLevel,
     EventHorizon,
@@ -2064,8 +2064,15 @@ class ArkResearchProvider:
             raise ProviderConfigurationError(
                 "实时事件研究需要配置 ARK_API_KEY/VOLCENGINE_ARK_API_KEY 和 ARK_MODEL/VOLCENGINE_ARK_MODEL。"
             )
-        self._client = OpenAI(api_key=api_key, base_url=base_url)
-        self._model = model
+        self._provider = create_openai_compatible_provider(
+            {
+                "apiKey": api_key,
+                "modelName": model,
+                "baseUrl": base_url,
+                "providerType": "ark",
+                "timeoutSeconds": 60,
+            }
+        )
 
     def collect_outlook(
         self,
@@ -2075,15 +2082,14 @@ class ArkResearchProvider:
         as_of: date,
     ) -> Sequence[ResearchFinding]:
         prompt = self._build_prompt(horizon=horizon, topics=topics, as_of=as_of)
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=[
+        content = self._provider.generate(
+            [
                 {"role": "system", "content": "You are a policy and macro research assistant. Return strict JSON only."},
                 {"role": "user", "content": prompt},
             ],
+            max_tokens=2000,
             temperature=0.2,
         )
-        content = response.choices[0].message.content or "[]"
         payload = json.loads(content)
         findings: list[ResearchFinding] = []
         for item in payload:

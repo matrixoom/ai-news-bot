@@ -10,6 +10,7 @@ from typing import Iterator
 
 
 CORE_MIGRATION_VERSION = "001_event_insight_core"
+LLM_RUNTIME_MIGRATION_VERSION = "002_llm_runtime"
 
 
 def utc_now_iso() -> str:
@@ -54,6 +55,16 @@ class EventInsightMigrationService:
                     VALUES (?, ?)
                     """,
                     (CORE_MIGRATION_VERSION, utc_now_iso()),
+                )
+            applied = self._applied_versions(connection)
+            if LLM_RUNTIME_MIGRATION_VERSION not in applied:
+                connection.executescript(_llm_runtime_schema_sql())
+                connection.execute(
+                    """
+                    INSERT INTO schema_migration(version, applied_at)
+                    VALUES (?, ?)
+                    """,
+                    (LLM_RUNTIME_MIGRATION_VERSION, utc_now_iso()),
                 )
 
     def _ensure_migration_table(self, connection: sqlite3.Connection) -> None:
@@ -462,4 +473,60 @@ def _core_schema_sql() -> str:
     CREATE INDEX IF NOT EXISTS idx_event_relation_target ON event_relation(target_event_id);
     CREATE INDEX IF NOT EXISTS idx_processing_job_status_next_run ON processing_job(status, next_run_at);
     CREATE INDEX IF NOT EXISTS idx_graph_sync_outbox_status ON graph_sync_outbox(status, id);
+    """
+
+
+def _llm_runtime_schema_sql() -> str:
+    """返回 002_llm_runtime 的建表 SQL。
+
+    Returns:
+        可传给 `executescript` 的完整 SQL。
+    """
+
+    return """
+    CREATE TABLE IF NOT EXISTS llm_provider_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        provider_type TEXT NOT NULL,
+        base_url TEXT NOT NULL DEFAULT '',
+        model_name TEXT NOT NULL,
+        encrypted_api_key TEXT NOT NULL DEFAULT '',
+        timeout_seconds INTEGER NOT NULL DEFAULT 60,
+        supports_structured_output INTEGER NOT NULL DEFAULT 1,
+        supports_embeddings INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        disabled_at TEXT,
+        CHECK (enabled IN (0, 1)),
+        CHECK (timeout_seconds > 0)
+    );
+
+    CREATE TABLE IF NOT EXISTS llm_task_config (
+        task_type TEXT PRIMARY KEY,
+        provider_config_id INTEGER NOT NULL REFERENCES llm_provider_config(id) ON DELETE RESTRICT,
+        model_name TEXT NOT NULL DEFAULT '',
+        temperature REAL NOT NULL DEFAULT 0.2,
+        max_tokens INTEGER NOT NULL DEFAULT 2000,
+        updated_at TEXT NOT NULL,
+        CHECK (temperature >= 0 AND temperature <= 2),
+        CHECK (max_tokens > 0)
+    );
+
+    CREATE TABLE IF NOT EXISTS llm_call_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_type TEXT NOT NULL,
+        provider_config_id INTEGER REFERENCES llm_provider_config(id) ON DELETE SET NULL,
+        model_name TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        latency_ms INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        CHECK (status IN ('succeeded', 'failed'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_llm_provider_enabled ON llm_provider_config(enabled, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_llm_call_log_task_created ON llm_call_log(task_type, created_at);
     """

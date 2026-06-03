@@ -13,12 +13,15 @@ from ...services.event_insight_job_service import EventInsightJobService
 from ...services.event_insight_repository import EventInsightRepository
 from ...services.event_insight_service import EventInsightService
 from ...services.events_outlook_service import EventOutlookValidationError, EventsOutlookService
+from ...services.llm_config_repository import LlmConfigRepository
+from ...services.llm_config_service import LlmConfigService
 from ...services.macro_data_service import MacroDataService, MacroDataValidationError
 from ...services.market_data_service import MarketDataService
 from ...services.market_data_repository import MarketDataValidationError
 from ...services.push_center_service import PushCenterService
 from ...providers.contracts import ProviderAvailability, ProviderStatus
 from .event_insight_routes import register_event_insight_routes
+from .llm_settings_routes import register_llm_settings_routes
 from .spa_assets import WORKBENCH_ROUTES, build_spa_unavailable_response, load_spa_assets
 
 logger = logging.getLogger(__name__)
@@ -90,6 +93,7 @@ def create_fastapi_app(
     event_insight_import_service: EventInsightImportService | None = None,
     event_insight_job_service: EventInsightJobService | None = None,
     event_insight_service: EventInsightService | None = None,
+    llm_config_service: LlmConfigService | None = None,
 ) -> FastAPI:
     """创建开发 Web 服务使用的 FastAPI 应用。
 
@@ -101,6 +105,7 @@ def create_fastapi_app(
         event_insight_import_service: Event Insight 材料导入服务。
         event_insight_job_service: Event Insight 任务状态服务。
         event_insight_service: Event Insight 事件工作台服务。
+        llm_config_service: LLM 配置服务。
 
     Returns:
         已注册前端工作台接口和 SPA 路由的 FastAPI 应用。
@@ -122,6 +127,7 @@ def create_fastapi_app(
         job_service=event_insight_job,
     )
     event_insight_events = event_insight_service or EventInsightService(event_insight_job.repository)
+    llm_service = llm_config_service or LlmConfigService(LlmConfigRepository(event_insight_job.repository.db_path))
     app = FastAPI(
         title="Finance And Policy Intelligence Dashboard",
         docs_url=None,
@@ -348,6 +354,7 @@ def create_fastapi_app(
         job_service=event_insight_job,
         event_service=event_insight_events,
     )
+    register_llm_settings_routes(app, llm_config_service=llm_service)
 
     @app.put("/api/push/config")
     def update_push_config(payload: dict | None = None) -> JSONResponse:
