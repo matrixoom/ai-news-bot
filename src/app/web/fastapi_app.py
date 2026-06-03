@@ -11,6 +11,7 @@ from ...services.dashboard_service import DashboardService
 from ...services.event_insight_import_service import EventInsightImportService
 from ...services.event_insight_job_service import EventInsightJobService
 from ...services.event_insight_repository import EventInsightRepository
+from ...services.event_insight_service import EventInsightService
 from ...services.events_outlook_service import EventOutlookValidationError, EventsOutlookService
 from ...services.macro_data_service import MacroDataService, MacroDataValidationError
 from ...services.market_data_service import MarketDataService
@@ -88,6 +89,7 @@ def create_fastapi_app(
     event_outlook_service: EventsOutlookService | None = None,
     event_insight_import_service: EventInsightImportService | None = None,
     event_insight_job_service: EventInsightJobService | None = None,
+    event_insight_service: EventInsightService | None = None,
 ) -> FastAPI:
     """创建开发 Web 服务使用的 FastAPI 应用。
 
@@ -98,6 +100,7 @@ def create_fastapi_app(
         event_outlook_service: Event Outlook 时间轴服务。
         event_insight_import_service: Event Insight 材料导入服务。
         event_insight_job_service: Event Insight 任务状态服务。
+        event_insight_service: Event Insight 事件工作台服务。
 
     Returns:
         已注册前端工作台接口和 SPA 路由的 FastAPI 应用。
@@ -118,6 +121,7 @@ def create_fastapi_app(
         repository=event_insight_job.repository,
         job_service=event_insight_job,
     )
+    event_insight_events = event_insight_service or EventInsightService(event_insight_job.repository)
     app = FastAPI(
         title="Finance And Policy Intelligence Dashboard",
         docs_url=None,
@@ -342,6 +346,7 @@ def create_fastapi_app(
         app,
         import_service=event_insight_import,
         job_service=event_insight_job,
+        event_service=event_insight_events,
     )
 
     @app.put("/api/push/config")

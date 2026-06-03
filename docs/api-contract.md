@@ -435,7 +435,135 @@ Event Insight 使用独立前缀，不复用 Event Outlook 静态日历接口：
 - `404`：`event_insight_job_not_found`
 - `503`：`event_insight_job_status_failed`
 
-### 4.7 `GET /api/frontend/modules/push`
+### 4.7 Event Insight 事件工作台接口
+
+Event Insight 事件工作台用于管理已经发生或正在被研究的事实事件，不表示未来日历。Event Outlook 仍保留为静态未来事件时间线，两者不共用数据表和接口。
+
+#### 4.7.1 `GET /api/frontend/modules/event-insight/events`
+
+用途：分页返回结构化事件列表，默认仅返回 `manualStatus=active` 且未归档事件。
+
+查询参数：
+
+- `keyword`：可选，标题/摘要关键字。
+- `status`：`active | ignored | archived | all`，默认 `active`。
+- `topicId`：可选，按主题筛选。
+- `page` / `pageSize`：默认 `1 / 20`，`pageSize` 最大 100。
+- `sortBy` / `sortOrder`：默认 `event_time / desc`。
+
+成功：`200`
+
+```json
+{
+  "traceId": "event-insight-events-abc123",
+  "items": [
+    {
+      "id": 1,
+      "title": "存储芯片报价上调",
+      "summary": "DRAM 合约价上涨，AI 服务器需求支撑内存涨价。",
+      "eventTime": "2026-05-16T10:30:00+08:00",
+      "eventType": "price_change",
+      "confidenceScore": 0.82,
+      "manualStatus": "active"
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "total": 1
+}
+```
+
+#### 4.7.2 `GET /api/frontend/modules/event-insight/events/{eventId}`
+
+用途：返回事件详情、主题归属和证据链。
+
+成功：`200`，返回 `{ "traceId": "...", "event": { "evidence": [], "topics": [] } }`
+
+失败：`404`，`event_insight_event_not_found`
+
+#### 4.7.3 `PUT /api/frontend/modules/event-insight/events/{eventId}`
+
+用途：写入人工字段覆盖。接口不会改写原始事实字段，而是追加 `event_field_override` 和 `event_operation_log`。
+
+请求体：
+
+```json
+{
+  "title": "DRAM 合约价延续上涨",
+  "summary": "多来源确认内存涨价。",
+  "eventType": "price_change",
+  "confidenceScore": 0.9,
+  "reason": "人工确认"
+}
+```
+
+成功：`200`，返回更新后的展示事件。
+
+失败：
+
+- `400`：`invalid_event_insight_event_payload`
+- `404`：`event_insight_event_not_found`
+
+#### 4.7.4 `POST /api/frontend/modules/event-insight/events/{eventId}/ignore`
+
+用途：将事件标记为 `ignored`，默认列表不再返回该事件。
+
+请求体：`{ "reason": "重复新闻或低价值噪声" }`
+
+成功：`200`
+
+失败：`404`，`event_insight_event_not_found`
+
+#### 4.7.5 `POST /api/frontend/modules/event-insight/topics`
+
+用途：创建或复用同名主题。
+
+请求体：`{ "name": "内存涨价", "summary": "围绕存储芯片供需变化。" }`
+
+成功：`201`
+
+失败：`400`，`invalid_event_insight_topic_payload`
+
+#### 4.7.6 `POST /api/frontend/modules/event-insight/events/{eventId}/link-topic`
+
+用途：将事件关联到主题。
+
+请求体：`{ "topicId": 1, "roleInTopic": "key_catalyst" }`
+
+成功：`200`
+
+失败：
+
+- `400`：`invalid_event_insight_topic_link_payload`
+- `404`：`event_insight_event_or_topic_not_found`
+
+#### 4.7.7 `POST /api/frontend/modules/event-insight/events/batch-action`
+
+用途：批量忽略或批量关联主题。接口采用部分成功语义，单条失败不会回滚其他事件。
+
+请求体：
+
+```json
+{
+  "eventIds": [1, 9999],
+  "action": "ignore",
+  "params": { "reason": "批量忽略" }
+}
+```
+
+成功：`200`
+
+```json
+{
+  "traceId": "event-insight-batch-abc123",
+  "succeededEventIds": [1],
+  "failedItems": [{ "eventId": 9999, "error": "event_not_found" }]
+}
+```
+
+失败：`400`，`invalid_event_insight_batch_action`
+
+### 4.8 `GET /api/frontend/modules/push`
 
 查询参数：
 

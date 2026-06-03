@@ -568,6 +568,273 @@ class EventInsightRepository:
             rows = connection.execute("SELECT * FROM graph_sync_outbox ORDER BY id ASC").fetchall()
         return [dict(row) for row in rows]
 
+    def list_events_for_workbench(
+        self,
+        *,
+        keyword: str = "",
+        status: str = "active",
+        topic_id: int | None = None,
+        page: int = 1,
+        page_size: int = 20,
+        sort_by: str = "event_time",
+        sort_order: str = "desc",
+    ) -> dict[str, Any]:
+        """分页读取事件工作台列表。
+
+        Args:
+            keyword: 标题或摘要关键字；SQLite FTS5 中文分词较弱，因此列表检索先使用 LIKE。
+            status: 人工状态筛选；`all` 表示不过滤人工状态。
+            topic_id: 可选主题 ID 筛选。
+            page: 页码，从 1 开始。
+            page_size: 每页数量。
+            sort_by: 排序字段白名单键。
+            sort_order: 排序方向。
+
+        Returns:
+            包含 `items` 和 `total` 的分页结果。
+        """
+
+        sort_columns = {
+            "event_time": "e.event_time",
+            "created_at": "e.created_at",
+            "confidence_score": "e.confidence_score",
+        }
+        order_column = sort_columns.get(sort_by, "e.event_time")
+        order_direction = "ASC" if sort_order == "asc" else "DESC"
+        where_clauses = ["e.archived_at IS NULL"]
+        params: list[Any] = []
+        if status != "all":
+            where_clauses.append("e.manual_status = ?")
+            params.append(status)
+        if keyword:
+            where_clauses.append("(e.title LIKE ? OR e.summary LIKE ?)")
+            like_keyword = f"%{keyword}%"
+            params.extend([like_keyword, like_keyword])
+        join_sql = ""
+        if topic_id is not None:
+            join_sql = "JOIN topic_event te_filter ON te_filter.event_id = e.id"
+            where_clauses.append("te_filter.topic_id = ?")
+            params.append(topic_id)
+
+        where_sql = " AND ".join(where_clauses)
+        offset = (page - 1) * page_size
+        with self._session() as connection:
+            total_row = connection.execute(
+                f"""
+                SELECT COUNT(DISTINCT e.id) AS total
+                FROM event e
+                {join_sql}
+                WHERE {where_sql}
+                """,
+                params,
+            ).fetchone()
+            rows = connection.execute(
+                f"""
+                SELECT DISTINCT e.*
+                FROM event e
+                {join_sql}
+                WHERE {where_sql}
+                ORDER BY {order_column} {order_direction}, e.id {order_direction}
+                LIMIT ? OFFSET ?
+                """,
+                [*params, page_size, offset],
+            ).fetchall()
+        return {"items": [dict(row) for row in rows], "total": int(total_row["total"])}
+
+    def list_event_topics(self, event_id: int) -> list[dict[str, Any]]:
+        """读取事件关联主题。
+
+        Args:
+            event_id: 事件主键。
+
+        Returns:
+            主题关联字段列表。
+        """
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    t.id, t.name, t.summary, t.lifecycle_stage, t.heat_score,
+                    te.role_in_topic, te.relevance_score, te.manual_locked
+                FROM topic_event te
+                JOIN topic t ON t.id = te.topic_id
+                WHERE te.event_id = ? AND t.archived_at IS NULL
+                ORDER BY te.updated_at DESC, t.id ASC
+                """,
+                (event_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_event_evidence(self, event_id: int) -> list[dict[str, Any]]:
+        """读取事件证据链。
+
+        Args:
+            event_id: 事件主键。
+
+        Returns:
+            证据及来源材料字段列表。
+        """
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    ev.id, ev.raw_document_id, ev.excerpt, ev.start_offset, ev.end_offset,
+                    ev.evidence_level, ev.source_title, ev.source_url, ee.role,
+                    rd.title AS document_title, rd.url AS document_url
+                FROM event_evidence ee
+                JOIN evidence ev ON ev.id = ee.evidence_id
+                JOIN raw_document rd ON rd.id = ev.raw_document_id
+                WHERE ee.event_id = ?
+                ORDER BY ee.created_at ASC, ev.id ASC
+                """,
+                (event_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def create_event_operation_log(
+        self,
+        *,
+        event_id: int | None,
+        operation_type: str,
+        before_json: str,
+        after_json: str,
+        reason: str,
+        operator: str,
+    ) -> int:
+        """记录事件人工操作日志。
+
+        Args:
+            event_id: 事件主键；批量或主题操作可为空。
+            operation_type: 操作类型。
+            before_json: 操作前快照 JSON。
+            after_json: 操作后快照 JSON。
+            reason: 操作原因。
+            operator: 操作人。
+
+        Returns:
+            新增日志主键。
+        """
+
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO event_operation_log (
+                    event_id, operation_type, before_json, after_json, reason, operator, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (event_id, operation_type, before_json, after_json, reason, operator, utc_now_iso()),
+            )
+        return int(cursor.lastrowid)
+
+    def set_event_manual_status(self, *, event_id: int, manual_status: str, reason: str) -> bool:
+        """更新事件人工状态。
+
+        Args:
+            event_id: 事件主键。
+            manual_status: 新人工状态。
+            reason: 状态变更原因。
+
+        Returns:
+            更新成功返回 True；事件不存在返回 False。
+        """
+
+        timestamp = utc_now_iso()
+        archived_at = timestamp if manual_status == "archived" else None
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE event
+                SET manual_status = ?, archived_at = ?, archive_reason = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (manual_status, archived_at, reason, timestamp, event_id),
+            )
+        return cursor.rowcount > 0
+
+    def create_topic(self, *, name: str, summary: str = "") -> dict[str, Any]:
+        """创建或返回同名主题。
+
+        Args:
+            name: 主题名称。
+            summary: 主题摘要。
+
+        Returns:
+            主题字段字典。
+        """
+
+        timestamp = utc_now_iso()
+        with self._session() as connection:
+            connection.execute(
+                """
+                INSERT INTO topic (name, summary, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    summary = CASE WHEN excluded.summary <> '' THEN excluded.summary ELSE topic.summary END,
+                    updated_at = excluded.updated_at
+                """,
+                (name, summary, timestamp, timestamp),
+            )
+            row = connection.execute("SELECT * FROM topic WHERE name = ?", (name,)).fetchone()
+        return dict(row)
+
+    def get_topic(self, topic_id: int) -> dict[str, Any] | None:
+        """按主键读取主题。
+
+        Args:
+            topic_id: 主题主键。
+
+        Returns:
+            找到时返回主题字段字典，否则返回 None。
+        """
+
+        with self._session() as connection:
+            row = connection.execute("SELECT * FROM topic WHERE id = ? AND archived_at IS NULL", (topic_id,)).fetchone()
+        return dict(row) if row else None
+
+    def link_event_topic(
+        self,
+        *,
+        event_id: int,
+        topic_id: int,
+        role_in_topic: str,
+        relevance_score: float = 1.0,
+        manual_locked: bool = True,
+    ) -> bool:
+        """关联事件和主题。
+
+        Args:
+            event_id: 事件主键。
+            topic_id: 主题主键。
+            role_in_topic: 事件在主题中的角色。
+            relevance_score: 相关度分数。
+            manual_locked: 是否由人工锁定。
+
+        Returns:
+            事件和主题都存在时返回 True，否则返回 False。
+        """
+
+        if self.get_event(event_id) is None or self.get_topic(topic_id) is None:
+            return False
+
+        timestamp = utc_now_iso()
+        with self._session() as connection:
+            connection.execute(
+                """
+                INSERT INTO topic_event (
+                    topic_id, event_id, role_in_topic, relevance_score, manual_locked, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(topic_id, event_id) DO UPDATE SET
+                    role_in_topic = excluded.role_in_topic,
+                    relevance_score = excluded.relevance_score,
+                    manual_locked = excluded.manual_locked,
+                    updated_at = excluded.updated_at
+                """,
+                (topic_id, event_id, role_in_topic, relevance_score, int(manual_locked), timestamp, timestamp),
+            )
+        return True
+
     def create_processing_job(
         self,
         *,
