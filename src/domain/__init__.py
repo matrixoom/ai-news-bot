@@ -1,6 +1,14 @@
 """Domain models and rules."""
 
 from .events_outlook import EventsOutlookSnapshot, OutlookEventView, OutlookWindowView, build_default_outlook_horizons
+from .event_insight import (
+    EventInsightEventRecord,
+    EventInsightEventType,
+    ManualStatus,
+    ProcessingStatus,
+    RawDocumentRecord,
+    RawDocumentSourceType,
+)
 from .external_data import (
     ConfidenceLevel,
     EventHorizon,
@@ -48,6 +56,8 @@ __all__ = [
     "DomainNewsDigest",
     "EventHorizon",
     "EventsOutlookSnapshot",
+    "EventInsightEventRecord",
+    "EventInsightEventType",
     "FishbowlState",
     "MacroFrequency",
     "MacroHistoryPoint",
@@ -71,7 +81,11 @@ __all__ = [
     "NewsSourceType",
     "OutlookEventView",
     "OutlookWindowView",
+    "ManualStatus",
+    "ProcessingStatus",
     "ResearchFinding",
+    "RawDocumentRecord",
+    "RawDocumentSourceType",
     "SearchResultItem",
     "SourceReference",
     "TrackedIndexDefinition",
