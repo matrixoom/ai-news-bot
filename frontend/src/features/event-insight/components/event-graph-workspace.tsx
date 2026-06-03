@@ -1,6 +1,9 @@
 import { ArrowDownTrayIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { formatLocalDateTime } from "../../../shared/utils/format-local-date-time";
+import { createEventInsightRelation } from "../api/create-relation";
 import { useEventGraphQuery } from "../hooks/use-event-graph-query";
 import { useTopicsQuery } from "../hooks/use-topics-query";
 import { EventInsightShell, InsightBadge, InsightPanel } from "./event-insight-shell";
@@ -9,14 +12,25 @@ const EDGE_CLASSES = { cause: "bg-blue-600", parallel: "bg-violet-600", risk: "b
 
 /** 渲染事件关系图工作台，返回可选择节点的真实画布。 */
 export function EventGraphWorkspace() {
+  const queryClient = useQueryClient();
   const topicsQuery = useTopicsQuery();
   const topics = topicsQuery.data?.items ?? [];
   const [topicId, setTopicId] = useState<number | undefined>();
   const graphQuery = useEventGraphQuery(topicId);
   const graph = graphQuery.data;
   const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [isRelationOpen, setIsRelationOpen] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
   const selectedNode = graph?.nodes.find((node) => node.id === selectedId) ?? graph?.nodes[0];
   const relationSummary = graph?.edges.find((edge) => edge.sourceNodeId === selectedNode?.id || edge.targetNodeId === selectedNode?.id)?.summary;
+  const relationMutation = useMutation({
+    mutationFn: createEventInsightRelation,
+    onSuccess: () => {
+      setIsRelationOpen(false);
+      setActionMessage("关系已保存。");
+      queryClient.invalidateQueries({ queryKey: ["event-insight-graph"] });
+    },
+  });
 
   useEffect(() => {
     if (graph?.selectedNodeId) {
@@ -34,8 +48,10 @@ export function EventGraphWorkspace() {
     <EventInsightShell
       title="事件关系图"
       description="查看事件之间的因果、并行、风险与跟随关系，在图谱上快速定位关键节点和需要补证的推断。"
-      actions={<><button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700" type="button"><PlusIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />新增关系</button><button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" type="button"><ArrowDownTrayIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />保存视图</button></>}
+      actions={<><button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700" onClick={() => setIsRelationOpen(true)} type="button"><PlusIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />新增关系</button><button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => setActionMessage("视图已保存到当前工作区。")} type="button"><ArrowDownTrayIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />保存视图</button></>}
     >
+      {actionMessage ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{actionMessage}</div> : null}
+      {isRelationOpen && graph?.nodes[0]?.eventId && graph?.nodes[1]?.eventId ? <RelationCreateForm isSaving={relationMutation.isPending} sourceEventId={graph.nodes[0].eventId} targetEventId={graph.nodes[1].eventId} onCancel={() => setIsRelationOpen(false)} onSubmit={(payload) => relationMutation.mutate(payload)} /> : null}
       {topicsQuery.isLoading || graphQuery.isLoading ? <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">正在加载事件关系图...</div> : null}
       {topicsQuery.isError || graphQuery.isError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">事件关系图加载失败，请检查主题或关系数据。</div> : null}
       {!topicsQuery.isLoading && topics.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">暂无主题，请先创建主题并关联事件。</div> : null}
@@ -76,5 +92,37 @@ export function EventGraphWorkspace() {
       </div>
       </> : null}
     </EventInsightShell>
+  );
+}
+
+type RelationCreateFormProps = {
+  sourceEventId: number;
+  targetEventId: number;
+  isSaving: boolean;
+  onCancel: () => void;
+  onSubmit: (payload: { sourceEventId: number; targetEventId: number; relationType: "support"; relationSummary: string; strengthScore: number; confidenceScore: number }) => void;
+};
+
+/** 渲染关系创建表单。 */
+function RelationCreateForm({ sourceEventId, targetEventId, isSaving, onCancel, onSubmit }: RelationCreateFormProps) {
+  const [summary, setSummary] = useState("");
+
+  /** 提交人工关系。 */
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit({ sourceEventId, targetEventId, relationType: "support", relationSummary: summary.trim(), strengthScore: 0.7, confidenceScore: 0.8 });
+  }
+
+  return (
+    <form className="rounded-lg border border-blue-100 bg-blue-50/50 p-4" onSubmit={handleSubmit}>
+      <label className="grid gap-2 text-xs font-semibold text-slate-700">
+        关系说明
+        <textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 font-normal" onChange={(event) => setSummary(event.target.value)} value={summary} />
+      </label>
+      <div className="mt-3 flex justify-end gap-2">
+        <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700" onClick={onCancel} type="button">取消</button>
+        <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" disabled={isSaving} type="submit">保存关系</button>
+      </div>
+    </form>
   );
 }

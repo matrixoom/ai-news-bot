@@ -803,6 +803,8 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 
 连接失败：`200`，返回 `{ "ok": false, "detail": "连接测试失败：..." }`；`detail` 不包含明文 API Key。
 
+连接测试会写入 `llm_call_log`，日志只保存脱敏后的请求摘要和响应摘要，不保存 API Key、完整请求头或完整 prompt。
+
 #### 4.9.6 `GET /api/system/llm/task-configs`
 
 用途：读取任务到 provider/model 的映射。
@@ -821,6 +823,98 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 ```
 
 成功：`200`，返回 `{ "taskConfig": { ... } }`。
+
+#### 4.9.8 `GET /api/system/llm/call-logs`
+
+用途：查看 LLM 真实调用日志，供 System 页面核验连接测试是否实际发起。
+
+参数：
+
+- `taskType`：可选，例如 `connection_test`
+- `limit`：可选，默认 `20`，最大 `100`
+
+成功：`200`
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "taskType": "connection_test",
+      "providerId": 1,
+      "providerName": "主分析模型",
+      "providerType": "openai_compatible",
+      "modelName": "analysis-model",
+      "status": "succeeded",
+      "requestPreview": "system: ... | user: ...",
+      "responsePreview": "OK",
+      "errorMessage": "",
+      "createdAt": "2026-06-03T08:00:00Z"
+    }
+  ]
+}
+```
+
+### 4.10 System RSS Settings 接口
+
+用途：在 System 页面配置 RSS 源和每日抓取时间，RSS 条目会接入 Event Insight 的 `raw_document / event / evidence` 链路。
+
+#### 4.10.1 `GET /api/system/rss/sources`
+
+成功：`200`
+
+```json
+{
+  "sources": [
+    {
+      "id": 1,
+      "name": "AI 财经观察",
+      "url": "https://example.com/rss.xml",
+      "language": "zh",
+      "category": "finance",
+      "enabled": true,
+      "fetchTime": "06:30",
+      "maxItems": 20,
+      "lastFetchedAt": null
+    }
+  ],
+  "scheduler": {
+    "enabled": true,
+    "timezone": "Asia/Shanghai",
+    "dailyFetchTime": "06:30"
+  }
+}
+```
+
+#### 4.10.2 `POST /api/system/rss/sources`
+
+创建 RSS 源。失败：`400 invalid_rss_source_payload`。
+
+#### 4.10.3 `PUT /api/system/rss/sources/{id}`
+
+更新 RSS 源。失败：`404 rss_source_not_found`。
+
+#### 4.10.4 `POST /api/system/rss/sources/{id}/disable`
+
+禁用 RSS 源，不物理删除历史配置。
+
+#### 4.10.5 `POST /api/system/rss/sources/{id}/fetch`
+
+手动抓取 RSS 源，成功后将新增条目写入 Event Insight 事件列表。
+
+成功：`200`
+
+```json
+{
+  "importedCount": 1,
+  "skippedCount": 0,
+  "fetchedAt": "2026-06-03T08:00:00Z"
+}
+```
+
+#### 4.10.6 `PUT /api/system/rss/scheduler`
+
+保存每日 RSS 抓取配置。
 
 ## 5. Push 控制接口
 

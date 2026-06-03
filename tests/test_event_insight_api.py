@@ -215,6 +215,30 @@ class EventInsightApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["error"], "event_insight_topic_not_found")
 
+    def test_create_relation_returns_relation_and_updates_graph(self) -> None:
+        """校验新增事件关系接口会写入关系图投影。"""
+        response = self.client.post(
+            "/api/frontend/modules/event-insight/relations",
+            json={
+                "sourceEventId": self.event_id,
+                "targetEventId": self.other_event_id,
+                "relationType": "support",
+                "relationSummary": "报价变化支撑后续订单预期。",
+                "strengthScore": 0.7,
+                "confidenceScore": 0.8,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        relation = response.json()["relation"]
+        self.assertEqual(relation["sourceEventId"], self.event_id)
+        self.assertEqual(relation["targetEventId"], self.other_event_id)
+        self.assertEqual(relation["relationType"], "support")
+
+        graph_response = self.client.get("/api/frontend/modules/event-insight/graph")
+        edge_summaries = [edge["summary"] for edge in graph_response.json()["edges"]]
+        self.assertIn("报价变化支撑后续订单预期。", edge_summaries)
+
     def test_update_event_records_override_without_losing_original_fact(self) -> None:
         """校验编辑事件会写人工覆盖，并返回更新后的展示值。"""
         response = self.client.put(

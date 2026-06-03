@@ -529,19 +529,75 @@ class EventInsightRepository:
         model_name: str,
         status: str,
         error_message: str = "",
+        request_preview: str = "",
+        response_preview: str = "",
     ) -> int:
-        """记录一次 LLM 调用摘要。"""
+        """记录一次 LLM 调用摘要。
+
+        Args:
+            task_type: 调用任务类型。
+            provider_config_id: LLM provider 主键。
+            model_name: 实际模型名称。
+            status: 调用状态。
+            error_message: 失败摘要，必须已脱敏。
+            request_preview: 脱敏后的请求摘要。
+            response_preview: 脱敏后的响应摘要。
+
+        Returns:
+            新增调用日志主键。
+        """
 
         with self._session() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO llm_call_log (
-                    task_type, provider_config_id, model_name, status, error_message, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    task_type, provider_config_id, model_name, status, error_message,
+                    request_preview, response_preview, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (task_type, provider_config_id, model_name, status, error_message, utc_now_iso()),
+                (
+                    task_type,
+                    provider_config_id,
+                    model_name,
+                    status,
+                    error_message,
+                    request_preview,
+                    response_preview,
+                    utc_now_iso(),
+                ),
             )
         return int(cursor.lastrowid)
+
+    def list_llm_call_logs(self, *, task_type: str = "", limit: int = 20) -> list[dict[str, Any]]:
+        """读取最近 LLM 调用日志。
+
+        Args:
+            task_type: 可选任务类型筛选。
+            limit: 最大返回数量。
+
+        Returns:
+            LLM 调用日志行列表。
+        """
+
+        clauses: list[str] = []
+        params: list[Any] = []
+        if task_type:
+            clauses.append("l.task_type = ?")
+            params.append(task_type)
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._session() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT l.*, p.name AS provider_name, p.provider_type
+                FROM llm_call_log l
+                LEFT JOIN llm_provider_config p ON p.id = l.provider_config_id
+                {where_sql}
+                ORDER BY l.id DESC
+                LIMIT ?
+                """,
+                [*params, min(max(1, limit), 100)],
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def get_llm_provider_config(self, provider_id: int) -> dict[str, Any] | None:
         """读取 LLM provider 配置，用于校验 call log 外键。"""
@@ -1444,6 +1500,198 @@ class EventInsightRepository:
                 (job_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def create_rss_source(self, values: dict[str, Any]) -> dict[str, Any]:
+        """新增 RSS 源配置。
+
+        Args:
+            values: 已校验的 RSS 源字段。
+
+        Returns:
+            新增 RSS 源字段字典。
+        """
+
+        timestamp = utc_now_iso()
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO rss_source_config (
+                    name, url, language, category, enabled, fetch_time, max_items,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    values["name"],
+                    values["url"],
+                    values.get("language", "zh"),
+                    values.get("category", "finance"),
+                    int(values.get("enabled", True)),
+                    values.get("fetch_time", "06:30"),
+                    int(values.get("max_items", 20)),
+                    timestamp,
+                    timestamp,
+                ),
+            )
+        return self.get_rss_source(int(cursor.lastrowid)) or {}
+
+    def update_rss_source(self, source_id: int, values: dict[str, Any]) -> dict[str, Any] | None:
+        """更新 RSS 源配置。
+
+        Args:
+            source_id: RSS 源主键。
+            values: 已校验的 RSS 源字段。
+
+        Returns:
+            更新后的 RSS 源；不存在时返回 None。
+        """
+
+        existing = self.get_rss_source(source_id)
+        if existing is None:
+            return None
+        merged = {**existing, **values, "updated_at": utc_now_iso()}
+        with self._session() as connection:
+            connection.execute(
+                """
+                UPDATE rss_source_config
+                SET name = ?, url = ?, language = ?, category = ?, enabled = ?,
+                    fetch_time = ?, max_items = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    merged["name"],
+                    merged["url"],
+                    merged.get("language", "zh"),
+                    merged.get("category", "finance"),
+                    int(merged.get("enabled", True)),
+                    merged.get("fetch_time", "06:30"),
+                    int(merged.get("max_items", 20)),
+                    merged["updated_at"],
+                    source_id,
+                ),
+            )
+        return self.get_rss_source(source_id)
+
+    def list_rss_sources(self) -> list[dict[str, Any]]:
+        """列出 RSS 源配置。
+
+        Returns:
+            RSS 源字段字典列表。
+        """
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM rss_source_config
+                ORDER BY enabled DESC, updated_at DESC, id DESC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_rss_source(self, source_id: int) -> dict[str, Any] | None:
+        """按主键读取 RSS 源配置。
+
+        Args:
+            source_id: RSS 源主键。
+
+        Returns:
+            找到时返回 RSS 源字段，否则返回 None。
+        """
+
+        with self._session() as connection:
+            row = connection.execute("SELECT * FROM rss_source_config WHERE id = ?", (source_id,)).fetchone()
+        return dict(row) if row else None
+
+    def disable_rss_source(self, source_id: int) -> dict[str, Any] | None:
+        """禁用 RSS 源配置。
+
+        Args:
+            source_id: RSS 源主键。
+
+        Returns:
+            更新后的 RSS 源；不存在时返回 None。
+        """
+
+        timestamp = utc_now_iso()
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE rss_source_config
+                SET enabled = 0, disabled_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (timestamp, timestamp, source_id),
+            )
+        return self.get_rss_source(source_id) if cursor.rowcount else None
+
+    def mark_rss_source_fetched(self, source_id: int, fetched_at: str) -> None:
+        """记录 RSS 源最近抓取时间。
+
+        Args:
+            source_id: RSS 源主键。
+            fetched_at: 抓取完成时间。
+
+        Returns:
+            无返回值。
+        """
+
+        with self._session() as connection:
+            connection.execute(
+                """
+                UPDATE rss_source_config
+                SET last_fetched_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (fetched_at, fetched_at, source_id),
+            )
+
+    def get_rss_scheduler_config(self) -> dict[str, Any]:
+        """读取 RSS 全局调度配置。
+
+        Returns:
+            RSS 调度配置字段。
+        """
+
+        with self._session() as connection:
+            row = connection.execute("SELECT * FROM rss_scheduler_config WHERE id = 1").fetchone()
+        return dict(row) if row else {
+            "id": 1,
+            "enabled": 1,
+            "timezone": "Asia/Shanghai",
+            "daily_fetch_time": "06:30",
+            "updated_at": utc_now_iso(),
+        }
+
+    def update_rss_scheduler_config(self, values: dict[str, Any]) -> dict[str, Any]:
+        """保存 RSS 全局调度配置。
+
+        Args:
+            values: 已校验调度字段。
+
+        Returns:
+            更新后的调度配置。
+        """
+
+        timestamp = utc_now_iso()
+        with self._session() as connection:
+            connection.execute(
+                """
+                INSERT INTO rss_scheduler_config(id, enabled, timezone, daily_fetch_time, updated_at)
+                VALUES (1, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    enabled = excluded.enabled,
+                    timezone = excluded.timezone,
+                    daily_fetch_time = excluded.daily_fetch_time,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    int(values.get("enabled", True)),
+                    values.get("timezone", "Asia/Shanghai"),
+                    values.get("daily_fetch_time", "06:30"),
+                    timestamp,
+                ),
+            )
+        return self.get_rss_scheduler_config()
 
     def _connect(self) -> sqlite3.Connection:
         """打开带 PRAGMA 的 SQLite 连接。

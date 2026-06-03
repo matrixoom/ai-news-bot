@@ -1,17 +1,33 @@
 import { PlusIcon } from "@heroicons/react/24/outline";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { formatLocalDateTime } from "../../../shared/utils/format-local-date-time";
+import { createEventInsightTopic } from "../api/create-topic";
 import { useTopicTraceQuery } from "../hooks/use-topic-trace-query";
 import { useTopicsQuery } from "../hooks/use-topics-query";
 import { EventInsightShell, InsightPanel } from "./event-insight-shell";
 
 /** 渲染主题溯源工作台，返回阶段判断与演进时间线。 */
 export function TopicTraceWorkspace() {
+  const queryClient = useQueryClient();
   const topicsQuery = useTopicsQuery();
   const [topicId, setTopicId] = useState<number | undefined>();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
   const topics = topicsQuery.data?.items ?? [];
   const traceQuery = useTopicTraceQuery(topicId);
   const trace = traceQuery.data;
+
+  const createTopicMutation = useMutation({
+    mutationFn: createEventInsightTopic,
+    onSuccess: (result) => {
+      setIsCreateOpen(false);
+      setTopicId(result.topic.id);
+      setActionMessage(`主题已创建：${result.topic.name}`);
+      queryClient.invalidateQueries({ queryKey: ["event-insight-topics"] });
+    },
+  });
 
   useEffect(() => {
     if (topicId === undefined && topics[0]) {
@@ -23,8 +39,10 @@ export function TopicTraceWorkspace() {
     <EventInsightShell
       title="主题溯源"
       description="按主题还原事件演进路径，查看每个阶段的事实依据、判断变化和后续待验证线索。"
-      actions={<><select aria-label="选择主题" className="h-9 rounded-md border border-slate-300 px-3 text-xs text-slate-700" onChange={(event) => setTopicId(Number(event.target.value))} value={topicId ?? ""}>{topics.length === 0 ? <option value="">暂无主题</option> : null}{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}</select><button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" type="button"><PlusIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />新建主题</button></>}
+      actions={<><select aria-label="选择主题" className="h-9 rounded-md border border-slate-300 px-3 text-xs text-slate-700" onChange={(event) => setTopicId(Number(event.target.value))} value={topicId ?? ""}>{topics.length === 0 ? <option value="">暂无主题</option> : null}{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}</select><button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => setIsCreateOpen(true)} type="button"><PlusIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />新建主题</button></>}
     >
+      {actionMessage ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{actionMessage}</div> : null}
+      {isCreateOpen ? <TopicCreateForm isSaving={createTopicMutation.isPending} onCancel={() => setIsCreateOpen(false)} onSubmit={(payload) => createTopicMutation.mutate(payload)} /> : null}
       {topicsQuery.isLoading || traceQuery.isLoading ? <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">正在加载主题溯源...</div> : null}
       {topicsQuery.isError || traceQuery.isError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">主题溯源加载失败，请检查主题是否存在。</div> : null}
       {!topicsQuery.isLoading && topics.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">暂无主题，请先在事件列表中创建主题。</div> : null}
@@ -57,5 +75,42 @@ export function TopicTraceWorkspace() {
       </div>
       </> : null}
     </EventInsightShell>
+  );
+}
+
+type TopicCreateFormProps = {
+  isSaving: boolean;
+  onCancel: () => void;
+  onSubmit: (payload: { name: string; summary: string }) => void;
+};
+
+/** 渲染主题创建表单。 */
+function TopicCreateForm({ isSaving, onCancel, onSubmit }: TopicCreateFormProps) {
+  const [name, setName] = useState("");
+  const [summary, setSummary] = useState("");
+
+  /** 提交新主题。 */
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit({ name: name.trim(), summary: summary.trim() });
+  }
+
+  return (
+    <form className="rounded-lg border border-blue-100 bg-blue-50/50 p-4" onSubmit={handleSubmit}>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="grid gap-2 text-xs font-semibold text-slate-700">
+          主题名称
+          <input className="h-9 rounded-md border border-slate-300 px-3 font-normal" onChange={(event) => setName(event.target.value)} value={name} />
+        </label>
+        <label className="grid gap-2 text-xs font-semibold text-slate-700 md:col-span-2">
+          主题摘要
+          <textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 font-normal" onChange={(event) => setSummary(event.target.value)} value={summary} />
+        </label>
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700" onClick={onCancel} type="button">取消</button>
+        <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" disabled={isSaving} type="submit">保存主题</button>
+      </div>
+    </form>
   );
 }

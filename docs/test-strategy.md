@@ -23,6 +23,7 @@
 - push center 配置、预览、触发逻辑、宽基指数时间范围与历史保留
 - event insight SQLite migration、外键、FTS trigger、人工覆盖、重复候选和 graph outbox 幂等
 - event insight 材料导入 API、processing_job 幂等、租约恢复、attempt 日志和文件路径安全
+- system LLM provider 改删测、连接测试调用日志脱敏、RSS 源配置和 RSS 入库 Event Insight 事件
 - 历史文档校验类 / demo 类测试已归档到 `to_delete/tests/`
 
 ### 2.2 集成测试（后端 API）
@@ -84,7 +85,7 @@ uv run python -m pytest tests/test_event_insight_repository.py tests/test_event_
 覆盖点：
 
 ```text
-1. 001_event_insight_core migration 幂等。
+1. 001_event_insight_core / 002_llm_runtime / 003_rss_config migration 幂等。
 2. SQLite 连接启用 foreign_keys 与 WAL。
 3. 原始材料和事件 FTS 插入、更新、软归档同步。
 4. event_field_override 独立保存人工覆盖，不改写模型事实。
@@ -149,6 +150,25 @@ cmd /c npm --prefix frontend run test -- src/features/settings/__tests__/setting
 5. Settings 页面从真实 API 加载 provider 与任务映射。
 6. Settings 页面保存新 provider 后不展示明文密钥。
 7. ArkResearchProvider 保持 Event Outlook 静态日历契约不变。
+8. 连接测试写入 `connection_test` 调用日志，日志不包含明文 API Key。
+9. Settings 页面支持编辑、禁用 provider，并展示真实测试反馈。
+```
+
+### 3.8.1 RSS Settings 与事件接入改动
+
+```powershell
+uv run python -m pytest tests/test_rss_settings_api.py tests/test_event_insight_api.py -q
+cmd /c npm --prefix frontend run test -- src/features/settings/__tests__/settings-page.test.tsx src/features/event-insight/__tests__/event-list-workspace.test.tsx --run
+```
+
+覆盖点：
+
+```text
+1. RSS 源支持新增、更新、禁用和手动抓取。
+2. RSS 调度设置持久化到 `rss_scheduler_config`。
+3. RSS 抓取条目写入 raw_document / event / evidence，并可从 Event Insight 事件列表检索。
+4. 重复 RSS 条目通过 content_hash 跳过，不重复造事件。
+5. Settings 页面可新增 RSS 源并触发抓取，抓取后刷新 Event Insight 事件列表缓存。
 ```
 
 ### 3.9 Event Insight 抽取与证据链改动
@@ -214,8 +234,9 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 1. Graph API 返回 topic 范围内的事件节点和这些节点之间的 event_relation 边。
 2. 关系类型映射为前端可绘制类型，不泄露后端枚举差异。
 3. topicId 不存在时返回 404。
-4. 前端事件关系图从真实 API 加载，覆盖 loading、边摘要和节点选择详情。
-5. P9 不依赖 Neo4j，不影响 Event Outlook 静态日历。
+4. `POST /api/frontend/modules/event-insight/relations` 可创建人工关系并更新图谱投影。
+5. 前端事件关系图从真实 API 加载，覆盖 loading、边摘要、节点选择详情、新增关系和保存视图反馈。
+6. P9 不依赖 Neo4j，不影响 Event Outlook 静态日历。
 ```
 
 ### 3.13 Event Insight 发布硬化改动

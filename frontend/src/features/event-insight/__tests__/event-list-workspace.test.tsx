@@ -110,6 +110,49 @@ describe("EventListWorkspace", () => {
 
     expect(await screen.findByText("暂无事件，先导入材料或调整筛选条件。")).toBeInTheDocument();
   });
+
+  it("imports, edits, and batch-ignores selected events through real action buttons", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = resolveRequestUrl(input);
+      const method = init?.method ?? "GET";
+      if (url.pathname === "/api/frontend/modules/event-insight/events" && method === "GET") {
+        return jsonResponse(listPayload);
+      }
+      if (url.pathname === "/api/frontend/modules/event-insight/events/1" && method === "GET") {
+        return jsonResponse({ traceId: "event-insight-event-first", event: { ...listPayload.items[0], evidence: [], topics: listPayload.items[0].topics } });
+      }
+      if (url.pathname === "/api/frontend/modules/event-insight/events/1" && method === "PUT") {
+        const body = JSON.parse(String(init?.body));
+        return jsonResponse({ traceId: "event-update", event: { ...listPayload.items[0], ...body, evidence: [], topics: [] } });
+      }
+      if (url.pathname === "/api/frontend/modules/event-insight/events/batch-action" && method === "POST") {
+        return jsonResponse({ traceId: "batch", succeededEventIds: [1], failedItems: [] });
+      }
+      if (url.pathname === "/api/frontend/modules/event-insight/documents/import" && method === "POST") {
+        return jsonResponse({ jobId: 9, jobType: "parse_document", status: "pending", rawDocumentId: 3, traceId: "import" });
+      }
+      throw new Error(`Unexpected request ${method} ${url.pathname}`);
+    });
+
+    renderWithQueryClient(<EventListWorkspace />);
+
+    expect(await screen.findByText("存储芯片报价上调")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    fireEvent.change(screen.getByLabelText("事件标题"), { target: { value: "DRAM 合约价延续上涨" } });
+    fireEvent.change(screen.getByLabelText("事件摘要"), { target: { value: "多来源确认内存涨价。" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存事件" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/frontend/modules/event-insight/events/1", expect.objectContaining({ method: "PUT" })));
+
+    fireEvent.click(screen.getByRole("button", { name: "批量处理" }));
+    expect(await screen.findByText("批量操作完成：1 成功，0 失败。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "导入材料" }));
+    fireEvent.change(screen.getByLabelText("材料标题"), { target: { value: "AI 服务器需求更新" } });
+    fireEvent.change(screen.getByLabelText("材料正文"), { target: { value: "AI 服务器需求维持高位，DRAM 报价上修。" } });
+    fireEvent.click(screen.getByRole("button", { name: "提交导入" }));
+    expect(await screen.findByText("导入任务已创建：#9")).toBeInTheDocument();
+  });
 });
 
 function renderWithQueryClient(children: React.ReactElement) {

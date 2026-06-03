@@ -93,6 +93,16 @@ def register_llm_settings_routes(app: FastAPI, *, llm_config_service: LlmConfigS
             logger.exception("llm task config list failed")
             return JSONResponse({"error": "llm_task_config_list_failed"}, status_code=503)
 
+    @app.get("/api/system/llm/call-logs")
+    def list_llm_call_logs(taskType: str = "", limit: int = 20) -> JSONResponse:
+        """返回 LLM 调用日志，用于核验连接测试是否真实发生。"""
+
+        try:
+            return JSONResponse(llm_config_service.list_call_logs(task_type=taskType, limit=limit))
+        except Exception:
+            logger.exception("llm call log list failed", extra={"task_type": taskType})
+            return JSONResponse({"error": "llm_call_log_list_failed"}, status_code=503)
+
     @app.put("/api/system/llm/task-configs/{task_type}")
     def update_llm_task_config(task_type: str, payload: dict | None = None) -> JSONResponse:
         """保存任务模型映射。"""

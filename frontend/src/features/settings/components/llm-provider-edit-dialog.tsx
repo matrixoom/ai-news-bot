@@ -5,17 +5,18 @@ type LlmProviderEditDialogProps = {
   onCancel: () => void;
   onSave: (payload: LlmProviderPayload) => void;
   isSaving: boolean;
+  initialValue?: Partial<LlmProviderPayload>;
 };
 
 /** 渲染新增 LLM provider 表单。 */
-export function LlmProviderEditDialog({ onCancel, onSave, isSaving }: LlmProviderEditDialogProps) {
+export function LlmProviderEditDialog({ onCancel, onSave, isSaving, initialValue }: LlmProviderEditDialogProps) {
   const [form, setForm] = useState<LlmProviderPayload>({
-    name: "",
-    providerType: "openai_compatible",
-    baseUrl: "",
-    modelName: "",
+    name: initialValue?.name ?? "",
+    providerType: initialValue?.providerType ?? "openai_compatible",
+    baseUrl: initialValue?.baseUrl ?? "",
+    modelName: initialValue?.modelName ?? "",
     apiKey: "",
-    timeoutSeconds: 60,
+    timeoutSeconds: initialValue?.timeoutSeconds ?? 60,
   });
 
   /** 提交新增配置。 */

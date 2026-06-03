@@ -78,6 +78,33 @@ class LlmSettingsApiTests(unittest.TestCase):
         self.assertEqual(test_response.status_code, 200)
         self.assertTrue(test_response.json()["ok"])
 
+        log_response = self.client.get("/api/system/llm/call-logs?taskType=connection_test")
+        self.assertEqual(log_response.status_code, 200)
+        logs = log_response.json()["items"]
+        self.assertEqual(logs[0]["taskType"], "connection_test")
+        self.assertEqual(logs[0]["providerId"], provider["id"])
+        self.assertEqual(logs[0]["status"], "succeeded")
+        self.assertIn("主分析模型 connected", logs[0]["responsePreview"])
+        self.assertNotIn("sk-api-secret", str(logs[0]))
+
+        update_response = self.client.put(
+            f"/api/system/llm/providers/{provider['id']}",
+            json={
+                "name": "主分析模型-更新",
+                "providerType": "openai_compatible",
+                "baseUrl": "https://api.updated.example.com/v1",
+                "modelName": "updated-model",
+                "timeoutSeconds": 45,
+            },
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.json()["provider"]["name"], "主分析模型-更新")
+        self.assertEqual(update_response.json()["provider"]["apiKeyPreview"], "sk-...cret")
+
+        disable_response = self.client.post(f"/api/system/llm/providers/{provider['id']}/disable")
+        self.assertEqual(disable_response.status_code, 200)
+        self.assertFalse(disable_response.json()["provider"]["enabled"])
+
     def test_task_mapping_and_disable_conflict(self) -> None:
         """校验任务映射可保存，引用中的 provider 禁用返回 409。"""
         provider = self.client.post(
