@@ -506,6 +506,17 @@ P6 新增本地 `extract_event` 任务处理能力。该任务不新增公开 HT
 - JSON 缺少必填字段：任务失败。
 - `evidence.excerpt` 无法在 `raw_document.content_text` 中定位：任务失败，拒绝写入该证据链。
 
+#### 4.7.9 检索、重复候选与规则聚类内部能力
+
+P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后续主题溯源页、关系图页或后台任务复用。
+
+能力边界：
+
+- `search_events(query)`：对 active 事件执行中文 n-gram fallback 检索，解决 SQLite FTS5 对中文短词召回弱的问题。
+- `generate_duplicate_candidates(source_event_id, threshold)`：只写入 `duplicate_event_candidate`，不自动合并、不删除事件、不修改 `manual_status`。
+- `cluster_events(keyword, topic_name)`：创建或复用主题，并把匹配事件写入 `topic_event`；自动规则关联使用 `manual_locked=false`，便于后续人工调整。
+- `inspect_vector_runtime()`：仅探测 `sqlite-vec` 可用性；扩展不可用时返回原因，不阻断基础检索。
+
 #### 4.7.3 `PUT /api/frontend/modules/event-insight/events/{eventId}`
 
 用途：写入人工字段覆盖。接口不会改写原始事实字段，而是追加 `event_field_override` 和 `event_operation_log`。

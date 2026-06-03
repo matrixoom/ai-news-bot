@@ -168,7 +168,23 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 5. 前端详情展示证据来源位置和关联实体。
 ```
 
-### 3.10 前端改动
+### 3.10 Event Insight 检索、候选与聚类改动
+
+```powershell
+uv run python -m pytest tests/test_event_retrieval_service.py tests/test_event_insight_repository.py tests/test_event_extraction_service.py -q
+```
+
+覆盖点：
+
+```text
+1. 中文短词可通过 n-gram fallback 召回相关事件。
+2. 重复候选只写 duplicate_event_candidate，不合并、不删除、不改 manual_status。
+3. 规则聚类创建/复用主题，并关联匹配事件到 topic_event。
+4. sqlite-vec 不可用时不阻断基础检索。
+5. P7 不影响 P6 抽取与 Event Insight Repository 既有契约。
+```
+
+### 3.11 前端改动
 
 在 `frontend/` 目录执行：
 
