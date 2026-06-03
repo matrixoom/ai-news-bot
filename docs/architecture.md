@@ -355,6 +355,37 @@ Frontend:
 3. P8 读取 SQLite 事实库，不复用 Event Outlook 静态日历。
 ```
 
+P9 新增事件关系图投影链路：
+
+```text
+Controller:
+  src/app/web/event_insight_routes.py
+  - GET /api/frontend/modules/event-insight/graph
+
+Service:
+  src/services/event_insight_service.py
+  - get_event_graph 生成前端节点、边和确定性布局
+
+Repository:
+  src/services/event_insight_repository.py
+  - create_event_relation 写入 SQLite 关系边
+  - list_event_graph_events 读取主题内或全局活跃事件节点
+  - list_event_graph_relations 读取节点集合内部关系
+
+Frontend:
+  frontend/src/features/event-insight/components/event-graph-workspace.tsx
+  - 从真实 API 加载关系图，覆盖 loading/error/empty 和节点选择
+```
+
+关系图边界：
+
+```text
+1. P9 不接 Neo4j；Neo4j 仍是后续可重建投影。
+2. P9 不自动生成关系，只展示 event_relation 中已有关系。
+3. 前端布局由后端 deterministic 百分比坐标提供，保证测试和回放稳定。
+4. 关系类型映射：cause -> cause，same_topic/support -> parallel，contradict -> risk，follow_up -> follow。
+```
+
 ## 7. 状态与降级策略
 
 - Provider 层支持 `live / degraded / unavailable`

@@ -154,6 +154,48 @@ class EventInsightApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["error"], "event_insight_topic_not_found")
 
+    def test_event_graph_returns_nodes_and_edges_for_topic(self) -> None:
+        """校验事件关系图接口返回主题内节点和关系边。"""
+        topic_response = self.client.post(
+            "/api/frontend/modules/event-insight/topics",
+            json={"name": "内存涨价", "summary": "围绕存储芯片供需变化。"},
+        )
+        topic_id = topic_response.json()["topic"]["id"]
+        self.client.post(
+            f"/api/frontend/modules/event-insight/events/{self.event_id}/link-topic",
+            json={"topicId": topic_id, "roleInTopic": "key_catalyst"},
+        )
+        self.client.post(
+            f"/api/frontend/modules/event-insight/events/{self.other_event_id}/link-topic",
+            json={"topicId": topic_id, "roleInTopic": "follow_up"},
+        )
+        relation_id = self.repository.create_event_relation(
+            source_event_id=self.event_id,
+            target_event_id=self.other_event_id,
+            relation_type="cause",
+            relation_summary="内存涨价推升光模块订单预期。",
+            strength_score=0.73,
+            confidence_score=0.81,
+            generation_method="manual",
+        )
+
+        response = self.client.get(f"/api/frontend/modules/event-insight/graph?topicId={topic_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["traceId"].startswith("event-insight-graph-"))
+        self.assertEqual({node["eventId"] for node in payload["nodes"]}, {self.event_id, self.other_event_id})
+        self.assertEqual(payload["edges"][0]["id"], f"relation-{relation_id}")
+        self.assertEqual(payload["edges"][0]["type"], "cause")
+        self.assertEqual(payload["edges"][0]["summary"], "内存涨价推升光模块订单预期。")
+
+    def test_event_graph_returns_404_for_missing_topic(self) -> None:
+        """校验关系图主题不存在时返回稳定错误码。"""
+        response = self.client.get("/api/frontend/modules/event-insight/graph?topicId=9999")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"], "event_insight_topic_not_found")
+
     def test_update_event_records_override_without_losing_original_fact(self) -> None:
         """校验编辑事件会写人工覆盖，并返回更新后的展示值。"""
         response = self.client.put(

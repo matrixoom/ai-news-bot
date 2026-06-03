@@ -893,6 +893,118 @@ class EventInsightRepository:
             grouped.setdefault(int(row_dict["event_id"]), []).append(row_dict)
         return grouped
 
+    def create_event_relation(
+        self,
+        *,
+        source_event_id: int,
+        target_event_id: int,
+        relation_type: str,
+        relation_summary: str = "",
+        strength_score: float = 0,
+        confidence_score: float = 0,
+        generation_method: str = "manual",
+    ) -> int:
+        """创建事件关系边。
+
+        Args:
+            source_event_id: 来源事件主键。
+            target_event_id: 目标事件主键。
+            relation_type: 关系类型。
+            relation_summary: 关系摘要。
+            strength_score: 关系强度分数。
+            confidence_score: 关系置信度。
+            generation_method: 生成方式。
+
+        Returns:
+            新增关系主键。
+        """
+
+        timestamp = utc_now_iso()
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO event_relation (
+                    source_event_id, target_event_id, relation_type, relation_summary,
+                    strength_score, confidence_score, generation_method, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    source_event_id,
+                    target_event_id,
+                    relation_type,
+                    relation_summary,
+                    strength_score,
+                    confidence_score,
+                    generation_method,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    def list_event_graph_events(self, topic_id: int | None = None, *, limit: int = 40) -> list[dict[str, Any]]:
+        """读取事件关系图节点候选。
+
+        Args:
+            topic_id: 可选主题主键；为空时读取活跃事件。
+            limit: 节点数量上限。
+
+        Returns:
+            事件节点行列表。
+        """
+
+        params: list[Any] = []
+        join_sql = ""
+        where_clauses = ["e.archived_at IS NULL", "e.manual_status = 'active'"]
+        if topic_id is not None:
+            join_sql = "JOIN topic_event te ON te.event_id = e.id"
+            where_clauses.append("te.topic_id = ?")
+            params.append(topic_id)
+
+        where_sql = " AND ".join(where_clauses)
+        with self._session() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT DISTINCT e.*
+                FROM event e
+                {join_sql}
+                WHERE {where_sql}
+                ORDER BY e.event_time DESC, e.id DESC
+                LIMIT ?
+                """,
+                [*params, limit],
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_event_graph_relations(self, event_ids: list[int]) -> list[dict[str, Any]]:
+        """读取给定节点集合内部的事件关系边。
+
+        Args:
+            event_ids: 图谱节点事件 ID。
+
+        Returns:
+            事件关系行列表。
+        """
+
+        if len(event_ids) < 2:
+            return []
+
+        placeholders = ",".join("?" for _ in event_ids)
+        params = [*event_ids, *event_ids]
+        with self._session() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM event_relation
+                WHERE archived_at IS NULL
+                  AND source_event_id IN ({placeholders})
+                  AND target_event_id IN ({placeholders})
+                ORDER BY strength_score DESC, id ASC
+                """,
+                params,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def list_event_evidence(self, event_id: int) -> list[dict[str, Any]]:
         """读取事件证据链。
 

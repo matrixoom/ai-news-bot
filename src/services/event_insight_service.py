@@ -262,6 +262,41 @@ class EventInsightService:
             "currentJudgement": current_judgement,
         }
 
+    def get_event_graph(self, *, topic_id: int | None = None) -> dict[str, Any]:
+        """构建事件关系图投影。
+
+        Args:
+            topic_id: 可选主题主键，传入时只展示主题内事件关系。
+
+        Returns:
+            包含节点、边和默认选中节点的图谱响应。
+        """
+
+        if topic_id is not None and self._repository.get_topic(topic_id) is None:
+            raise EventInsightNotFoundError(f"topic {topic_id} not found")
+
+        event_rows = self._repository.list_event_graph_events(topic_id=topic_id)
+        event_ids = [int(row["id"]) for row in event_rows]
+        relation_rows = self._repository.list_event_graph_relations(event_ids)
+        node_positions = _build_graph_positions(len(event_rows))
+        nodes = [
+            _present_graph_node(row, node_positions[index])
+            for index, row in enumerate(event_rows)
+        ]
+        node_id_by_event_id = {int(node["eventId"]): str(node["id"]) for node in nodes}
+        edges = [
+            _present_graph_edge(row, node_id_by_event_id, index)
+            for index, row in enumerate(relation_rows)
+            if int(row["source_event_id"]) in node_id_by_event_id and int(row["target_event_id"]) in node_id_by_event_id
+        ]
+
+        return {
+            "traceId": _trace_id("event-insight-graph"),
+            "nodes": nodes,
+            "edges": edges,
+            "selectedNodeId": nodes[0]["id"] if nodes else None,
+        }
+
     def run_batch_action(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         """执行事件批量操作。
 
@@ -559,3 +594,142 @@ def _build_trace_clues(topic: dict[str, Any], timeline: list[dict[str, Any]]) ->
     if any(int(item.get("evidenceCount") or 0) == 0 for item in timeline):
         clues.append("为缺少证据的节点补充材料")
     return clues
+
+
+def _build_graph_positions(count: int) -> list[dict[str, str]]:
+    """生成确定性的图谱节点坐标。
+
+    Args:
+        count: 节点数量。
+
+    Returns:
+        百分比坐标列表。
+    """
+
+    seeds = [
+        ("12%", "22%"),
+        ("58%", "46%"),
+        ("32%", "64%"),
+        ("70%", "18%"),
+        ("18%", "52%"),
+        ("76%", "68%"),
+    ]
+    return [{"left": seeds[index % len(seeds)][0], "top": seeds[index % len(seeds)][1]} for index in range(count)]
+
+
+def _present_graph_node(row: dict[str, Any], position: dict[str, str]) -> dict[str, Any]:
+    """将事件行转换为关系图节点。
+
+    Args:
+        row: 事件数据库字段。
+        position: 前端画布百分比坐标。
+
+    Returns:
+        前端图谱节点。
+    """
+
+    confidence_score = float(row.get("confidence_score") or 0)
+    return {
+        "id": f"event-{int(row['id'])}",
+        "eventId": int(row["id"]),
+        "kind": str(row.get("event_type") or "event"),
+        "title": str(row["title"]),
+        "happenedAt": str(row["event_time"]),
+        "confidence": f"{_confidence_label(confidence_score)} · {int(round(confidence_score * 100))}",
+        "confidenceTone": _confidence_tone(confidence_score),
+        "summary": str(row["summary"]),
+        "left": position["left"],
+        "top": position["top"],
+    }
+
+
+def _present_graph_edge(
+    row: dict[str, Any],
+    node_id_by_event_id: dict[int, str],
+    index: int,
+) -> dict[str, Any]:
+    """将事件关系行转换为关系图边。
+
+    Args:
+        row: event_relation 数据库字段。
+        node_id_by_event_id: event_id 到前端 node id 的映射。
+        index: 边序号，用于生成稳定布局。
+
+    Returns:
+        前端图谱边。
+    """
+
+    edge_layouts = [
+        ("25%", "35%", "34%", "18deg"),
+        ("38%", "58%", "28%", "-12deg"),
+        ("20%", "48%", "42%", "42deg"),
+        ("54%", "30%", "30%", "65deg"),
+    ]
+    left, top, width, rotate = edge_layouts[index % len(edge_layouts)]
+    return {
+        "id": f"relation-{int(row['id'])}",
+        "sourceNodeId": node_id_by_event_id[int(row["source_event_id"])],
+        "targetNodeId": node_id_by_event_id[int(row["target_event_id"])],
+        "type": _present_relation_type(str(row["relation_type"])),
+        "summary": str(row.get("relation_summary") or ""),
+        "strengthScore": float(row.get("strength_score") or 0),
+        "confidenceScore": float(row.get("confidence_score") or 0),
+        "left": left,
+        "top": top,
+        "width": width,
+        "rotate": rotate,
+    }
+
+
+def _present_relation_type(relation_type: str) -> str:
+    """映射后端关系类型到前端绘制类型。
+
+    Args:
+        relation_type: event_relation.relation_type。
+
+    Returns:
+        前端边类型。
+    """
+
+    mapping = {
+        "cause": "cause",
+        "same_topic": "parallel",
+        "support": "parallel",
+        "contradict": "risk",
+        "follow_up": "follow",
+    }
+    return mapping.get(relation_type, "parallel")
+
+
+def _confidence_label(score: float) -> str:
+    """生成置信度中文标签。
+
+    Args:
+        score: 0 到 1 的置信度。
+
+    Returns:
+        中文可信度标签。
+    """
+
+    if score >= 0.8:
+        return "高可信"
+    if score >= 0.6:
+        return "中可信"
+    return "低可信"
+
+
+def _confidence_tone(score: float) -> str:
+    """生成置信度色调。
+
+    Args:
+        score: 0 到 1 的置信度。
+
+    Returns:
+        前端 InsightTone。
+    """
+
+    if score >= 0.8:
+        return "green"
+    if score >= 0.6:
+        return "amber"
+    return "rose"

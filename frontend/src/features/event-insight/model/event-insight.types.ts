@@ -155,6 +155,7 @@ export type TopicTracePayload = {
 
 export type GraphNode = {
   id: string;
+  eventId?: number;
   kind: string;
   title: string;
   happenedAt: string;
@@ -167,9 +168,21 @@ export type GraphNode = {
 
 export type GraphEdge = {
   id: string;
+  sourceNodeId?: string;
+  targetNodeId?: string;
   type: "cause" | "parallel" | "risk" | "follow";
+  summary?: string;
+  strengthScore?: number;
+  confidenceScore?: number;
   left: string;
   top: string;
   width: string;
   rotate: string;
+};
+
+export type EventGraphPayload = {
+  traceId: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  selectedNodeId?: string | null;
 };

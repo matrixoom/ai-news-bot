@@ -201,7 +201,24 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 5. 前端主题溯源页从真实 API 加载，覆盖 loading、error 和空时间线展示。
 ```
 
-### 3.12 前端改动
+### 3.12 Event Insight 事件关系图改动
+
+```powershell
+uv run python -m pytest tests/test_event_insight_api.py tests/test_event_insight_repository.py -q
+cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/event-insight-workspaces.test.tsx --run
+```
+
+覆盖点：
+
+```text
+1. Graph API 返回 topic 范围内的事件节点和这些节点之间的 event_relation 边。
+2. 关系类型映射为前端可绘制类型，不泄露后端枚举差异。
+3. topicId 不存在时返回 404。
+4. 前端事件关系图从真实 API 加载，覆盖 loading、边摘要和节点选择详情。
+5. P9 不依赖 Neo4j，不影响 Event Outlook 静态日历。
+```
+
+### 3.13 前端改动
 
 在 `frontend/` 目录执行：
 

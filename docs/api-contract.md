@@ -559,6 +559,57 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 - `404`：`event_insight_topic_not_found`
 - `503`：`event_insight_topic_trace_failed`
 
+#### 4.7.11 `GET /api/frontend/modules/event-insight/graph`
+
+用途：返回事件关系图的 SQLite 投影。该接口读取 `event`、`topic_event` 和 `event_relation`，只展示事实库中已存在的关系边，不调用 LLM，不依赖 Neo4j。
+
+查询参数：
+
+- `topicId`：可选，传入时只返回该主题内事件节点和这些节点之间的关系边；主题不存在返回 404。
+
+成功：`200`
+
+```json
+{
+  "traceId": "event-insight-graph-abc123",
+  "nodes": [
+    {
+      "id": "event-1",
+      "eventId": 1,
+      "kind": "price_change",
+      "title": "存储芯片报价上调",
+      "happenedAt": "2026-05-16T10:30:00+08:00",
+      "confidence": "高可信 · 82",
+      "confidenceTone": "green",
+      "summary": "DRAM 合约价上涨，AI 服务器需求支撑内存涨价。",
+      "left": "12%",
+      "top": "22%"
+    }
+  ],
+  "edges": [
+    {
+      "id": "relation-1",
+      "sourceNodeId": "event-1",
+      "targetNodeId": "event-2",
+      "type": "cause",
+      "summary": "内存涨价推升光模块订单预期。",
+      "strengthScore": 0.73,
+      "confidenceScore": 0.81,
+      "left": "25%",
+      "top": "35%",
+      "width": "34%",
+      "rotate": "18deg"
+    }
+  ],
+  "selectedNodeId": "event-1"
+}
+```
+
+失败：
+
+- `404`：`event_insight_topic_not_found`
+- `503`：`event_insight_graph_failed`
+
 #### 4.7.3 `PUT /api/frontend/modules/event-insight/events/{eventId}`
 
 用途：写入人工字段覆盖。接口不会改写原始事实字段，而是追加 `event_field_override` 和 `event_operation_log`。
