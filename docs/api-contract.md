@@ -797,7 +797,11 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 
 #### 4.9.5 `POST /api/system/llm/providers/{id}/test`
 
-用途：测试 provider 连接。成功返回 `{ "ok": true, "detail": "..." }`。
+用途：测试 provider 连接。接口会使用已保存的脱敏后端配置发起一次短模型调用，验证 provider、baseUrl、model 与 API Key 是否可用。
+
+成功：`200`，返回 `{ "ok": true, "detail": "连接测试成功：..." }`。
+
+连接失败：`200`，返回 `{ "ok": false, "detail": "连接测试失败：..." }`；`detail` 不包含明文 API Key。
 
 #### 4.9.6 `GET /api/system/llm/task-configs`
 

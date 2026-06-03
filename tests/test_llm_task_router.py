@@ -56,6 +56,31 @@ class LlmTaskRouterTests(unittest.TestCase):
         self.assertNotIn("apiKey", listed)
         self.assertEqual(listed["apiKeyPreview"], "sk-...alue")
 
+    def test_provider_connection_test_calls_configured_model(self) -> None:
+        """校验连接测试会真实调用配置的 provider，而不是只检查配置存在。"""
+        fake = FakeProvider(text="OK")
+        service = LlmConfigService(
+            self.repository,
+            secret_key="unit-test-secret",
+            provider_factory=lambda _: fake,
+        )
+        provider = service.create_provider(
+            {
+                "name": "连接测试模型",
+                "providerType": "openai_compatible",
+                "baseUrl": "https://api.example.com/v1",
+                "modelName": "connectivity-model",
+                "apiKey": "sk-connect-secret",
+            }
+        )["provider"]
+
+        result = service.test_provider(provider["id"])
+
+        self.assertTrue(result["ok"])
+        self.assertIn("连接测试成功", result["detail"])
+        self.assertEqual(fake.calls[0]["max_tokens"], 8)
+        self.assertEqual(fake.calls[0]["temperature"], 0)
+
     def test_task_router_uses_configured_provider(self) -> None:
         """校验任务路由按 task_type 选择配置的 provider 和模型参数。"""
         provider = self.service.create_provider(

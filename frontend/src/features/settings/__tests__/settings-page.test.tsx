@@ -27,7 +27,7 @@ describe("SettingsPage", () => {
     expect(screen.getByText("主题摘要")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
-    expect(await screen.findByText("主分析模型 connected")).toBeInTheDocument();
+    expect(await screen.findByText("连接测试成功：主分析模型 / analysis-model 已返回响应。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "新增配置" }));
     fireEvent.change(screen.getByLabelText("配置名称"), { target: { value: "快速抽取模型" } });

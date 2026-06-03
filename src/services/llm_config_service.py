@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable
 
+from ..llm_providers.openai_compatible_provider import create_openai_compatible_provider
 from ..security.local_secret_cipher import LocalSecretCipher
 from .llm_config_repository import LlmConfigRepository
+
+
+logger = logging.getLogger(__name__)
 
 
 class LlmProviderNotFoundError(Exception):
@@ -29,10 +34,12 @@ class LlmConfigService:
         *,
         secret_key: str | None = None,
         connection_tester: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        provider_factory: Callable[[dict[str, Any]], Any] = create_openai_compatible_provider,
     ) -> None:
         self._repository = repository
         self._cipher = LocalSecretCipher(secret_key)
         self._connection_tester = connection_tester
+        self._provider_factory = provider_factory
 
     def list_providers(self) -> dict[str, Any]:
         """返回脱敏后的 provider 列表。"""
@@ -75,7 +82,31 @@ class LlmConfigService:
         provider = self._present_provider(self._require_provider(provider_id), include_secret=True)
         if self._connection_tester is not None:
             return self._connection_tester(provider)
-        return {"ok": bool(provider.get("apiKey")), "detail": "provider configuration is present"}
+        if not provider.get("apiKey"):
+            return {"ok": False, "detail": "连接测试失败：API Key 未配置。"}
+        try:
+            llm_provider = self._provider_factory(provider)
+            llm_provider.generate(
+                [
+                    {"role": "system", "content": "Return a concise connectivity acknowledgement."},
+                    {"role": "user", "content": "Reply with OK."},
+                ],
+                max_tokens=8,
+                temperature=0,
+            )
+        except Exception as exc:
+            logger.warning(
+                "llm provider connection test failed",
+                extra={
+                    "provider_id": provider_id,
+                    "provider_type": provider.get("providerType"),
+                    "model_name": provider.get("modelName"),
+                    "base_url": provider.get("baseUrl"),
+                },
+                exc_info=True,
+            )
+            return {"ok": False, "detail": f"连接测试失败：{_safe_error_message(exc, str(provider.get('apiKey') or ''))}"}
+        return {"ok": True, "detail": f"连接测试成功：{provider['name']} / {provider['modelName']} 已返回响应。"}
 
     def list_task_configs(self) -> dict[str, Any]:
         """返回任务模型映射列表。"""
@@ -194,3 +225,20 @@ def _preview_key(api_key: str) -> str:
     if len(api_key) <= 7:
         return "***"
     return f"{api_key[:3]}...{api_key[-4:]}"
+
+
+def _safe_error_message(exc: Exception, api_key: str) -> str:
+    """生成面向用户的连接测试错误信息，避免泄露密钥。
+
+    Args:
+        exc: provider 调用抛出的异常。
+        api_key: 当前 provider 明文密钥，仅用于脱敏替换。
+
+    Returns:
+        已截断且脱敏的错误摘要。
+    """
+
+    message = str(exc).strip() or exc.__class__.__name__
+    if api_key:
+        message = message.replace(api_key, "***")
+    return message[:240]
