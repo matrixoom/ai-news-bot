@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
 import sqlite3
 from typing import Any, Iterator
@@ -118,6 +120,34 @@ class EventInsightRepository:
                 ),
             )
             return int(cursor.lastrowid)
+
+    def get_raw_document(self, document_id: int) -> dict[str, Any] | None:
+        """按主键读取原始材料。
+
+        Args:
+            document_id: 原始材料主键。
+
+        Returns:
+            找到时返回材料字段字典，否则返回 None。
+        """
+
+        with self._session() as connection:
+            row = connection.execute("SELECT * FROM raw_document WHERE id = ?", (document_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_raw_document_by_hash(self, content_hash: str) -> dict[str, Any] | None:
+        """按内容哈希读取原始材料。
+
+        Args:
+            content_hash: 材料内容哈希。
+
+        Returns:
+            找到时返回材料字段字典，否则返回 None。
+        """
+
+        with self._session() as connection:
+            row = connection.execute("SELECT * FROM raw_document WHERE content_hash = ?", (content_hash,)).fetchone()
+        return dict(row) if row else None
 
     def update_raw_document_content(self, *, document_id: int, title: str, content_text: str) -> None:
         """更新原始材料标题和正文。
@@ -538,6 +568,256 @@ class EventInsightRepository:
             rows = connection.execute("SELECT * FROM graph_sync_outbox ORDER BY id ASC").fetchall()
         return [dict(row) for row in rows]
 
+    def create_processing_job(
+        self,
+        *,
+        job_type: str,
+        idempotency_key: str,
+        payload_json: str,
+        next_run_at: str,
+        max_attempts: int = 3,
+    ) -> dict[str, Any]:
+        """创建本地处理任务，幂等键重复时返回已有任务。
+
+        Args:
+            job_type: 任务类型。
+            idempotency_key: 幂等键。
+            payload_json: 任务 payload JSON 字符串。
+            next_run_at: 最早可运行时间。
+            max_attempts: 最大尝试次数。
+
+        Returns:
+            任务字段字典。
+        """
+
+        timestamp = utc_now_iso()
+        with self._session() as connection:
+            connection.execute(
+                """
+                INSERT INTO processing_job (
+                    job_type, status, idempotency_key, payload_json,
+                    max_attempts, next_run_at, created_at, updated_at
+                ) VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(idempotency_key) DO NOTHING
+                """,
+                (job_type, idempotency_key, payload_json, max_attempts, next_run_at, timestamp, timestamp),
+            )
+            row = connection.execute(
+                "SELECT * FROM processing_job WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+        return dict(row)
+
+    def get_processing_job(self, job_id: int) -> dict[str, Any] | None:
+        """按主键读取处理任务。
+
+        Args:
+            job_id: 任务主键。
+
+        Returns:
+            找到时返回任务字段字典，否则返回 None。
+        """
+
+        with self._session() as connection:
+            row = connection.execute("SELECT * FROM processing_job WHERE id = ?", (job_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_processing_job_by_idempotency_key(self, idempotency_key: str) -> dict[str, Any] | None:
+        """按幂等键读取处理任务。
+
+        Args:
+            idempotency_key: 任务幂等键。
+
+        Returns:
+            找到时返回任务字段字典，否则返回 None。
+        """
+
+        with self._session() as connection:
+            row = connection.execute(
+                "SELECT * FROM processing_job WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def claim_next_processing_job(self, *, lease_owner: str, now: str, lease_seconds: int) -> dict[str, Any] | None:
+        """原子领取下一条可运行任务。
+
+        Args:
+            lease_owner: 当前 worker 标识。
+            now: 当前时间。
+            lease_seconds: 租约秒数。
+
+        Returns:
+            成功时返回 running 任务，否则返回 None。
+        """
+
+        lease_expires_at = _add_seconds(now, lease_seconds)
+        connection = self._connect()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT *
+                FROM processing_job
+                WHERE
+                    (status = 'pending' AND next_run_at <= ?)
+                    OR (status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (now, now),
+            ).fetchone()
+            if row is None:
+                connection.commit()
+                return None
+
+            attempt_no = int(row["attempt_count"]) + 1
+            if attempt_no > int(row["max_attempts"]):
+                connection.execute(
+                    """
+                    UPDATE processing_job
+                    SET status = 'failed', lease_owner = NULL, lease_expires_at = NULL,
+                        updated_at = ?, error_message = ?
+                    WHERE id = ?
+                    """,
+                    (now, "max attempts exhausted before claim", int(row["id"])),
+                )
+                connection.commit()
+                return None
+
+            connection.execute(
+                """
+                UPDATE processing_job
+                SET status = 'running',
+                    lease_owner = ?,
+                    lease_expires_at = ?,
+                    attempt_count = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (lease_owner, lease_expires_at, attempt_no, now, int(row["id"])),
+            )
+            connection.execute(
+                """
+                INSERT INTO processing_job_attempt(job_id, attempt_no, status, started_at)
+                VALUES (?, ?, 'running', ?)
+                """,
+                (int(row["id"]), attempt_no, now),
+            )
+            claimed = connection.execute("SELECT * FROM processing_job WHERE id = ?", (int(row["id"]),)).fetchone()
+            connection.commit()
+            return dict(claimed)
+        finally:
+            connection.close()
+
+    def complete_processing_job(self, *, job_id: int, now: str) -> dict[str, Any] | None:
+        """标记任务成功完成。
+
+        Args:
+            job_id: 任务主键。
+            now: 完成时间。
+
+        Returns:
+            更新后的任务；不存在时返回 None。
+        """
+
+        with self._session() as connection:
+            job = connection.execute("SELECT * FROM processing_job WHERE id = ?", (job_id,)).fetchone()
+            if job is None:
+                return None
+            connection.execute(
+                """
+                UPDATE processing_job
+                SET status = 'succeeded', lease_owner = NULL, lease_expires_at = NULL,
+                    updated_at = ?, error_message = ''
+                WHERE id = ?
+                """,
+                (now, job_id),
+            )
+            connection.execute(
+                """
+                UPDATE processing_job_attempt
+                SET status = 'succeeded', finished_at = ?
+                WHERE job_id = ? AND attempt_no = ?
+                """,
+                (now, job_id, int(job["attempt_count"])),
+            )
+        return self.get_processing_job(job_id)
+
+    def fail_processing_job(
+        self,
+        *,
+        job_id: int,
+        error_message: str,
+        now: str,
+        retry_delay_seconds: int,
+    ) -> dict[str, Any] | None:
+        """记录任务失败，并在次数未耗尽时重新排队。
+
+        Args:
+            job_id: 任务主键。
+            error_message: 失败原因。
+            now: 失败时间。
+            retry_delay_seconds: 下一次重试延迟。
+
+        Returns:
+            更新后的任务；不存在时返回 None。
+        """
+
+        with self._session() as connection:
+            job = connection.execute("SELECT * FROM processing_job WHERE id = ?", (job_id,)).fetchone()
+            if job is None:
+                return None
+            attempt_count = int(job["attempt_count"])
+            max_attempts = int(job["max_attempts"])
+            next_status = "pending" if attempt_count < max_attempts else "failed"
+            next_run_at = _add_seconds(now, retry_delay_seconds) if next_status == "pending" else now
+            connection.execute(
+                """
+                UPDATE processing_job
+                SET status = ?,
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    next_run_at = ?,
+                    updated_at = ?,
+                    error_message = ?
+                WHERE id = ?
+                """,
+                (next_status, next_run_at, now, error_message, job_id),
+            )
+            if attempt_count > 0:
+                connection.execute(
+                    """
+                    UPDATE processing_job_attempt
+                    SET status = 'failed', finished_at = ?, error_message = ?
+                    WHERE job_id = ? AND attempt_no = ?
+                    """,
+                    (now, error_message, job_id, attempt_count),
+                )
+        return self.get_processing_job(job_id)
+
+    def list_processing_job_attempts(self, job_id: int) -> list[dict[str, Any]]:
+        """读取任务尝试日志。
+
+        Args:
+            job_id: 任务主键。
+
+        Returns:
+            attempt 记录字典列表。
+        """
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM processing_job_attempt
+                WHERE job_id = ?
+                ORDER BY attempt_no ASC
+                """,
+                (job_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def _connect(self) -> sqlite3.Connection:
         """打开带 PRAGMA 的 SQLite 连接。
 
@@ -565,3 +845,37 @@ class EventInsightRepository:
             connection.commit()
         finally:
             connection.close()
+
+
+def decode_job_payload(row: dict[str, Any]) -> dict[str, Any]:
+    """解析任务 payload JSON。
+
+    Args:
+        row: processing_job 字段字典。
+
+    Returns:
+        payload 字典；非法 JSON 返回空字典。
+    """
+
+    try:
+        payload = json.loads(str(row.get("payload_json") or "{}"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _add_seconds(timestamp: str, seconds: int) -> str:
+    """给 UTC ISO 时间增加秒数。
+
+    Args:
+        timestamp: 形如 `2026-06-03T09:00:00Z` 的时间。
+        seconds: 增加秒数。
+
+    Returns:
+        增加后的 UTC ISO 时间。
+    """
+
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return (parsed + timedelta(seconds=seconds)).astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")

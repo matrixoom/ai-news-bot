@@ -336,7 +336,106 @@ uv run python main.py macro-sync
 
 失败：`400`，`invalid_event_outlook_payload`
 
-### 4.6 `GET /api/frontend/modules/push`
+### 4.6 Event Insight 导入与任务接口
+
+Event Insight 使用独立前缀，不复用 Event Outlook 静态日历接口：
+
+```text
+/api/frontend/modules/event-insight/*
+```
+
+#### 4.6.1 `POST /api/frontend/modules/event-insight/documents/import`
+
+用途：导入事件洞察原始材料，并创建可恢复的 `parse_document` 本地任务。接口在请求线程内只做校验、入库和受控文件复制，不抓取远端 URL 正文，不触发 LLM 抽取。
+
+请求头：
+
+- `Idempotency-Key`：可选；重复请求返回同一个任务。
+
+请求 JSON 支持三种模式：
+
+```json
+{
+  "mode": "text",
+  "title": "存储芯片报价上调",
+  "content": "DRAM 合约价上涨，AI 服务器需求支撑内存涨价。"
+}
+```
+
+```json
+{
+  "mode": "url",
+  "title": "HBM4 量产节奏提前",
+  "url": "https://example.com/research/hbm4"
+}
+```
+
+```json
+{
+  "mode": "file",
+  "title": "研报摘要",
+  "fileName": "memory-report.txt",
+  "contentType": "text/plain",
+  "content": "存储芯片价格继续上涨。"
+}
+```
+
+文件导入约束：
+
+```text
+1. 文件名不得包含路径或 `..`。
+2. 支持 .txt/.md/.json/.html/.htm/.pdf。
+3. MIME 必须与扩展名匹配。
+4. 默认单次内容上限为 5MB。
+5. 本地文件复制到受控目录 `.data/event_insight/raw/*`，数据库只保存相对路径。
+```
+
+成功：`202`
+
+```json
+{
+  "jobId": 1,
+  "jobType": "parse_document",
+  "status": "pending",
+  "rawDocumentId": 1,
+  "traceId": "event-insight-job-1"
+}
+```
+
+失败：
+
+- `400`：`invalid_event_insight_import_payload`
+- `503`：`event_insight_import_failed`
+
+#### 4.6.2 `GET /api/frontend/modules/event-insight/jobs/{jobId}`
+
+用途：轮询 Event Insight 本地任务状态。
+
+成功：`200`
+
+```json
+{
+  "id": 1,
+  "jobId": 1,
+  "jobType": "parse_document",
+  "status": "pending",
+  "attemptCount": 0,
+  "maxAttempts": 3,
+  "error": "",
+  "payload": {
+    "rawDocumentId": 1
+  },
+  "rawDocumentId": 1,
+  "traceId": "event-insight-job-1"
+}
+```
+
+失败：
+
+- `404`：`event_insight_job_not_found`
+- `503`：`event_insight_job_status_failed`
+
+### 4.7 `GET /api/frontend/modules/push`
 
 查询参数：
 

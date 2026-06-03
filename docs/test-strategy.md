@@ -22,6 +22,7 @@
 - market data 单图刷新隔离、全球期货收盘列解析与双源回退
 - push center 配置、预览、触发逻辑、宽基指数时间范围与历史保留
 - event insight SQLite migration、外键、FTS trigger、人工覆盖、重复候选和 graph outbox 幂等
+- event insight 材料导入 API、processing_job 幂等、租约恢复、attempt 日志和文件路径安全
 - 历史文档校验类 / demo 类测试已归档到 `to_delete/tests/`
 
 ### 2.2 集成测试（后端 API）
@@ -92,7 +93,26 @@ uv run python -m pytest tests/test_event_insight_repository.py tests/test_event_
 7. 现有 Event Outlook 静态日历回归不受影响。
 ```
 
-### 3.6 前端改动
+### 3.6 Event Insight 导入与任务改动
+
+```powershell
+uv run python -m pytest tests/test_event_insight_jobs.py tests/test_event_insight_import_api.py tests/test_event_outlook_timeline.py -q
+```
+
+覆盖点：
+
+```text
+1. create_job 使用 idempotency_key 避免重复任务。
+2. claim_next_job 设置 running、lease_owner、lease_expires_at 和 attempt 日志。
+3. 未过期租约不可重复领取，过期租约可恢复领取。
+4. fail_job 在次数未耗尽时重新排队，达到上限后标记 failed。
+5. text/url/file 三种导入返回 202 + jobId。
+6. URL 导入不抓取远端正文。
+7. 文件导入拒绝路径穿越，并复制到受控相对目录。
+8. 新增 Event Insight API 不影响 Event Outlook 静态日历。
+```
+
+### 3.7 前端改动
 
 在 `frontend/` 目录执行：
 

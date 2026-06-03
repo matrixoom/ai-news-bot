@@ -214,6 +214,42 @@ Event Insight P2 已建立独立 SQLite 地基：
 5. 图谱同步通过 graph_sync_outbox 解耦，Neo4j 后续可从 SQLite 重建。
 ```
 
+P3 新增材料导入与本地任务队列：
+
+```text
+Controller:
+  src/app/web/event_insight_routes.py
+  - POST /api/frontend/modules/event-insight/documents/import
+  - GET /api/frontend/modules/event-insight/jobs/{jobId}
+
+Service:
+  src/services/event_insight_import_service.py
+  - 校验 text/url/file JSON 导入
+  - 生成内容 hash 和幂等键
+  - 复制受控本地文件
+  - 创建 parse_document job
+
+  src/services/event_insight_job_service.py
+  - 创建幂等任务
+  - 查询任务状态
+  - 领取任务租约
+  - 失败重试和 attempt 日志
+
+Repository:
+  src/services/event_insight_repository.py
+  - processing_job / processing_job_attempt 读写
+  - raw_document 查询和 FTS 同步
+```
+
+导入边界：
+
+```text
+1. URL 导入只保存 URL 元信息，不在 HTTP 请求线程抓取远端正文。
+2. 文件导入只保存受控相对路径，禁止路径穿越。
+3. P3 创建 parse_document 任务，但不执行事件抽取、Embedding、聚类或图谱同步。
+4. 后续 worker 可以通过 claim_next_job 获取带租约的任务，超时后允许恢复领取。
+```
+
 ## 7. 状态与降级策略
 
 - Provider 层支持 `live / degraded / unavailable`
