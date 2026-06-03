@@ -1,0 +1,68 @@
+{
+  "description": "Event Insight P9 graph projection fixtures for a bounded topic subgraph.",
+  "topic": {
+    "id": "topic-memory-price",
+    "name": "内存涨价",
+    "lifecycle_stage": "verification"
+  },
+  "events": [
+    {
+      "id": "event-hbm4-capacity",
+      "title": "HBM4 量产节奏提前",
+      "event_time": "2026-05-12T09:00:00+08:00",
+      "event_type": "capacity",
+      "importance_score": 0.86
+    },
+    {
+      "id": "event-dram-contract-price",
+      "title": "DRAM 合约价上调",
+      "event_time": "2026-05-16T10:30:00+08:00",
+      "event_type": "price_change",
+      "importance_score": 0.82
+    },
+    {
+      "id": "event-ai-server-demand",
+      "title": "AI 服务器需求支撑高端存储",
+      "event_time": "2026-05-20T14:00:00+08:00",
+      "event_type": "supply_demand",
+      "importance_score": 0.79
+    }
+  ],
+  "entities": [
+    {
+      "id": "entity-samsung",
+      "name": "三星电子",
+      "entity_type": "company"
+    },
+    {
+      "id": "entity-sk-hynix",
+      "name": "SK 海力士",
+      "entity_type": "company"
+    },
+    {
+      "id": "entity-dram",
+      "name": "DRAM",
+      "entity_type": "product"
+    }
+  ],
+  "relations": [
+    {
+      "id": "rel-capacity-supports-price",
+      "source_event_id": "event-hbm4-capacity",
+      "target_event_id": "event-dram-contract-price",
+      "relation_type": "support",
+      "strength_score": 0.76,
+      "confidence_score": 0.72,
+      "evidence_ids": ["evd-hbm4-001", "evd-dram-001"]
+    },
+    {
+      "id": "rel-demand-supports-price",
+      "source_event_id": "event-ai-server-demand",
+      "target_event_id": "event-dram-contract-price",
+      "relation_type": "support",
+      "strength_score": 0.81,
+      "confidence_score": 0.78,
+      "evidence_ids": ["evd-demand-001", "evd-dram-001"]
+    }
+  ]
+}

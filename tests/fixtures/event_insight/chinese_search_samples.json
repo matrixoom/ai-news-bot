@@ -1,0 +1,29 @@
+{
+  "description": "Event Insight P7 search fixtures for Chinese FTS5 and n-gram recall.",
+  "samples": [
+    {
+      "id": "doc-hbm4-packaging",
+      "title": "HBM4 量产节奏提前，先进封装产能继续吃紧",
+      "body": "三星与 SK 海力士推进 HBM4，先进封装产能继续吃紧，AI 服务器需求继续拉动高端存储芯片。",
+      "expected_keywords": ["HBM4", "先进封装", "存储芯片", "AI服务器"]
+    },
+    {
+      "id": "doc-memory-price",
+      "title": "存储芯片报价上调，DRAM 合约价延续上涨",
+      "body": "DRAM 合约价上涨，AI 服务器需求支撑内存涨价，渠道库存继续下降。",
+      "expected_keywords": ["存储芯片", "DRAM", "内存", "涨价"]
+    },
+    {
+      "id": "doc-cpo",
+      "title": "CPO 光模块订单增加，海外云厂商资本开支上修",
+      "body": "800G 光模块需求加速，CPO 方案验证推进，海外云厂商继续上修 AI 资本开支。",
+      "expected_keywords": ["CPO", "光模块", "云厂商", "资本开支"]
+    },
+    {
+      "id": "doc-gold-silver",
+      "title": "黄金白银价格走强，有色金属板块成交活跃",
+      "body": "美元实际利率回落，黄金和白银价格走强，有色金属板块成交活跃。",
+      "expected_keywords": ["黄金", "白银", "有色金属", "价格走强"]
+    }
+  ]
+}
