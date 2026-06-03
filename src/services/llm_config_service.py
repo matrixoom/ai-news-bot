@@ -86,13 +86,34 @@ class LlmConfigService:
             return {"ok": False, "detail": "连接测试失败：API Key 未配置。"}
         try:
             llm_provider = self._provider_factory(provider)
-            llm_provider.generate(
-                [
-                    {"role": "system", "content": "Return a concise connectivity acknowledgement."},
-                    {"role": "user", "content": "Reply with OK."},
-                ],
+            messages = [
+                {"role": "system", "content": "Return a concise connectivity acknowledgement."},
+                {"role": "user", "content": "Reply with OK."},
+            ]
+            logger.info(
+                "llm provider connection test request",
+                extra={
+                    "provider_id": provider_id,
+                    "provider_type": provider.get("providerType"),
+                    "model_name": provider.get("modelName"),
+                    "base_url": provider.get("baseUrl"),
+                    "messages": messages,
+                },
+            )
+            response_text = llm_provider.generate(
+                messages,
                 max_tokens=8,
                 temperature=0,
+            )
+            logger.info(
+                "llm provider connection test response",
+                extra={
+                    "provider_id": provider_id,
+                    "provider_type": provider.get("providerType"),
+                    "model_name": provider.get("modelName"),
+                    "base_url": provider.get("baseUrl"),
+                    "response_text": response_text,
+                },
             )
         except Exception as exc:
             logger.warning(

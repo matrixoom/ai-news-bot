@@ -74,12 +74,17 @@ class LlmTaskRouterTests(unittest.TestCase):
             }
         )["provider"]
 
-        result = service.test_provider(provider["id"])
+        with self.assertLogs("src.services.llm_config_service", level="INFO") as captured_logs:
+            result = service.test_provider(provider["id"])
 
         self.assertTrue(result["ok"])
         self.assertIn("连接测试成功", result["detail"])
         self.assertEqual(fake.calls[0]["max_tokens"], 8)
         self.assertEqual(fake.calls[0]["temperature"], 0)
+        request_record = captured_logs.records[0]
+        response_record = captured_logs.records[1]
+        self.assertEqual(request_record.messages[1]["content"], "Reply with OK.")
+        self.assertEqual(response_record.response_text, "OK")
 
     def test_task_router_uses_configured_provider(self) -> None:
         """校验任务路由按 task_type 选择配置的 provider 和模型参数。"""
