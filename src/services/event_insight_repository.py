@@ -817,6 +817,82 @@ class EventInsightRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_topic_trace_events(self, topic_id: int) -> list[dict[str, Any]]:
+        """读取主题溯源所需的关联事件。
+
+        Args:
+            topic_id: 主题主键。
+
+        Returns:
+            关联事件及 topic_event 字段列表，按事件时间倒序排列。
+        """
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    e.*,
+                    te.role_in_topic,
+                    te.relevance_score,
+                    te.manual_locked,
+                    (
+                        SELECT COUNT(*)
+                        FROM event_evidence ee_count
+                        WHERE ee_count.event_id = e.id
+                    ) AS evidence_count
+                FROM topic_event te
+                JOIN event e ON e.id = te.event_id
+                WHERE te.topic_id = ? AND e.archived_at IS NULL
+                ORDER BY e.event_time DESC, e.id DESC
+                """,
+                (topic_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_evidence_for_events(self, event_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+        """批量读取多个事件的证据链。
+
+        Args:
+            event_ids: 事件主键列表。
+
+        Returns:
+            以 event_id 为 key 的证据列表映射。
+        """
+
+        if not event_ids:
+            return {}
+
+        placeholders = ",".join("?" for _ in event_ids)
+        with self._session() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    ee.event_id,
+                    ev.id,
+                    ev.raw_document_id,
+                    ev.excerpt,
+                    ev.evidence_level,
+                    ev.source_title,
+                    ev.source_url,
+                    ev.start_offset,
+                    ev.end_offset,
+                    rd.title AS document_title,
+                    rd.url AS document_url
+                FROM event_evidence ee
+                JOIN evidence ev ON ev.id = ee.evidence_id
+                JOIN raw_document rd ON rd.id = ev.raw_document_id
+                WHERE ee.event_id IN ({placeholders})
+                ORDER BY ee.event_id ASC, ee.created_at ASC, ev.id ASC
+                """,
+                event_ids,
+            ).fetchall()
+
+        grouped: dict[int, list[dict[str, Any]]] = {event_id: [] for event_id in event_ids}
+        for row in rows:
+            row_dict = dict(row)
+            grouped.setdefault(int(row_dict["event_id"]), []).append(row_dict)
+        return grouped
+
     def list_event_evidence(self, event_id: int) -> list[dict[str, Any]]:
         """读取事件证据链。
 

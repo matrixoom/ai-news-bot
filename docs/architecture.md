@@ -326,6 +326,35 @@ src/services/sqlite_vec_loader.py
 4. sqlite-vec 是可选增强能力，未安装时不能阻断事件列表、候选生成或聚类。
 ```
 
+P8 新增主题溯源链路：
+
+```text
+Controller:
+  src/app/web/event_insight_routes.py
+  - GET /api/frontend/modules/event-insight/topics/{topicId}/trace
+
+Service:
+  src/services/event_insight_service.py
+  - get_topic_trace 聚合主题、阶段、时间线、证据和当前判断
+
+Repository:
+  src/services/event_insight_repository.py
+  - list_topic_trace_events 批量读取主题关联事件
+  - list_evidence_for_events 批量读取事件证据，避免主题时间线 N+1
+
+Frontend:
+  frontend/src/features/event-insight/components/topic-trace-workspace.tsx
+  - 从真实 API 加载主题溯源，覆盖 loading/error/empty
+```
+
+主题溯源边界：
+
+```text
+1. P8 不调用 LLM 生成主题摘要，当前判断由现有 topic.summary 与最新事件组成。
+2. P8 不创建事件关系边，不投影 Neo4j。
+3. P8 读取 SQLite 事实库，不复用 Event Outlook 静态日历。
+```
+
 ## 7. 状态与降级策略
 
 - Provider 层支持 `live / degraded / unavailable`

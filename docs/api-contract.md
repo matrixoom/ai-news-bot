@@ -517,6 +517,48 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 - `cluster_events(keyword, topic_name)`：创建或复用主题，并把匹配事件写入 `topic_event`；自动规则关联使用 `manual_locked=false`，便于后续人工调整。
 - `inspect_vector_runtime()`：仅探测 `sqlite-vec` 可用性；扩展不可用时返回原因，不阻断基础检索。
 
+#### 4.7.10 `GET /api/frontend/modules/event-insight/topics/{topicId}/trace`
+
+用途：返回主题溯源页所需的真实主题、指标、阶段、时间线和当前判断。该接口读取 `topic`、`topic_event`、`event` 与证据链，不调用 LLM，不生成关系图投影。
+
+成功：`200`
+
+```json
+{
+  "traceId": "event-insight-topic-trace-abc123",
+  "topic": { "id": 1, "name": "内存涨价", "summary": "围绕存储芯片供需变化。" },
+  "metrics": [
+    { "label": "主题事件", "value": "2", "note": "按时间倒序展示", "noteTone": "green" }
+  ],
+  "stages": [
+    { "id": "stage-1", "label": "阶段 01", "title": "存储芯片报价上调", "active": false },
+    { "id": "stage-2", "label": "阶段 02 · 当前", "title": "CPO 光模块订单增加", "active": true }
+  ],
+  "timeline": [
+    {
+      "id": "event-2",
+      "eventId": 2,
+      "happenedAt": "2026-05-20T10:30:00+08:00",
+      "title": "CPO 光模块订单增加",
+      "summary": "海外云厂商资本开支上修。",
+      "roleInTopic": "supporting_event",
+      "evidenceCount": 0,
+      "evidence": []
+    }
+  ],
+  "currentJudgement": {
+    "title": "阶段 02：CPO 光模块订单增加",
+    "summary": "围绕存储芯片供需变化。",
+    "clues": ["继续补充交叉证据"]
+  }
+}
+```
+
+失败：
+
+- `404`：`event_insight_topic_not_found`
+- `503`：`event_insight_topic_trace_failed`
+
 #### 4.7.3 `PUT /api/frontend/modules/event-insight/events/{eventId}`
 
 用途：写入人工字段覆盖。接口不会改写原始事实字段，而是追加 `event_field_override` 和 `event_operation_log`。

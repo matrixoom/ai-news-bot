@@ -118,6 +118,42 @@ class EventInsightApiTests(unittest.TestCase):
         self.assertEqual(payload["event"]["topics"][0]["name"], "内存涨价")
         self.assertEqual(payload["event"]["evidence"][0]["excerpt"], "DRAM 合约价上涨，AI 服务器需求支撑内存涨价。")
 
+    def test_topic_trace_returns_metrics_stages_and_timeline(self) -> None:
+        """校验主题溯源接口返回真实关联事件、指标和阶段。"""
+        topic_response = self.client.post(
+            "/api/frontend/modules/event-insight/topics",
+            json={"name": "内存涨价", "summary": "围绕存储芯片供需变化。"},
+        )
+        topic_id = topic_response.json()["topic"]["id"]
+        self.client.post(
+            f"/api/frontend/modules/event-insight/events/{self.event_id}/link-topic",
+            json={"topicId": topic_id, "roleInTopic": "key_catalyst"},
+        )
+        self.client.post(
+            f"/api/frontend/modules/event-insight/events/{self.other_event_id}/link-topic",
+            json={"topicId": topic_id, "roleInTopic": "supporting_event"},
+        )
+
+        response = self.client.get(f"/api/frontend/modules/event-insight/topics/{topic_id}/trace")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["traceId"].startswith("event-insight-topic-trace-"))
+        self.assertEqual(payload["topic"]["id"], topic_id)
+        self.assertEqual(payload["metrics"][0]["label"], "主题事件")
+        self.assertEqual(payload["metrics"][0]["value"], "2")
+        self.assertEqual(payload["stages"][-1]["title"], "CPO 光模块订单增加")
+        self.assertTrue(payload["stages"][-1]["active"])
+        self.assertEqual(payload["timeline"][0]["title"], "CPO 光模块订单增加")
+        self.assertEqual(payload["timeline"][1]["evidence"][0]["excerpt"], "DRAM 合约价上涨，AI 服务器需求支撑内存涨价。")
+
+    def test_topic_trace_returns_404_for_missing_topic(self) -> None:
+        """校验主题不存在时返回稳定错误码。"""
+        response = self.client.get("/api/frontend/modules/event-insight/topics/9999/trace")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"], "event_insight_topic_not_found")
+
     def test_update_event_records_override_without_losing_original_fact(self) -> None:
         """校验编辑事件会写人工覆盖，并返回更新后的展示值。"""
         response = self.client.put(

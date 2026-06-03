@@ -224,6 +224,44 @@ class EventInsightService:
         )
         return self.get_event_detail(event_id)
 
+    def get_topic_trace(self, topic_id: int) -> dict[str, Any]:
+        """构建主题溯源响应。
+
+        Args:
+            topic_id: 主题主键。
+
+        Returns:
+            包含主题、指标、阶段、时间线和当前判断的响应。
+        """
+
+        topic = self._repository.get_topic(topic_id)
+        if topic is None:
+            raise EventInsightNotFoundError(f"topic {topic_id} not found")
+
+        event_rows = self._repository.list_topic_trace_events(topic_id)
+        event_ids = [int(row["id"]) for row in event_rows]
+        evidence_by_event_id = self._repository.list_evidence_for_events(event_ids)
+        timeline = [
+            self._present_topic_timeline_entry(row, evidence_by_event_id.get(int(row["id"]), []))
+            for row in event_rows
+        ]
+        stages = _build_topic_stages(event_rows)
+        current = timeline[0] if timeline else None
+        current_judgement = {
+            "title": f"{stages[-1]['label'].replace(' · 当前', '')}：{stages[-1]['title']}" if stages else "暂无阶段判断",
+            "summary": str(topic.get("summary") or (current or {}).get("summary") or "暂无关联事件。"),
+            "clues": _build_trace_clues(topic, timeline),
+        }
+
+        return {
+            "traceId": _trace_id("event-insight-topic-trace"),
+            "topic": self._present_topic(topic),
+            "metrics": _build_topic_metrics(event_rows, evidence_by_event_id),
+            "stages": stages,
+            "timeline": timeline,
+            "currentJudgement": current_judgement,
+        }
+
     def run_batch_action(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         """执行事件批量操作。
 
@@ -375,6 +413,34 @@ class EventInsightService:
             "relevanceScore": float(row.get("relevance_score") or 0),
         }
 
+    def _present_topic_timeline_entry(
+        self,
+        row: dict[str, Any],
+        evidence_rows: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """将主题事件行转换为溯源时间线节点。
+
+        Args:
+            row: 事件与 topic_event 联表字段。
+            evidence_rows: 当前事件证据行列表。
+
+        Returns:
+            前端主题溯源时间线节点。
+        """
+
+        evidence = [self._present_evidence(evidence_row) for evidence_row in evidence_rows]
+        return {
+            "id": f"event-{int(row['id'])}",
+            "eventId": int(row["id"]),
+            "happenedAt": str(row["event_time"]),
+            "title": str(row["title"]),
+            "summary": str(row["summary"]),
+            "roleInTopic": str(row.get("role_in_topic") or "supporting_event"),
+            "relevanceScore": float(row.get("relevance_score") or 0),
+            "evidenceCount": int(row.get("evidence_count") or len(evidence)),
+            "evidence": evidence,
+        }
+
 
 def _trace_id(prefix: str) -> str:
     """生成响应 traceId。
@@ -416,3 +482,80 @@ def _json_safe(row: dict[str, Any]) -> dict[str, Any]:
     """
 
     return {key: value for key, value in row.items()}
+
+
+def _build_topic_metrics(
+    event_rows: list[dict[str, Any]],
+    evidence_by_event_id: dict[int, list[dict[str, Any]]],
+) -> list[dict[str, str]]:
+    """基于主题事件生成展示指标。
+
+    Args:
+        event_rows: 主题关联事件行列表。
+        evidence_by_event_id: 事件证据映射。
+
+    Returns:
+        前端指标卡列表。
+    """
+
+    evidence_count = sum(len(items) for items in evidence_by_event_id.values())
+    document_ids = {
+        int(evidence["raw_document_id"])
+        for items in evidence_by_event_id.values()
+        for evidence in items
+        if evidence.get("raw_document_id") is not None
+    }
+    key_nodes = min(len(event_rows), 4)
+    missing_evidence = sum(1 for row in event_rows if int(row.get("evidence_count") or 0) == 0)
+    return [
+        {"label": "主题事件", "value": str(len(event_rows)), "note": "按时间倒序展示", "noteTone": "green"},
+        {"label": "有效证据", "value": str(evidence_count), "note": f"覆盖 {len(document_ids)} 份材料", "noteTone": "green"},
+        {"label": "关键节点", "value": str(key_nodes), "note": "由关联事件生成", "noteTone": "green"},
+        {"label": "待验证线索", "value": str(missing_evidence), "note": "缺少证据的事件数", "noteTone": "amber"},
+    ]
+
+
+def _build_topic_stages(event_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """基于主题事件生成阶段条。
+
+    Args:
+        event_rows: 主题关联事件行列表，按时间倒序排列。
+
+    Returns:
+        按时间正序排列的阶段列表，最后一项标记为当前阶段。
+    """
+
+    chronological_rows = list(reversed(event_rows))[-4:]
+    stages: list[dict[str, Any]] = []
+    for index, row in enumerate(chronological_rows, start=1):
+        is_current = index == len(chronological_rows)
+        stages.append(
+            {
+                "id": f"stage-{index}",
+                "label": f"阶段 {index:02d}{' · 当前' if is_current else ''}",
+                "title": str(row["title"]),
+                "active": is_current,
+            }
+        )
+    return stages
+
+
+def _build_trace_clues(topic: dict[str, Any], timeline: list[dict[str, Any]]) -> list[str]:
+    """生成主题溯源待验证线索。
+
+    Args:
+        topic: 主题字段。
+        timeline: 时间线节点列表。
+
+    Returns:
+        待验证线索文案列表。
+    """
+
+    if not timeline:
+        return ["先关联事件到该主题"]
+    clues = ["继续补充交叉证据"]
+    if str(topic.get("lifecycle_stage") or "noise") == "noise":
+        clues.append("确认主题是否具备持续跟踪价值")
+    if any(int(item.get("evidenceCount") or 0) == 0 for item in timeline):
+        clues.append("为缺少证据的节点补充材料")
+    return clues
