@@ -1118,6 +1118,27 @@ class EventInsightRepository:
             row = connection.execute("SELECT * FROM topic WHERE name = ?", (name,)).fetchone()
         return dict(row)
 
+    def list_topics(self) -> list[dict[str, Any]]:
+        """读取未归档主题列表。
+
+        Args:
+            无。
+
+        Returns:
+            按更新时间倒序排列的主题字段列表。
+        """
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM topic
+                WHERE archived_at IS NULL
+                ORDER BY updated_at DESC, id DESC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def get_topic(self, topic_id: int) -> dict[str, Any] | None:
         """按主键读取主题。
 

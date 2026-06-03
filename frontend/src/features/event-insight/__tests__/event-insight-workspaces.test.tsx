@@ -11,7 +11,7 @@ afterEach(() => {
 
 describe("Event insight mock workspaces", () => {
   it("loads topic trace metrics, current stage, and timeline from API", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(topicTracePayload));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(eventInsightFetch);
 
     renderWithQueryClient(<TopicTraceWorkspace />);
 
@@ -20,6 +20,7 @@ describe("Event insight mock workspaces", () => {
     expect(screen.getByText("主题事件")).toBeInTheDocument();
     expect(screen.getAllByText("存储芯片报价上调").length).toBeGreaterThan(0);
     expect(screen.getAllByText("DRAM 合约价上涨，AI 服务器需求支撑内存涨价。").length).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/frontend/modules/event-insight/topics/7/trace"), expect.any(Object));
   });
 
   it("shows topic trace loading state", () => {
@@ -31,7 +32,7 @@ describe("Event insight mock workspaces", () => {
   });
 
   it("renders the relationship graph canvas and selected-node details", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(eventGraphPayload));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(eventInsightFetch);
 
     renderWithQueryClient(<EventGraphWorkspace />);
 
@@ -42,6 +43,7 @@ describe("Event insight mock workspaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "查看节点 数据中心液冷方案渗透率持续上升" }));
 
     expect(screen.getByRole("heading", { name: "数据中心液冷方案渗透率持续上升" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/frontend/modules/event-insight/graph?topicId=7"), expect.any(Object));
   });
 
   it("shows event graph loading state", () => {
@@ -99,6 +101,12 @@ const topicTracePayload = {
     summary: "海外云厂商资本开支上修。",
     clues: ["继续补充交叉证据"],
   },
+};
+
+const topicsPayload = {
+  traceId: "event-insight-topics-test",
+  items: [{ id: 7, name: "内存涨价", summary: "围绕存储芯片供需变化。", lifecycleStage: "tracking", heatScore: 0.72 }],
+  total: 1,
 };
 
 const eventGraphPayload = {
@@ -166,4 +174,28 @@ function jsonResponse(body: unknown) {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+async function eventInsightFetch(input: RequestInfo | URL) {
+  const url = resolveRequestUrl(input);
+  if (url.pathname === "/api/frontend/modules/event-insight/topics") {
+    return jsonResponse(topicsPayload);
+  }
+  if (url.pathname === "/api/frontend/modules/event-insight/topics/7/trace") {
+    return jsonResponse(topicTracePayload);
+  }
+  if (url.pathname === "/api/frontend/modules/event-insight/graph") {
+    return jsonResponse(eventGraphPayload);
+  }
+  throw new Error(`Unexpected request ${url.pathname}${url.search}`);
+}
+
+function resolveRequestUrl(input: RequestInfo | URL) {
+  if (typeof input === "string") {
+    return new URL(input, window.location.origin);
+  }
+  if (input instanceof URL) {
+    return input;
+  }
+  return new URL(input.url, window.location.origin);
 }

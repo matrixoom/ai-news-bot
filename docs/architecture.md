@@ -386,6 +386,31 @@ Frontend:
 4. 关系类型映射：cause -> cause，same_topic/support -> parallel，contradict -> risk，follow_up -> follow。
 ```
 
+P10 新增主题选择硬化：
+
+```text
+Controller:
+  src/app/web/event_insight_routes.py
+  - GET /api/frontend/modules/event-insight/topics
+
+Service:
+  src/services/event_insight_service.py
+  - list_topics 返回前端主题选择器契约
+
+Frontend:
+  frontend/src/features/event-insight/hooks/use-topics-query.ts
+  - TopicTraceWorkspace 和 EventGraphWorkspace 先读取主题列表
+  - 自动选择第一条主题，避免固定 topicId=1 的隐式假设
+```
+
+硬化边界：
+
+```text
+1. P10 不自动创建主题；没有主题时前端展示空状态。
+2. P10 不处理 npm audit 依赖升级，避免和功能交付混合。
+3. P10 只移除固定主题 ID 假设，不新增复杂主题管理页。
+```
+
 ## 7. 状态与降级策略
 
 - Provider 层支持 `live / degraded / unavailable`

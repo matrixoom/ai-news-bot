@@ -218,7 +218,25 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 5. P9 不依赖 Neo4j，不影响 Event Outlook 静态日历。
 ```
 
-### 3.13 前端改动
+### 3.13 Event Insight 发布硬化改动
+
+```powershell
+uv run python -m pytest tests/test_event_insight_api.py tests/test_event_insight_repository.py tests/test_event_retrieval_service.py tests/test_event_extraction_service.py tests/test_llm_settings_api.py -q
+cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/event-insight-workspaces.test.tsx src/features/event-insight/__tests__/event-list-workspace.test.tsx src/features/settings/__tests__/settings-page.test.tsx --run
+cmd /c npm --prefix frontend run build
+```
+
+覆盖点：
+
+```text
+1. 主题列表 API 返回可选择主题，并按最近更新排序。
+2. 主题溯源页和关系图页不再固定 topicId=1，会先读取主题列表再请求详情。
+3. 没有主题时前端展示空状态，不误请求不存在主题。
+4. P7-P9 的检索、抽取、主题溯源和关系图契约保持可回归。
+5. Settings LLM Runtime 仍可加载任务配置，不受 Event Insight 页面硬化影响。
+```
+
+### 3.14 前端改动
 
 在 `frontend/` 目录执行：
 

@@ -114,6 +114,12 @@ export type EventInsightBatchActionResult = {
   failedItems: Array<{ eventId: number; error: string }>;
 };
 
+export type EventInsightTopicsPayload = {
+  traceId: string;
+  items: EventInsightTopic[];
+  total: number;
+};
+
 export type TopicTraceMetric = {
   label: string;
   value: string;

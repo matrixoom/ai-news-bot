@@ -2,13 +2,16 @@ import { ArrowDownTrayIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { formatLocalDateTime } from "../../../shared/utils/format-local-date-time";
 import { useEventGraphQuery } from "../hooks/use-event-graph-query";
+import { useTopicsQuery } from "../hooks/use-topics-query";
 import { EventInsightShell, InsightBadge, InsightPanel } from "./event-insight-shell";
 
 const EDGE_CLASSES = { cause: "bg-blue-600", parallel: "bg-violet-600", risk: "border-t-2 border-dashed border-rose-600", follow: "bg-emerald-600" };
 
 /** 渲染事件关系图工作台，返回可选择节点的真实画布。 */
 export function EventGraphWorkspace() {
-  const topicId = 1;
+  const topicsQuery = useTopicsQuery();
+  const topics = topicsQuery.data?.items ?? [];
+  const [topicId, setTopicId] = useState<number | undefined>();
   const graphQuery = useEventGraphQuery(topicId);
   const graph = graphQuery.data;
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -21,18 +24,25 @@ export function EventGraphWorkspace() {
     }
   }, [graph?.selectedNodeId]);
 
+  useEffect(() => {
+    if (topicId === undefined && topics[0]) {
+      setTopicId(topics[0].id);
+    }
+  }, [topicId, topics]);
+
   return (
     <EventInsightShell
       title="事件关系图"
       description="查看事件之间的因果、并行、风险与跟随关系，在图谱上快速定位关键节点和需要补证的推断。"
       actions={<><button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700" type="button"><PlusIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />新增关系</button><button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" type="button"><ArrowDownTrayIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />保存视图</button></>}
     >
-      {graphQuery.isLoading ? <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">正在加载事件关系图...</div> : null}
-      {graphQuery.isError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">事件关系图加载失败，请检查主题或关系数据。</div> : null}
+      {topicsQuery.isLoading || graphQuery.isLoading ? <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">正在加载事件关系图...</div> : null}
+      {topicsQuery.isError || graphQuery.isError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">事件关系图加载失败，请检查主题或关系数据。</div> : null}
+      {!topicsQuery.isLoading && topics.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">暂无主题，请先创建主题并关联事件。</div> : null}
       {graph ? <>
       <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-3">
         <input aria-label="搜索图谱节点" className="h-9 w-64 rounded-md border border-slate-300 px-3 text-xs" placeholder="搜索事件、实体或主题" />
-        <select aria-label="关系图主题" className="h-9 rounded-md border border-slate-300 px-3 text-xs"><option>主题 #1</option></select>
+        <select aria-label="关系图主题" className="h-9 rounded-md border border-slate-300 px-3 text-xs" onChange={(event) => setTopicId(Number(event.target.value))} value={topicId ?? ""}>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}</select>
         <select aria-label="关系图时间范围" className="h-9 rounded-md border border-slate-300 px-3 text-xs"><option>最近 90 天</option></select>
       </div>
       <div className="grid min-h-[650px] gap-3 xl:grid-cols-[208px_minmax(0,1fr)_300px]">

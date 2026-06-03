@@ -172,6 +172,16 @@ def register_event_insight_routes(
             logger.exception("event insight topic create failed")
             return JSONResponse({"error": "event_insight_topic_create_failed"}, status_code=503)
 
+    @app.get("/api/frontend/modules/event-insight/topics")
+    def list_event_insight_topics() -> JSONResponse:
+        """返回 Event Insight 主题列表。"""
+
+        try:
+            return JSONResponse(event_service.list_topics())
+        except Exception:
+            logger.exception("event insight topics list failed")
+            return JSONResponse({"error": "event_insight_topics_unavailable"}, status_code=503)
+
     @app.get("/api/frontend/modules/event-insight/topics/{topic_id}/trace")
     def get_event_insight_topic_trace(topic_id: int) -> JSONResponse:
         """返回 Event Insight 主题溯源。"""

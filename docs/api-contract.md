@@ -653,6 +653,33 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 
 失败：`400`，`invalid_event_insight_topic_payload`
 
+#### 4.7.5.1 `GET /api/frontend/modules/event-insight/topics`
+
+用途：返回前端主题选择器可用的未归档主题列表，默认按 `updated_at desc, id desc` 排序。
+
+成功：`200`
+
+```json
+{
+  "traceId": "event-insight-topics-abc123",
+  "items": [
+    {
+      "id": 2,
+      "name": "光模块景气",
+      "summary": "围绕光模块订单变化。",
+      "lifecycleStage": "noise",
+      "heatScore": 0,
+      "roleInTopic": "",
+      "relevanceScore": 0,
+      "manualLocked": false
+    }
+  ],
+  "total": 1
+}
+```
+
+失败：`503`，`event_insight_topics_unavailable`
+
 #### 4.7.6 `POST /api/frontend/modules/event-insight/events/{eventId}/link-topic`
 
 用途：将事件关联到主题。
