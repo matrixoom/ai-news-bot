@@ -30,16 +30,26 @@ describe("Event insight mock workspaces", () => {
     expect(screen.getByText("正在加载主题溯源...")).toBeInTheDocument();
   });
 
-  it("renders the relationship graph canvas and selected-node details", () => {
-    render(<EventGraphWorkspace />);
+  it("renders the relationship graph canvas and selected-node details", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(eventGraphPayload));
+
+    renderWithQueryClient(<EventGraphWorkspace />);
 
     expect(screen.getByRole("heading", { name: "事件关系图" })).toBeInTheDocument();
-    expect(screen.getByLabelText("事件关系图画布")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "节点详情" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("事件关系图画布")).toBeInTheDocument();
+    expect(screen.getByText("内存涨价推升光模块订单预期。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "查看节点 数据中心液冷方案渗透率持续上升" }));
 
     expect(screen.getByRole("heading", { name: "数据中心液冷方案渗透率持续上升" })).toBeInTheDocument();
+  });
+
+  it("shows event graph loading state", () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise(() => undefined));
+
+    renderWithQueryClient(<EventGraphWorkspace />);
+
+    expect(screen.getByText("正在加载事件关系图...")).toBeInTheDocument();
   });
 });
 
@@ -89,6 +99,50 @@ const topicTracePayload = {
     summary: "海外云厂商资本开支上修。",
     clues: ["继续补充交叉证据"],
   },
+};
+
+const eventGraphPayload = {
+  traceId: "event-insight-graph-test",
+  nodes: [
+    {
+      id: "event-1",
+      eventId: 1,
+      kind: "price_change",
+      title: "存储芯片报价上调",
+      happenedAt: "2026-05-16T10:30:00+08:00",
+      confidence: "高可信 · 82",
+      confidenceTone: "green",
+      summary: "DRAM 合约价上涨，AI 服务器需求支撑内存涨价。",
+      left: "12%",
+      top: "22%",
+    },
+    {
+      id: "event-2",
+      eventId: 2,
+      kind: "supply_demand",
+      title: "数据中心液冷方案渗透率持续上升",
+      happenedAt: "2026-05-20T10:30:00+08:00",
+      confidence: "中可信 · 76",
+      confidenceTone: "amber",
+      summary: "海外云厂商资本开支上修。",
+      left: "58%",
+      top: "46%",
+    },
+  ],
+  edges: [
+    {
+      id: "relation-1",
+      sourceNodeId: "event-1",
+      targetNodeId: "event-2",
+      type: "cause",
+      summary: "内存涨价推升光模块订单预期。",
+      left: "25%",
+      top: "35%",
+      width: "34%",
+      rotate: "18deg",
+    },
+  ],
+  selectedNodeId: "event-1",
 };
 
 function renderWithQueryClient(children: React.ReactElement) {

@@ -98,6 +98,18 @@ def register_event_insight_routes(
             logger.exception("event insight events list failed", extra={"keyword": keyword, "status": status})
             return JSONResponse({"error": "event_insight_events_unavailable"}, status_code=503)
 
+    @app.get("/api/frontend/modules/event-insight/graph")
+    def get_event_insight_graph(topicId: int | None = None) -> JSONResponse:
+        """返回 Event Insight 事件关系图投影。"""
+
+        try:
+            return JSONResponse(event_service.get_event_graph(topic_id=topicId))
+        except EventInsightNotFoundError:
+            return JSONResponse({"error": "event_insight_topic_not_found"}, status_code=404)
+        except Exception:
+            logger.exception("event insight graph failed", extra={"topic_id": topicId})
+            return JSONResponse({"error": "event_insight_graph_failed"}, status_code=503)
+
     @app.post("/api/frontend/modules/event-insight/events/batch-action")
     def run_event_insight_batch_action(payload: dict | None = None) -> JSONResponse:
         """执行 Event Insight 事件批量操作。"""
