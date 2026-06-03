@@ -8,12 +8,16 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from ...services.dashboard_service import DashboardService
+from ...services.event_insight_import_service import EventInsightImportService
+from ...services.event_insight_job_service import EventInsightJobService
+from ...services.event_insight_repository import EventInsightRepository
 from ...services.events_outlook_service import EventOutlookValidationError, EventsOutlookService
 from ...services.macro_data_service import MacroDataService, MacroDataValidationError
 from ...services.market_data_service import MarketDataService
 from ...services.market_data_repository import MarketDataValidationError
 from ...services.push_center_service import PushCenterService
 from ...providers.contracts import ProviderAvailability, ProviderStatus
+from .event_insight_routes import register_event_insight_routes
 from .spa_assets import WORKBENCH_ROUTES, build_spa_unavailable_response, load_spa_assets
 
 logger = logging.getLogger(__name__)
@@ -82,6 +86,8 @@ def create_fastapi_app(
     macro_data_service: MacroDataService | None = None,
     market_data_service: MarketDataService | None = None,
     event_outlook_service: EventsOutlookService | None = None,
+    event_insight_import_service: EventInsightImportService | None = None,
+    event_insight_job_service: EventInsightJobService | None = None,
 ) -> FastAPI:
     """创建开发 Web 服务使用的 FastAPI 应用。
 
@@ -90,6 +96,8 @@ def create_fastapi_app(
         push_center_service: 推送中心服务。
         macro_data_service: Macro Data 模块服务。
         event_outlook_service: Event Outlook 时间轴服务。
+        event_insight_import_service: Event Insight 材料导入服务。
+        event_insight_job_service: Event Insight 任务状态服务。
 
     Returns:
         已注册前端工作台接口和 SPA 路由的 FastAPI 应用。
@@ -103,6 +111,12 @@ def create_fastapi_app(
     market_service = market_data_service or MarketDataService()
     event_service = event_outlook_service or EventsOutlookService(
         research_provider=_resolve_event_outlook_research_provider(service)
+    )
+    event_insight_repository = EventInsightRepository()
+    event_insight_job = event_insight_job_service or EventInsightJobService(event_insight_repository)
+    event_insight_import = event_insight_import_service or EventInsightImportService(
+        repository=event_insight_job.repository,
+        job_service=event_insight_job,
     )
     app = FastAPI(
         title="Finance And Policy Intelligence Dashboard",
@@ -323,6 +337,12 @@ def create_fastapi_app(
         except Exception:
             logger.exception("frontend event outlook update failed", extra={"event_id": event_id})
             return JSONResponse({"error": "frontend_event_outlook_update_failed"}, status_code=503)
+
+    register_event_insight_routes(
+        app,
+        import_service=event_insight_import,
+        job_service=event_insight_job,
+    )
 
     @app.put("/api/push/config")
     def update_push_config(payload: dict | None = None) -> JSONResponse:
