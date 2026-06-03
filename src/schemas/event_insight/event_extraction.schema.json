@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": ["events"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "summary", "eventTime", "eventType", "confidenceScore", "evidence"],
+        "properties": {
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "eventTime": { "type": "string" },
+          "eventType": { "type": "string" },
+          "confidenceScore": { "type": "number" },
+          "evidence": { "type": "array" },
+          "entities": { "type": "array" }
+        }
+      }
+    }
+  }
+}

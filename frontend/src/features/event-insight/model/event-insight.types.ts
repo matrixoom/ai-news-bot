@@ -47,6 +47,15 @@ export type EventInsightApiEvidence = {
   endOffset?: number;
 };
 
+export type EventInsightApiEntity = {
+  id: number;
+  name: string;
+  entityType?: string;
+  canonicalName?: string;
+  role?: string;
+  relevanceScore?: number;
+};
+
 export type EventInsightApiEvent = {
   id: number;
   title: string;
@@ -67,6 +76,7 @@ export type EventInsightApiEvent = {
   updatedAt?: string;
   topics?: EventInsightTopic[];
   evidence?: EventInsightApiEvidence[];
+  entities?: EventInsightApiEntity[];
 };
 
 export type EventInsightEventsPayload = {

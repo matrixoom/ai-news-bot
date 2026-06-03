@@ -151,7 +151,24 @@ cmd /c npm --prefix frontend run test -- src/features/settings/__tests__/setting
 7. ArkResearchProvider 保持 Event Outlook 静态日历契约不变。
 ```
 
-### 3.9 前端改动
+### 3.9 Event Insight 抽取与证据链改动
+
+```powershell
+uv run python -m pytest tests/test_event_extraction_service.py tests/test_event_insight_jobs.py tests/test_event_insight_api.py -q
+cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/event-list-workspace.test.tsx --run
+```
+
+覆盖点：
+
+```text
+1. LlmTaskRouter 返回的 JSON 会被校验后写入 event/evidence/entity。
+2. evidence.excerpt 必须能在原始材料中定位 startOffset/endOffset。
+3. extract_event 本地任务可领取、成功完成并标记 succeeded。
+4. 模型输出非 JSON 或证据不存在时进入失败路径。
+5. 前端详情展示证据来源位置和关联实体。
+```
+
+### 3.10 前端改动
 
 在 `frontend/` 目录执行：
 

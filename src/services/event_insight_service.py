@@ -93,6 +93,9 @@ class EventInsightService:
         event["evidence"] = [
             self._present_evidence(evidence) for evidence in self._repository.list_event_evidence(event_id)
         ]
+        event["entities"] = [
+            self._present_entity(entity) for entity in self._repository.list_event_entities(event_id)
+        ]
         return {"traceId": _trace_id("event-insight-event"), "event": event}
 
     def update_event(self, event_id: int, payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -351,6 +354,25 @@ class EventInsightService:
             "sourceUrl": str(row.get("source_url") or row.get("document_url") or ""),
             "startOffset": int(row.get("start_offset") or 0),
             "endOffset": int(row.get("end_offset") or 0),
+        }
+
+    def _present_entity(self, row: dict[str, Any]) -> dict[str, Any]:
+        """将实体行转换为前端契约。
+
+        Args:
+            row: entity 与 event_entity 联表字段。
+
+        Returns:
+            camelCase 实体字段。
+        """
+
+        return {
+            "id": int(row["id"]),
+            "name": str(row["name"]),
+            "entityType": str(row.get("entity_type") or ""),
+            "canonicalName": str(row.get("canonical_name") or ""),
+            "role": str(row.get("role") or ""),
+            "relevanceScore": float(row.get("relevance_score") or 0),
         }
 
 

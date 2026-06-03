@@ -53,8 +53,11 @@ const detailPayload = {
         sourceUrl: "https://example.com/cpo",
         evidenceLevel: "B",
         role: "primary",
+        startOffset: 4,
+        endOffset: 25,
       },
     ],
+    entities: [{ id: 3, name: "CPO", entityType: "product", role: "subject" }],
     topics: [],
   },
 };
@@ -88,6 +91,8 @@ describe("EventListWorkspace", () => {
 
     expect(await screen.findByRole("heading", { name: "CPO 光模块订单增加" })).toBeInTheDocument();
     expect(screen.getByText("海外云厂商资本开支上修，光模块订单增加。")).toBeInTheDocument();
+    expect(screen.getByText("CPO")).toBeInTheDocument();
+    expect(screen.getByText("原文位置 4-25")).toBeInTheDocument();
   });
 
   it("shows a loading state while the list request is pending", () => {
