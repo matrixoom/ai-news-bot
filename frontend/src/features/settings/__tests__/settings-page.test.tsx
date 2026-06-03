@@ -38,6 +38,24 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("快速抽取模型")).toBeInTheDocument();
     expect(screen.queryByText("sk-fast-secret")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑配置" }));
+    fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "analysis-model-updated" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+    expect(await screen.findByText("analysis-model-updated")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "禁用配置" }));
+    expect(await screen.findByText("模型配置已禁用。")).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { name: "RSS 源配置" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新增 RSS 源" }));
+    fireEvent.change(screen.getByLabelText("RSS 名称"), { target: { value: "AI 财经观察" } });
+    fireEvent.change(screen.getByLabelText("RSS URL"), { target: { value: "https://example.com/rss.xml" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存 RSS 源" }));
+    expect(await screen.findByText("AI 财经观察")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "抓取 AI 财经观察" }));
+    expect(await screen.findByText("抓取完成：1 条新增，0 条跳过。")).toBeInTheDocument();
+
     expect(screen.queryByText("Module workspace")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Workspace preferences" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Current defaults" })).not.toBeInTheDocument();

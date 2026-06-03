@@ -80,9 +80,31 @@ class LlmConfigService:
         """测试 provider 连接。"""
 
         provider = self._present_provider(self._require_provider(provider_id), include_secret=True)
+        request_preview = "system: Return a concise connectivity acknowledgement. | user: Reply with OK."
         if self._connection_tester is not None:
-            return self._connection_tester(provider)
+            result = self._connection_tester(provider)
+            ok = bool(result.get("ok"))
+            detail = str(result.get("detail") or "")
+            self._repository.create_llm_call_log(
+                task_type="connection_test",
+                provider_config_id=provider_id,
+                model_name=str(provider.get("modelName") or ""),
+                status="succeeded" if ok else "failed",
+                error_message="" if ok else _safe_error_message(Exception(detail), str(provider.get("apiKey") or "")),
+                request_preview=request_preview,
+                response_preview=_safe_error_message(Exception(detail), str(provider.get("apiKey") or "")),
+            )
+            return result
         if not provider.get("apiKey"):
+            self._repository.create_llm_call_log(
+                task_type="connection_test",
+                provider_config_id=provider_id,
+                model_name=str(provider.get("modelName") or ""),
+                status="failed",
+                error_message="API Key 未配置",
+                request_preview=request_preview,
+                response_preview="",
+            )
             return {"ok": False, "detail": "连接测试失败：API Key 未配置。"}
         try:
             llm_provider = self._provider_factory(provider)
@@ -105,6 +127,14 @@ class LlmConfigService:
                 max_tokens=8,
                 temperature=0,
             )
+            self._repository.create_llm_call_log(
+                task_type="connection_test",
+                provider_config_id=provider_id,
+                model_name=str(provider.get("modelName") or ""),
+                status="succeeded",
+                request_preview=request_preview,
+                response_preview=_safe_error_message(Exception(response_text), str(provider.get("apiKey") or "")),
+            )
             logger.info(
                 "llm provider connection test response",
                 extra={
@@ -116,6 +146,16 @@ class LlmConfigService:
                 },
             )
         except Exception as exc:
+            safe_message = _safe_error_message(exc, str(provider.get("apiKey") or ""))
+            self._repository.create_llm_call_log(
+                task_type="connection_test",
+                provider_config_id=provider_id,
+                model_name=str(provider.get("modelName") or ""),
+                status="failed",
+                error_message=safe_message,
+                request_preview=request_preview,
+                response_preview="",
+            )
             logger.warning(
                 "llm provider connection test failed",
                 extra={
@@ -126,8 +166,15 @@ class LlmConfigService:
                 },
                 exc_info=True,
             )
-            return {"ok": False, "detail": f"连接测试失败：{_safe_error_message(exc, str(provider.get('apiKey') or ''))}"}
+            return {"ok": False, "detail": f"连接测试失败：{safe_message}"}
         return {"ok": True, "detail": f"连接测试成功：{provider['name']} / {provider['modelName']} 已返回响应。"}
+
+    def list_call_logs(self, *, task_type: str = "", limit: int = 20) -> dict[str, Any]:
+        """返回脱敏后的 LLM 调用日志。"""
+
+        return {
+            "items": [self._present_call_log(row) for row in self._repository.list_llm_call_logs(task_type=task_type, limit=limit)]
+        }
 
     def list_task_configs(self) -> dict[str, Any]:
         """返回任务模型映射列表。"""
@@ -235,6 +282,23 @@ class LlmConfigService:
             "maxTokens": int(row.get("max_tokens") or 2000),
             "enabled": bool(row.get("enabled")),
             "updatedAt": str(row.get("updated_at") or ""),
+        }
+
+    def _present_call_log(self, row: dict[str, Any]) -> dict[str, Any]:
+        """将 LLM 调用日志行转换为前端契约。"""
+
+        return {
+            "id": int(row["id"]),
+            "taskType": str(row["task_type"]),
+            "providerId": int(row["provider_config_id"]) if row.get("provider_config_id") is not None else None,
+            "providerName": str(row.get("provider_name") or ""),
+            "providerType": str(row.get("provider_type") or ""),
+            "modelName": str(row.get("model_name") or ""),
+            "status": str(row.get("status") or ""),
+            "requestPreview": str(row.get("request_preview") or ""),
+            "responsePreview": str(row.get("response_preview") or ""),
+            "errorMessage": str(row.get("error_message") or ""),
+            "createdAt": str(row.get("created_at") or ""),
         }
 
 

@@ -258,6 +258,7 @@ Controller:
   src/app/web/llm_settings_routes.py
   - /api/system/llm/providers*
   - /api/system/llm/task-configs*
+  - /api/system/llm/call-logs
 
 Service:
   src/services/llm_config_service.py
@@ -265,6 +266,7 @@ Service:
   - 本地加密 API Key
   - 对前端响应脱敏
   - 阻止禁用已被任务映射引用的 provider
+  - 连接测试发起真实 OpenAI-compatible 调用并写入脱敏 llm_call_log
 
   src/services/llm_task_router.py
   - 按 task_type 解析 provider/model/temperature/max_tokens
@@ -283,6 +285,35 @@ Provider:
 2. `llm_provider_config.encrypted_api_key` 存储本地加密密文。
 3. 禁止在日志中输出密钥或完整请求头。
 4. P5 不包含事件抽取 prompt，只建立模型配置和任务路由。
+```
+
+RSS 配置接入链路：
+
+```text
+Controller:
+  src/app/web/rss_settings_routes.py
+  - /api/system/rss/sources*
+  - /api/system/rss/scheduler
+
+Service:
+  src/services/rss_config_service.py
+  - 管理 rss_source_config / rss_scheduler_config
+  - 使用 src/news/fetcher.py 抓取界面配置的 RSS URL
+  - 将 RSS 条目写入 raw_document / event / evidence / event_operation_log
+
+Fetcher:
+  src/news/fetcher.py
+  - 支持外部传入 RSS 源配置
+  - 旧内置源仅作为兼容 fallback，不再是 System 抓取链路的唯一配置来源
+```
+
+边界：
+
+```text
+1. RSS 源禁用不物理删除，保留历史配置和已入库事件。
+2. RSS 手动抓取使用 content_hash 幂等跳过重复条目。
+3. RSS 入库事件 source_method=rss，默认 event_type=other，后续抽取任务可再结构化。
+4. 每日调度配置保存在 SQLite；本次接口提供配置和手动抓取入口，外层调度器按该配置触发。
 ```
 
 P6 新增事件抽取链路：

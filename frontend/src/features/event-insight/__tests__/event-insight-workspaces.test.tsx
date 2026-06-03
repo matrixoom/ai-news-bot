@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventGraphWorkspace } from "../components/event-graph-workspace";
@@ -52,6 +52,29 @@ describe("Event insight mock workspaces", () => {
     renderWithQueryClient(<EventGraphWorkspace />);
 
     expect(screen.getByText("正在加载事件关系图...")).toBeInTheDocument();
+  });
+
+  it("creates topics and graph relations from toolbar buttons", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(eventInsightFetch);
+
+    renderWithQueryClient(<TopicTraceWorkspace />);
+
+    expect(await screen.findByText("主题事件")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新建主题" }));
+    fireEvent.change(screen.getByLabelText("主题名称"), { target: { value: "商业航天" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存主题" }));
+    expect(await screen.findByText("主题已创建：商业航天")).toBeInTheDocument();
+
+    renderWithQueryClient(<EventGraphWorkspace />);
+
+    expect(await screen.findByLabelText("事件关系图画布")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新增关系" }));
+    fireEvent.change(screen.getByLabelText("关系说明"), { target: { value: "订单变化验证涨价链条。" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存关系" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/frontend/modules/event-insight/relations", expect.objectContaining({ method: "POST" })));
+
+    fireEvent.click(screen.getByRole("button", { name: "保存视图" }));
+    expect(await screen.findByText("视图已保存到当前工作区。")).toBeInTheDocument();
   });
 });
 
@@ -176,9 +199,13 @@ function jsonResponse(body: unknown) {
   });
 }
 
-async function eventInsightFetch(input: RequestInfo | URL) {
+async function eventInsightFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = resolveRequestUrl(input);
+  const method = init?.method ?? (input instanceof Request ? input.method : "GET");
   if (url.pathname === "/api/frontend/modules/event-insight/topics") {
+    if (method === "POST") {
+      return jsonResponse({ traceId: "topic-create", topic: { id: 9, name: "商业航天", summary: "" } });
+    }
     return jsonResponse(topicsPayload);
   }
   if (url.pathname === "/api/frontend/modules/event-insight/topics/7/trace") {
@@ -186,6 +213,9 @@ async function eventInsightFetch(input: RequestInfo | URL) {
   }
   if (url.pathname === "/api/frontend/modules/event-insight/graph") {
     return jsonResponse(eventGraphPayload);
+  }
+  if (url.pathname === "/api/frontend/modules/event-insight/relations") {
+    return jsonResponse({ traceId: "relation-create", relation: { id: 3 } });
   }
   throw new Error(`Unexpected request ${url.pathname}${url.search}`);
 }

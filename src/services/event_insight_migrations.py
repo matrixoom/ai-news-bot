@@ -11,6 +11,7 @@ from typing import Iterator
 
 CORE_MIGRATION_VERSION = "001_event_insight_core"
 LLM_RUNTIME_MIGRATION_VERSION = "002_llm_runtime"
+RSS_CONFIG_MIGRATION_VERSION = "003_rss_config"
 
 
 def utc_now_iso() -> str:
@@ -65,6 +66,16 @@ class EventInsightMigrationService:
                     VALUES (?, ?)
                     """,
                     (LLM_RUNTIME_MIGRATION_VERSION, utc_now_iso()),
+                )
+            applied = self._applied_versions(connection)
+            if RSS_CONFIG_MIGRATION_VERSION not in applied:
+                connection.executescript(_rss_config_schema_sql())
+                connection.execute(
+                    """
+                    INSERT INTO schema_migration(version, applied_at)
+                    VALUES (?, ?)
+                    """,
+                    (RSS_CONFIG_MIGRATION_VERSION, utc_now_iso()),
                 )
 
     def _ensure_migration_table(self, connection: sqlite3.Connection) -> None:
@@ -529,4 +540,48 @@ def _llm_runtime_schema_sql() -> str:
 
     CREATE INDEX IF NOT EXISTS idx_llm_provider_enabled ON llm_provider_config(enabled, updated_at);
     CREATE INDEX IF NOT EXISTS idx_llm_call_log_task_created ON llm_call_log(task_type, created_at);
+    """
+
+
+def _rss_config_schema_sql() -> str:
+    """返回 003_rss_config 的建表与兼容升级 SQL。
+
+    Returns:
+        可传给 `executescript` 的完整 SQL。
+    """
+
+    return """
+    ALTER TABLE llm_call_log ADD COLUMN request_preview TEXT NOT NULL DEFAULT '';
+    ALTER TABLE llm_call_log ADD COLUMN response_preview TEXT NOT NULL DEFAULT '';
+
+    CREATE TABLE IF NOT EXISTS rss_source_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        url TEXT NOT NULL,
+        language TEXT NOT NULL DEFAULT 'zh',
+        category TEXT NOT NULL DEFAULT 'finance',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        fetch_time TEXT NOT NULL DEFAULT '06:30',
+        max_items INTEGER NOT NULL DEFAULT 20,
+        last_fetched_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        disabled_at TEXT,
+        CHECK (enabled IN (0, 1)),
+        CHECK (max_items > 0 AND max_items <= 100)
+    );
+
+    CREATE TABLE IF NOT EXISTS rss_scheduler_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 1,
+        timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+        daily_fetch_time TEXT NOT NULL DEFAULT '06:30',
+        updated_at TEXT NOT NULL,
+        CHECK (enabled IN (0, 1))
+    );
+
+    INSERT OR IGNORE INTO rss_scheduler_config(id, enabled, timezone, daily_fetch_time, updated_at)
+    VALUES (1, 1, 'Asia/Shanghai', '06:30', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
+
+    CREATE INDEX IF NOT EXISTS idx_rss_source_enabled_time ON rss_source_config(enabled, fetch_time);
     """

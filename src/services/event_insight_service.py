@@ -354,6 +354,58 @@ class EventInsightService:
             "failedItems": failed,
         }
 
+    def create_relation(self, payload: dict[str, Any] | None) -> dict[str, Any]:
+        """创建事件到事件的关系边。
+
+        Args:
+            payload: 关系源事件、目标事件、类型和评分。
+
+        Returns:
+            新增关系的前端响应。
+        """
+
+        body = payload or {}
+        try:
+            source_event_id = int(body.get("sourceEventId"))
+            target_event_id = int(body.get("targetEventId"))
+        except (TypeError, ValueError):
+            raise EventInsightValidationError("sourceEventId and targetEventId are required") from None
+        self._require_event(source_event_id)
+        self._require_event(target_event_id)
+        relation_type = str(body.get("relationType") or "").strip()
+        if relation_type not in {"same_topic", "cause", "support", "contradict", "follow_up"}:
+            raise EventInsightValidationError("unsupported relationType")
+        relation_summary = str(body.get("relationSummary") or "").strip()
+        relation_id = self._repository.create_event_relation(
+            source_event_id=source_event_id,
+            target_event_id=target_event_id,
+            relation_type=relation_type,
+            relation_summary=relation_summary,
+            strength_score=float(body.get("strengthScore") or 0),
+            confidence_score=float(body.get("confidenceScore") or 0),
+            generation_method="manual",
+        )
+        self._repository.create_event_operation_log(
+            event_id=source_event_id,
+            operation_type="create_relation",
+            before_json="{}",
+            after_json=json.dumps({"relation_id": relation_id, "target_event_id": target_event_id}, ensure_ascii=False),
+            reason="manual relation create",
+            operator="frontend",
+        )
+        return {
+            "traceId": _trace_id("event-insight-relation"),
+            "relation": {
+                "id": relation_id,
+                "sourceEventId": source_event_id,
+                "targetEventId": target_event_id,
+                "relationType": relation_type,
+                "relationSummary": relation_summary,
+                "strengthScore": float(body.get("strengthScore") or 0),
+                "confidenceScore": float(body.get("confidenceScore") or 0),
+            },
+        }
+
     def _require_event(self, event_id: int) -> dict[str, Any]:
         """读取事件，不存在时抛出业务异常。
 

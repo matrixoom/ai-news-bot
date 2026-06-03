@@ -183,6 +183,84 @@ class LlmConfigRepository:
             ).fetchone()
         return dict(row) if row else None
 
+    def create_llm_call_log(
+        self,
+        *,
+        task_type: str,
+        provider_config_id: int | None,
+        model_name: str,
+        status: str,
+        error_message: str = "",
+        request_preview: str = "",
+        response_preview: str = "",
+    ) -> int:
+        """记录一次 LLM 调用摘要。
+
+        Args:
+            task_type: 调用任务类型。
+            provider_config_id: LLM provider 主键。
+            model_name: 实际模型名称。
+            status: 调用状态。
+            error_message: 失败摘要，必须已脱敏。
+            request_preview: 脱敏后的请求摘要。
+            response_preview: 脱敏后的响应摘要。
+
+        Returns:
+            新增调用日志主键。
+        """
+
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO llm_call_log (
+                    task_type, provider_config_id, model_name, status, error_message,
+                    request_preview, response_preview, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    task_type,
+                    provider_config_id,
+                    model_name,
+                    status,
+                    error_message,
+                    request_preview,
+                    response_preview,
+                    utc_now_iso(),
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    def list_llm_call_logs(self, *, task_type: str = "", limit: int = 20) -> list[dict[str, Any]]:
+        """读取最近 LLM 调用日志。
+
+        Args:
+            task_type: 可选任务类型筛选。
+            limit: 最大返回数量。
+
+        Returns:
+            LLM 调用日志行列表。
+        """
+
+        clauses: list[str] = []
+        params: list[Any] = []
+        if task_type:
+            clauses.append("l.task_type = ?")
+            params.append(task_type)
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._session() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT l.*, p.name AS provider_name, p.provider_type
+                FROM llm_call_log l
+                LEFT JOIN llm_provider_config p ON p.id = l.provider_config_id
+                {where_sql}
+                ORDER BY l.id DESC
+                LIMIT ?
+                """,
+                [*params, min(max(1, limit), 100)],
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def _connect(self) -> sqlite3.Connection:
         """打开 SQLite 连接。"""
 

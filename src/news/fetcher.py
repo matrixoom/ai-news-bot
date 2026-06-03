@@ -14,10 +14,19 @@ logger = setup_logger(__name__)
 class NewsFetcher:
     """Fetch real-time AI news from RSS feeds and news APIs"""
 
-    def __init__(self):
-        """Initialize the news fetcher"""
+    def __init__(self, rss_feeds: Optional[Dict[str, str]] = None, language_feeds: Optional[Dict[str, Dict[str, str]]] = None):
+        """
+        Initialize the news fetcher.
+
+        Args:
+            rss_feeds: Optional international RSS source map from System settings.
+            language_feeds: Optional language-specific RSS source map from System settings.
+
+        Returns:
+            Initialized fetcher with UI-configurable RSS sources when provided.
+        """
         # RSS feed sources for AI news (reliable sources only)
-        self.rss_feeds = {
+        default_rss_feeds = {
             # Major Tech Media
             "TechCrunch AI": "https://techcrunch.com/tag/artificial-intelligence/feed/",
             "VentureBeat AI": "https://venturebeat.com/category/ai/feed/",
@@ -48,7 +57,7 @@ class NewsFetcher:
         }
 
         # Chinese AI news sources (zh)
-        self.chinese_feeds = {
+        default_chinese_feeds = {
             # Tech News Outlets
             "36Kr (36氪)": "https://36kr.com/feed",
             "JiQiZhiXin (机器之心)": "https://www.jiqizhixin.com/rss",
@@ -61,7 +70,7 @@ class NewsFetcher:
         }
 
         # Japanese AI news sources (ja)
-        self.japanese_feeds = {
+        default_japanese_feeds = {
             # Tech News Outlets
             "ITmedia AI+": "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml",
             "Nikkei xTECH": "https://xtech.nikkei.com/rss/index.rdf",
@@ -73,7 +82,7 @@ class NewsFetcher:
         }
 
         # French AI news sources (fr)
-        self.french_feeds = {
+        default_french_feeds = {
             # Tech News Outlets
             "L'Usine Digitale": "https://www.usine-digitale.fr/rss/intelligence-artificielle.xml",
             "01net": "https://www.01net.com/rss/actualites/",
@@ -85,7 +94,7 @@ class NewsFetcher:
         }
 
         # Spanish AI news sources (es)
-        self.spanish_feeds = {
+        default_spanish_feeds = {
             # Tech News Outlets
             "Xataka": "https://www.xataka.com/tag/inteligencia-artificial/rss2.xml",
             "El País Tecnología": "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/tecnologia/portada",
@@ -96,7 +105,7 @@ class NewsFetcher:
         }
 
         # German AI news sources (de)
-        self.german_feeds = {
+        default_german_feeds = {
             # Tech News Outlets
             "Heise Online": "https://www.heise.de/rss/heise-atom.xml",
             "t3n Digital Pioneers": "https://t3n.de/tag/kuenstliche-intelligenz/feed/",
@@ -107,7 +116,7 @@ class NewsFetcher:
         }
 
         # Korean AI news sources (ko)
-        self.korean_feeds = {
+        default_korean_feeds = {
             # Tech News Outlets
             "Chosun Biz Tech": "https://biz.chosun.com/rss/tech.xml",
             "ZDNet Korea": "https://zdnet.co.kr/rss/",
@@ -118,7 +127,7 @@ class NewsFetcher:
         }
 
         # Portuguese AI news sources (pt)
-        self.portuguese_feeds = {
+        default_portuguese_feeds = {
             # Tech News Outlets
             "TecMundo": "https://www.tecmundo.com.br/rss",
             "Olhar Digital": "https://olhardigital.com.br/feed/",
@@ -129,7 +138,7 @@ class NewsFetcher:
         }
 
         # Italian AI news sources (it)
-        self.italian_feeds = {
+        default_italian_feeds = {
             # Tech News Outlets
             "Il Sole 24 Ore Tech": "https://www.ilsole24ore.com/rss/tecnologia.xml",
             "Punto Informatico": "https://www.punto-informatico.it/feed/",
@@ -140,7 +149,7 @@ class NewsFetcher:
         }
 
         # Russian AI news sources (ru)
-        self.russian_feeds = {
+        default_russian_feeds = {
             # Tech News Outlets
             "Habr": "https://habr.com/ru/rss/all/",
             "CNews": "https://www.cnews.ru/inc/rss/news.xml",
@@ -151,7 +160,7 @@ class NewsFetcher:
         }
 
         # Dutch AI news sources (nl)
-        self.dutch_feeds = {
+        default_dutch_feeds = {
             # Tech News Outlets
             "Tweakers": "https://feeds.feedburner.com/tweakers/mixed",
             "Computable": "https://www.computable.nl/rss.xml",
@@ -161,7 +170,7 @@ class NewsFetcher:
         }
 
         # Arabic AI news sources (ar)
-        self.arabic_feeds = {
+        default_arabic_feeds = {
             # Tech News Outlets
             "Arageek": "https://www.arageek.com/feed",
             "Tech Wd": "https://www.tech-wd.com/feed/",
@@ -170,13 +179,28 @@ class NewsFetcher:
         }
 
         # Hindi AI news sources (hi)
-        self.hindi_feeds = {
+        default_hindi_feeds = {
             # Tech News Outlets
             "Jagran Josh Tech": "https://www.jagranjosh.com/rss/tech.xml",
             "NDTV Gadgets": "https://feeds.feedburner.com/ndtvgadgets-latest",
             # Google News
             "Google News AI (HI)": "https://news.google.com/rss/search?q=कृत्रिम+बुद्धिमत्ता&hl=hi&gl=IN&ceid=IN:hi",
         }
+
+        configured_language_feeds = language_feeds or {}
+        self.rss_feeds = rss_feeds or default_rss_feeds
+        self.chinese_feeds = configured_language_feeds.get("zh", default_chinese_feeds)
+        self.japanese_feeds = configured_language_feeds.get("ja", default_japanese_feeds)
+        self.french_feeds = configured_language_feeds.get("fr", default_french_feeds)
+        self.spanish_feeds = configured_language_feeds.get("es", default_spanish_feeds)
+        self.german_feeds = configured_language_feeds.get("de", default_german_feeds)
+        self.korean_feeds = configured_language_feeds.get("ko", default_korean_feeds)
+        self.portuguese_feeds = configured_language_feeds.get("pt", default_portuguese_feeds)
+        self.italian_feeds = configured_language_feeds.get("it", default_italian_feeds)
+        self.russian_feeds = configured_language_feeds.get("ru", default_russian_feeds)
+        self.dutch_feeds = configured_language_feeds.get("nl", default_dutch_feeds)
+        self.arabic_feeds = configured_language_feeds.get("ar", default_arabic_feeds)
+        self.hindi_feeds = configured_language_feeds.get("hi", default_hindi_feeds)
 
 
     def fetch_rss_feed(self, feed_url: str, max_items: int = 10) -> List[Dict[str, str]]:

@@ -708,6 +708,10 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
   let pushState: any = clone(payloads.push);
   let eventOutlookState: any = clone(payloads.eventOutlook);
   let llmProvidersState: any = clone(payloads.llmProviders);
+  let rssState: any = {
+    sources: [],
+    scheduler: { enabled: true, timezone: "Asia/Shanghai", dailyFetchTime: "06:30" },
+  };
 
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -742,6 +746,27 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
       return jsonResponse({ provider });
     }
 
+    if (url.pathname.match(/^\/api\/system\/llm\/providers\/\d+$/) && method === "PUT") {
+      const providerId = Number(url.pathname.split("/").pop());
+      const body = await readJsonBody(input, init?.body);
+      const provider = llmProvidersState.providers.find((item: any) => item.id === providerId);
+      Object.assign(provider, {
+        name: body.name ?? provider.name,
+        providerType: body.providerType ?? provider.providerType,
+        baseUrl: body.baseUrl ?? provider.baseUrl,
+        modelName: body.modelName ?? provider.modelName,
+        timeoutSeconds: body.timeoutSeconds ?? provider.timeoutSeconds,
+      });
+      return jsonResponse({ provider });
+    }
+
+    if (url.pathname.match(/^\/api\/system\/llm\/providers\/\d+\/disable$/) && method === "POST") {
+      const providerId = Number(url.pathname.split("/").at(-2));
+      const provider = llmProvidersState.providers.find((item: any) => item.id === providerId);
+      if (provider) provider.enabled = false;
+      return jsonResponse({ provider });
+    }
+
     if (url.pathname.match(/^\/api\/system\/llm\/providers\/\d+\/test$/) && method === "POST") {
       const providerId = Number(url.pathname.split("/").at(-2));
       const provider = llmProvidersState.providers.find((item: any) => item.id === providerId);
@@ -753,6 +778,32 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
 
     if (url.pathname === "/api/system/llm/task-configs" && method === "GET") {
       return jsonResponse(payloads.llmTaskConfigs);
+    }
+
+    if (url.pathname === "/api/system/rss/sources" && method === "GET") {
+      return jsonResponse(rssState);
+    }
+
+    if (url.pathname === "/api/system/rss/sources" && method === "POST") {
+      const body = await readJsonBody(input, init?.body);
+      const source = {
+        id: rssState.sources.length + 1,
+        name: body.name,
+        url: body.url,
+        language: body.language ?? "zh",
+        category: body.category ?? "finance",
+        enabled: true,
+        fetchTime: body.fetchTime ?? "06:30",
+        maxItems: body.maxItems ?? 20,
+      };
+      rssState = { ...rssState, sources: [...rssState.sources, source] };
+      return jsonResponse({ source });
+    }
+
+    if (url.pathname.match(/^\/api\/system\/rss\/sources\/\d+\/fetch$/) && method === "POST") {
+      const sourceId = Number(url.pathname.split("/").at(-2));
+      const source = rssState.sources.find((item: any) => item.id === sourceId);
+      return jsonResponse({ source, importedCount: 1, skippedCount: 0, fetchedAt: "2026-06-03T08:00:00Z" });
     }
 
     if (url.pathname === "/api/frontend/modules/event-insight/events" && method === "GET") {

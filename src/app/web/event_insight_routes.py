@@ -122,6 +122,20 @@ def register_event_insight_routes(
             logger.exception("event insight batch action failed")
             return JSONResponse({"error": "event_insight_batch_action_failed"}, status_code=503)
 
+    @app.post("/api/frontend/modules/event-insight/relations")
+    def create_event_insight_relation(payload: dict | None = None) -> JSONResponse:
+        """创建 Event Insight 事件关系。"""
+
+        try:
+            return JSONResponse(event_service.create_relation(payload), status_code=201)
+        except EventInsightNotFoundError:
+            return JSONResponse({"error": "event_insight_event_not_found"}, status_code=404)
+        except EventInsightValidationError:
+            return JSONResponse({"error": "invalid_event_insight_relation_payload"}, status_code=400)
+        except Exception:
+            logger.exception("event insight relation create failed")
+            return JSONResponse({"error": "event_insight_relation_create_failed"}, status_code=503)
+
     @app.get("/api/frontend/modules/event-insight/events/{event_id}")
     def get_event_insight_event(event_id: int) -> JSONResponse:
         """返回 Event Insight 单个事件详情。"""
