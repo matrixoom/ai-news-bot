@@ -16,7 +16,24 @@ export function LlmSettingsWorkspace() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const selectedProvider = providers.find((provider) => provider.id === selectedId) ?? providers[0];
-  const connectionDetail = testProvider.data?.detail;
+  const connectionStatus = testProvider.isPending
+    ? "testing"
+    : testProvider.data?.ok
+      ? "success"
+      : testProvider.data || testProvider.isError
+        ? "failed"
+        : "idle";
+  const connectionDetail = testProvider.isPending
+    ? "正在测试连接..."
+    : testProvider.isError
+      ? "连接测试请求失败，请稍后重试。"
+      : testProvider.data?.detail ?? "连接状态待测试";
+  const connectionClassName = {
+    idle: "text-slate-700",
+    testing: "text-blue-700",
+    success: "text-emerald-700",
+    failed: "text-rose-700",
+  }[connectionStatus];
 
   useEffect(() => {
     if (selectedId === null && providers.length > 0) {
@@ -78,12 +95,12 @@ export function LlmSettingsWorkspace() {
                     <div><strong className="block text-slate-500">请求超时</strong>{selectedProvider.timeoutSeconds} 秒</div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-                    <span className="inline-flex items-center font-semibold text-slate-700">
+                    <span className={`inline-flex items-center font-semibold ${connectionClassName}`}>
                       <SignalIcon aria-hidden="true" className="mr-1 h-4 w-4" />
-                      {connectionDetail ?? "连接状态待测试"}
+                      {connectionDetail}
                     </span>
-                    <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700" onClick={() => testProvider.mutate(selectedProvider.id)} type="button">
-                      测试连接
+                    <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={testProvider.isPending} onClick={() => testProvider.mutate(selectedProvider.id)} type="button">
+                      {testProvider.isPending ? "测试中" : "测试连接"}
                     </button>
                   </div>
                 </>

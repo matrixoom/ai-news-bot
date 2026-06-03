@@ -745,7 +745,10 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     if (url.pathname.match(/^\/api\/system\/llm\/providers\/\d+\/test$/) && method === "POST") {
       const providerId = Number(url.pathname.split("/").at(-2));
       const provider = llmProvidersState.providers.find((item: any) => item.id === providerId);
-      return jsonResponse({ ok: true, detail: `${provider?.name ?? "provider"} connected` });
+      return jsonResponse({
+        ok: true,
+        detail: `连接测试成功：${provider?.name ?? "provider"} / ${provider?.modelName ?? ""} 已返回响应。`,
+      });
     }
 
     if (url.pathname === "/api/system/llm/task-configs" && method === "GET") {
