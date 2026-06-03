@@ -209,7 +209,7 @@ Event Insight P2 已建立独立 SQLite 地基：
 
 ```text
 1. SQLite 是事实主库。
-2. FTS5 负责基础全文检索，中文 n-gram 增强将在 P7 引入。
+2. FTS5 负责基础全文检索，P7 通过 EventRetrievalService 增加中文 n-gram fallback。
 3. 人工校正写入 event_field_override，不直接覆盖模型事实。
 4. 重复事件以 duplicate_event_candidate 记录候选，不物理删除。
 5. 图谱同步通过 graph_sync_outbox 解耦，Neo4j 后续可从 SQLite 重建。
@@ -302,6 +302,28 @@ src/services/event_extraction_service.py
 1. 抽取只处理已入库 raw_document，不直接抓取远端 URL。
 2. 证据链必须引用原文连续片段，禁止模型改写证据。
 3. P6 不执行相似搜索、自动去重、主题生成或图谱投影。
+```
+
+P7 新增检索、重复候选与规则聚类链路：
+
+```text
+src/services/event_retrieval_service.py
+  - search_events: 使用中文 n-gram fallback 召回 active 事件
+  - generate_duplicate_candidates: 写入 duplicate_event_candidate
+  - cluster_events: 创建/复用 topic 并写入 topic_event
+
+src/services/sqlite_vec_loader.py
+  - 探测 sqlite-vec 扩展可用性
+  - 不可用时只返回状态，不影响 n-gram 基础检索
+```
+
+检索边界：
+
+```text
+1. P7 不自动确认重复事件，不修改 manual_status。
+2. P7 不删除或合并事件，只生成可审核 candidate。
+3. 规则聚类只写 topic_event，manual_locked=false，保留人工调整空间。
+4. sqlite-vec 是可选增强能力，未安装时不能阻断事件列表、候选生成或聚类。
 ```
 
 ## 7. 状态与降级策略
