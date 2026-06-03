@@ -6,6 +6,7 @@
 
 ### Added
 
+- Event Insight 新增 P6 事件抽取服务：通过 `LlmTaskRouter` 将原始材料抽取为事件、证据和实体，证据片段必须能在原文中定位，并在事件详情中展示证据原文位置。
 - System Settings 新增真实 LLM Runtime 配置：支持 OpenAI-compatible provider 的加密持久化、脱敏列表、连接测试、任务模型映射和 `LlmTaskRouter`，ArkResearchProvider 改为复用统一 provider factory。
 - Event Insight 新增事件工作台真实 API 与前端联调：支持事件列表/详情、人工字段覆盖、忽略、主题创建、事件关联主题和批量操作，并将前端事件列表从 Mock 数据切换到 `/api/frontend/modules/event-insight/events`。
 - Event Insight 新增材料导入与本地任务队列接口，支持 text/url/受控 JSON file 导入、`parse_document` 任务创建、任务状态查询、幂等键、租约恢复、attempt 日志和路径穿越校验。

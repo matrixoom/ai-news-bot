@@ -266,6 +266,49 @@ class EventInsightRepository:
             )
             return int(cursor.lastrowid)
 
+    def create_analysis_run(
+        self,
+        *,
+        run_type: str,
+        model_provider: str = "",
+        model_name: str = "",
+        prompt_version: str = "event_extraction.v1",
+    ) -> int:
+        """创建分析运行记录。"""
+
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO analysis_run (
+                    run_type, status, model_provider, model_name, prompt_version, started_at
+                ) VALUES (?, 'running', ?, ?, ?, ?)
+                """,
+                (run_type, model_provider, model_name, prompt_version, utc_now_iso()),
+            )
+        return int(cursor.lastrowid)
+
+    def complete_analysis_run(self, *, analysis_run_id: int) -> None:
+        """标记分析运行成功。"""
+
+        with self._session() as connection:
+            connection.execute(
+                "UPDATE analysis_run SET status = 'succeeded', completed_at = ? WHERE id = ?",
+                (utc_now_iso(), analysis_run_id),
+            )
+
+    def fail_analysis_run(self, *, analysis_run_id: int, error_message: str) -> None:
+        """标记分析运行失败。"""
+
+        with self._session() as connection:
+            connection.execute(
+                """
+                UPDATE analysis_run
+                SET status = 'failed', completed_at = ?, error_message = ?
+                WHERE id = ?
+                """,
+                (utc_now_iso(), error_message, analysis_run_id),
+            )
+
     def get_event(self, event_id: int) -> dict[str, Any] | None:
         """按主键读取事件事实。
 
@@ -353,6 +396,8 @@ class EventInsightRepository:
         start_offset: int = 0,
         end_offset: int = 0,
         evidence_level: str = "C",
+        source_title: str = "",
+        source_url: str = "",
     ) -> int:
         """新增证据片段。
 
@@ -362,6 +407,8 @@ class EventInsightRepository:
             start_offset: 片段开始位置。
             end_offset: 片段结束位置。
             evidence_level: 证据等级。
+            source_title: 证据来源标题。
+            source_url: 证据来源 URL。
 
         Returns:
             新增证据主键。
@@ -371,12 +418,34 @@ class EventInsightRepository:
             cursor = connection.execute(
                 """
                 INSERT INTO evidence (
-                    raw_document_id, excerpt, start_offset, end_offset, evidence_level, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    raw_document_id, excerpt, start_offset, end_offset,
+                    evidence_level, source_title, source_url, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (raw_document_id, excerpt, start_offset, end_offset, evidence_level, utc_now_iso()),
+                (
+                    raw_document_id,
+                    excerpt,
+                    start_offset,
+                    end_offset,
+                    evidence_level,
+                    source_title,
+                    source_url,
+                    utc_now_iso(),
+                ),
             )
             return int(cursor.lastrowid)
+
+    def link_event_source(self, *, event_id: int, raw_document_id: int, source_role: str = "primary") -> None:
+        """关联事件和原始材料。"""
+
+        with self._session() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO event_source(event_id, raw_document_id, source_role, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (event_id, raw_document_id, source_role, utc_now_iso()),
+            )
 
     def link_event_evidence(self, *, event_id: int, evidence_id: int, role: str) -> None:
         """关联事件和证据。
@@ -398,6 +467,88 @@ class EventInsightRepository:
                 """,
                 (event_id, evidence_id, role, utc_now_iso()),
             )
+
+    def create_entity(self, *, name: str, entity_type: str, canonical_name: str = "") -> int:
+        """创建或复用实体。"""
+
+        with self._session() as connection:
+            connection.execute(
+                """
+                INSERT INTO entity(name, entity_type, canonical_name, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(name, entity_type) DO NOTHING
+                """,
+                (name, entity_type, canonical_name, utc_now_iso()),
+            )
+            row = connection.execute(
+                "SELECT id FROM entity WHERE name = ? AND entity_type = ?",
+                (name, entity_type),
+            ).fetchone()
+        return int(row["id"])
+
+    def link_event_entity(
+        self,
+        *,
+        event_id: int,
+        entity_id: int,
+        role: str = "mentioned",
+        relevance_score: float = 1.0,
+    ) -> None:
+        """关联事件和实体。"""
+
+        with self._session() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO event_entity(event_id, entity_id, role, relevance_score, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (event_id, entity_id, role, relevance_score, utc_now_iso()),
+            )
+
+    def list_event_entities(self, event_id: int) -> list[dict[str, Any]]:
+        """读取事件关联实体。"""
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT e.id, e.name, e.entity_type, e.canonical_name, ee.role, ee.relevance_score
+                FROM event_entity ee
+                JOIN entity e ON e.id = ee.entity_id
+                WHERE ee.event_id = ?
+                ORDER BY ee.relevance_score DESC, e.id ASC
+                """,
+                (event_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def create_llm_call_log(
+        self,
+        *,
+        task_type: str,
+        provider_config_id: int | None,
+        model_name: str,
+        status: str,
+        error_message: str = "",
+    ) -> int:
+        """记录一次 LLM 调用摘要。"""
+
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO llm_call_log (
+                    task_type, provider_config_id, model_name, status, error_message, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (task_type, provider_config_id, model_name, status, error_message, utc_now_iso()),
+            )
+        return int(cursor.lastrowid)
+
+    def get_llm_provider_config(self, provider_id: int) -> dict[str, Any] | None:
+        """读取 LLM provider 配置，用于校验 call log 外键。"""
+
+        with self._session() as connection:
+            row = connection.execute("SELECT * FROM llm_provider_config WHERE id = ?", (provider_id,)).fetchone()
+        return dict(row) if row else None
 
     def create_event_field_override(
         self,

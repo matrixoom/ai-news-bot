@@ -477,9 +477,34 @@ Event Insight 事件工作台用于管理已经发生或正在被研究的事实
 
 用途：返回事件详情、主题归属和证据链。
 
-成功：`200`，返回 `{ "traceId": "...", "event": { "evidence": [], "topics": [] } }`
+成功：`200`，返回 `{ "traceId": "...", "event": { "evidence": [], "topics": [], "entities": [] } }`。P6 起 `evidence` 包含 `startOffset/endOffset/sourceTitle/sourceUrl`，用于在前端核查证据原文位置。
 
 失败：`404`，`event_insight_event_not_found`
+
+#### 4.7.8 事件抽取内部任务
+
+P6 新增本地 `extract_event` 任务处理能力。该任务不新增公开 HTTP 端点，由 worker 或测试服务领取 `processing_job` 中的 `job_type=extract_event` 记录执行。
+
+任务 payload：
+
+```json
+{ "rawDocumentId": 1 }
+```
+
+处理结果：
+
+```json
+{
+  "analysisRunId": 1,
+  "eventIds": [1]
+}
+```
+
+失败语义：
+
+- 模型输出非 JSON：任务失败并写入 `analysis_run.error_message`。
+- JSON 缺少必填字段：任务失败。
+- `evidence.excerpt` 无法在 `raw_document.content_text` 中定位：任务失败，拒绝写入该证据链。
 
 #### 4.7.3 `PUT /api/frontend/modules/event-insight/events/{eventId}`
 

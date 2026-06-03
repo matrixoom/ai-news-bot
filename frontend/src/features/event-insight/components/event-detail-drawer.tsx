@@ -39,6 +39,8 @@ export function EventDetailDrawer({ event, isLoading, isError }: EventDetailDraw
         <dd className="text-slate-700">{event.analysisStatus ?? "未分析"}</dd>
         <dt className="text-slate-500">图谱状态</dt>
         <dd className="text-slate-700">{event.graphStatus ?? "未投影"}</dd>
+        <dt className="text-slate-500">关联实体</dt>
+        <dd className="text-slate-700">{event.entities?.map((entity) => entity.name).join("、") || "暂无实体"}</dd>
       </dl>
       <div>
         <h5 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">关键证据</h5>
@@ -47,6 +49,9 @@ export function EventDetailDrawer({ event, isLoading, isError }: EventDetailDraw
             event.evidence?.map((item) => (
               <div className="rounded-md border border-slate-200 p-3 text-xs leading-5 text-slate-600" key={item.id}>
                 <strong className="block text-slate-950">{item.sourceTitle || "未命名来源"}</strong>
+                <span className="mb-1 block text-[11px] text-slate-400">
+                  原文位置 {item.startOffset ?? 0}-{item.endOffset ?? 0}
+                </span>
                 {item.excerpt}
               </div>
             ))

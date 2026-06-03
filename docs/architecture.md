@@ -285,6 +285,25 @@ Provider:
 4. P5 不包含事件抽取 prompt，只建立模型配置和任务路由。
 ```
 
+P6 新增事件抽取链路：
+
+```text
+src/services/event_extraction_service.py
+  - 通过 LlmTaskRouter 调用 task_type=event_extraction
+  - 校验模型 JSON 输出和必填字段
+  - evidence.excerpt 必须能在 raw_document.content_text 中定位
+  - 写入 analysis_run / event / event_source / evidence / event_evidence / entity / event_entity / llm_call_log
+  - 可领取 processing_job 中的 extract_event 任务并标记成功/失败
+```
+
+抽取边界：
+
+```text
+1. 抽取只处理已入库 raw_document，不直接抓取远端 URL。
+2. 证据链必须引用原文连续片段，禁止模型改写证据。
+3. P6 不执行相似搜索、自动去重、主题生成或图谱投影。
+```
+
 ## 7. 状态与降级策略
 
 - Provider 层支持 `live / degraded / unavailable`
