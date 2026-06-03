@@ -6,6 +6,7 @@
 
 ### Added
 
+- Event Insight 新增独立 `.data/event_insight.db` SQLite 事实库、`001_event_insight_core` migration、Repository 基础写读能力和数据层回归测试，覆盖 FTS 同步、外键、人工覆盖、重复候选与 graph outbox 幂等。
 - Event Insight 完成 P0 技术验证记录，明确 sqlite-vec 可加载、FTS5 中文召回需要 n-gram 辅助、Neo4j 必须可选降级、关系图首版优先复用 ECharts，并补充后续检索与图谱测试 fixture。
 - Event Outlook 新增 `事件列表 / 主题溯源 / 事件关系图` 三个 Mock 研究工作台，Settings 新增展示型大模型配置页；本阶段先交付可浏览前端效果，静态日历保持原有行为，真实数据链路将在后续增量接入。
 - Push Center `Schedules` 页面改为全宽日报预览，计划任务与投递配置收纳到齿轮设置弹窗；预览页使用 Heroicons 图标提供设置、全量刷新、刷新预览和立即发送操作。

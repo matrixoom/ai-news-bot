@@ -11,6 +11,7 @@
 - 领域与服务：`src/domain/`、`src/services/`
 - 数据源抽象：`src/providers/`
 - 推送链路：`src/services/push_center_service.py` + `src/services/push_report_service.py` + `src/notifiers/`
+- 事件洞察事实库：`.data/event_insight.db` + `src/services/event_insight_repository.py`
 
 运行入口：
 
@@ -94,7 +95,25 @@
 
 - 对上只暴露标准协议，不泄露第三方 API 细节
 
-### 2.5 前端展示层（Frontend SPA）
+### 2.5 Repository 层（Persistence Layer）
+
+路径：`src/services/*_repository.py`、`src/services/*_store.py`
+
+职责：
+
+- 管理本地 SQLite 连接、migration、幂等写入和查询
+- 保持 IO 与业务编排分离
+- 通过显式方法向 Service 层暴露事实数据
+
+Event Insight 约束：
+
+- `.data/event_insight.db` 是事件洞察独立事实库
+- `schema_migration` 记录 Event Insight 自身 migration
+- 每个 Repository 连接必须启用 `PRAGMA foreign_keys=ON` 与 `PRAGMA journal_mode=WAL`
+- 原始材料和事件 FTS 索引由 SQLite trigger 同步
+- Neo4j 仅作为后续可重建投影，不是事实来源
+
+### 2.6 前端展示层（Frontend SPA）
 
 路径：`frontend/src/`
 
@@ -159,15 +178,50 @@
   - 负责数据健康状态与覆盖说明
 - `push`
   - 负责推送配置、预览、执行和调度状态
+- `event-outlook`
+  - 负责未来事件静态日历，继续使用既有 `timeline_events`、`EventsOutlookService`、`EventsOutlookStore` 和 `/api/frontend/modules/event-outlook`
+- `event-insight`
+  - 负责已发布/导入材料的证据发现、事件归纳、主题溯源和关系构建
+  - 使用独立 `.data/event_insight.db`，不得复用静态日历表
 
-## 6. 状态与降级策略
+## 6. Event Insight 数据边界
+
+Event Insight P2 已建立独立 SQLite 地基：
+
+```text
+.data/event_insight.db
+  schema_migration
+  scan_batch / analysis_run
+  raw_document / raw_document_fts
+  event / event_fts
+  event_source / evidence / event_evidence
+  entity / entity_alias / event_entity
+  topic / topic_event
+  event_relation / relation_evidence
+  event_operation_log / event_field_override
+  duplicate_event_candidate
+  processing_job / processing_job_attempt
+  graph_sync_outbox / graph_projection_state
+```
+
+边界规则：
+
+```text
+1. SQLite 是事实主库。
+2. FTS5 负责基础全文检索，中文 n-gram 增强将在 P7 引入。
+3. 人工校正写入 event_field_override，不直接覆盖模型事实。
+4. 重复事件以 duplicate_event_candidate 记录候选，不物理删除。
+5. 图谱同步通过 graph_sync_outbox 解耦，Neo4j 后续可从 SQLite 重建。
+```
+
+## 7. 状态与降级策略
 
 - Provider 层支持 `live / degraded / unavailable`
 - Service 层支持 sample fallback
 - Web 层在模块冷启动阶段可返回 `202 + module.loading=true + refresh_after_ms`
 - 前端根据 `refresh_after_ms` 自动轮询或用户手动刷新
 
-## 7. 演进建议
+## 8. 演进建议
 
 - 新模块接入时，优先按顺序新增：
   1. domain model

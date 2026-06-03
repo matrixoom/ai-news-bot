@@ -21,6 +21,7 @@
 - macro data SQLite 分表、时间范围解析与 API 契约
 - market data 单图刷新隔离、全球期货收盘列解析与双源回退
 - push center 配置、预览、触发逻辑、宽基指数时间范围与历史保留
+- event insight SQLite migration、外键、FTS trigger、人工覆盖、重复候选和 graph outbox 幂等
 - 历史文档校验类 / demo 类测试已归档到 `to_delete/tests/`
 
 ### 2.2 集成测试（后端 API）
@@ -73,7 +74,25 @@ uv run python -m pytest tests/test_task05_macro_monitoring.py tests/test_task06_
 uv run python -m pytest tests/test_push_workflow.py tests/test_push_center_api.py tests/test_push_email_notifier.py -q
 ```
 
-### 3.5 前端改动
+### 3.5 Event Insight 数据层改动
+
+```powershell
+uv run python -m pytest tests/test_event_insight_repository.py tests/test_event_outlook_timeline.py -q
+```
+
+覆盖点：
+
+```text
+1. 001_event_insight_core migration 幂等。
+2. SQLite 连接启用 foreign_keys 与 WAL。
+3. 原始材料和事件 FTS 插入、更新、软归档同步。
+4. event_field_override 独立保存人工覆盖，不改写模型事实。
+5. duplicate_event_candidate 保留来源事件、候选事件和方法。
+6. graph_sync_outbox 通过 idempotency_key 防止重复投影。
+7. 现有 Event Outlook 静态日历回归不受影响。
+```
+
+### 3.6 前端改动
 
 在 `frontend/` 目录执行：
 
