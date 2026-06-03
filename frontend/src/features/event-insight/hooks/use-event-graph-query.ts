@@ -6,5 +6,6 @@ export function useEventGraphQuery(topicId?: number) {
   return useQuery({
     queryKey: ["event-insight-graph", topicId],
     queryFn: ({ signal }) => getEventInsightGraph(topicId, signal),
+    enabled: topicId !== undefined,
   });
 }

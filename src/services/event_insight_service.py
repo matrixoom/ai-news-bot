@@ -194,6 +194,23 @@ class EventInsightService:
         )
         return {"traceId": _trace_id("event-insight-topic"), "topic": self._present_topic(topic)}
 
+    def list_topics(self) -> dict[str, Any]:
+        """构建主题列表响应。
+
+        Args:
+            无。
+
+        Returns:
+            前端可选择主题列表。
+        """
+
+        topics = [self._present_topic(topic) for topic in self._repository.list_topics()]
+        return {
+            "traceId": _trace_id("event-insight-topics"),
+            "items": topics,
+            "total": len(topics),
+        }
+
     def link_event_topic(self, event_id: int, payload: dict[str, Any] | None) -> dict[str, Any]:
         """关联事件到主题。
 

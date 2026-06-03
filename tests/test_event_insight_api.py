@@ -118,6 +118,25 @@ class EventInsightApiTests(unittest.TestCase):
         self.assertEqual(payload["event"]["topics"][0]["name"], "内存涨价")
         self.assertEqual(payload["event"]["evidence"][0]["excerpt"], "DRAM 合约价上涨，AI 服务器需求支撑内存涨价。")
 
+    def test_list_topics_returns_selectable_topics(self) -> None:
+        """校验主题列表接口返回前端可选择主题。"""
+        first = self.client.post(
+            "/api/frontend/modules/event-insight/topics",
+            json={"name": "内存涨价", "summary": "围绕存储芯片供需变化。"},
+        ).json()["topic"]
+        second = self.client.post(
+            "/api/frontend/modules/event-insight/topics",
+            json={"name": "光模块景气", "summary": "围绕光模块订单变化。"},
+        ).json()["topic"]
+
+        response = self.client.get("/api/frontend/modules/event-insight/topics")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["traceId"].startswith("event-insight-topics-"))
+        self.assertEqual([item["id"] for item in payload["items"]], [second["id"], first["id"]])
+        self.assertEqual(payload["total"], 2)
+
     def test_topic_trace_returns_metrics_stages_and_timeline(self) -> None:
         """校验主题溯源接口返回真实关联事件、指标和阶段。"""
         topic_response = self.client.post(

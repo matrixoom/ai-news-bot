@@ -6,6 +6,7 @@
 
 ### Added
 
+- Event Insight 新增 P10 发布硬化：新增 `GET /api/frontend/modules/event-insight/topics` 主题列表接口，主题溯源页和事件关系图页改为先读取可选主题，移除固定 `topicId=1` 假设。
 - Event Insight 新增 P9 事件关系图 SQLite 投影：`GET /api/frontend/modules/event-insight/graph` 返回真实事件节点和 `event_relation` 关系边，前端关系图从 mock 切换为 API 加载并支持节点详情。
 - Event Insight 新增 P8 主题溯源真实数据链路：`GET /api/frontend/modules/event-insight/topics/{topicId}/trace` 返回主题、指标、阶段、时间线和证据摘要，前端主题溯源页从 mock 切换为 API 加载。
 - Event Insight 新增 P7 检索、重复候选与规则聚类服务：中文 n-gram fallback 召回 active 事件，重复候选仅写入 `duplicate_event_candidate`，规则聚类仅关联 `topic_event`，并提供 sqlite-vec 可选探测能力。
