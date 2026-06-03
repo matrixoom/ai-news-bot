@@ -160,6 +160,18 @@ def register_event_insight_routes(
             logger.exception("event insight topic create failed")
             return JSONResponse({"error": "event_insight_topic_create_failed"}, status_code=503)
 
+    @app.get("/api/frontend/modules/event-insight/topics/{topic_id}/trace")
+    def get_event_insight_topic_trace(topic_id: int) -> JSONResponse:
+        """返回 Event Insight 主题溯源。"""
+
+        try:
+            return JSONResponse(event_service.get_topic_trace(topic_id))
+        except EventInsightNotFoundError:
+            return JSONResponse({"error": "event_insight_topic_not_found"}, status_code=404)
+        except Exception:
+            logger.exception("event insight topic trace failed", extra={"topic_id": topic_id})
+            return JSONResponse({"error": "event_insight_topic_trace_failed"}, status_code=503)
+
     @app.post("/api/frontend/modules/event-insight/events/{event_id}/link-topic")
     def link_event_insight_topic(event_id: int, payload: dict | None = None) -> JSONResponse:
         """将 Event Insight 事件关联到主题。"""

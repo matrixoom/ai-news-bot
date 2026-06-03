@@ -184,7 +184,24 @@ uv run python -m pytest tests/test_event_retrieval_service.py tests/test_event_i
 5. P7 不影响 P6 抽取与 Event Insight Repository 既有契约。
 ```
 
-### 3.11 前端改动
+### 3.11 Event Insight 主题溯源改动
+
+```powershell
+uv run python -m pytest tests/test_event_insight_api.py tests/test_event_insight_repository.py -q
+cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/event-insight-workspaces.test.tsx --run
+```
+
+覆盖点：
+
+```text
+1. 主题 trace API 返回 topic、metrics、stages、timeline 和 currentJudgement。
+2. timeline 只读取 topic_event 关联事件，并按事件时间倒序排列。
+3. 证据链批量加载，前端可展示事件证据摘录。
+4. 主题不存在时返回 404，不影响事件列表和静态 Event Outlook。
+5. 前端主题溯源页从真实 API 加载，覆盖 loading、error 和空时间线展示。
+```
+
+### 3.12 前端改动
 
 在 `frontend/` 目录执行：
 

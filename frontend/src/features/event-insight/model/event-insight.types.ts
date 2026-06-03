@@ -130,9 +130,27 @@ export type TopicTraceStage = {
 
 export type TopicTimelineEntry = {
   id: string;
+  eventId?: number;
   happenedAt: string;
   title: string;
   summary: string;
+  roleInTopic?: string;
+  relevanceScore?: number;
+  evidenceCount?: number;
+  evidence?: EventInsightApiEvidence[];
+};
+
+export type TopicTracePayload = {
+  traceId: string;
+  topic: EventInsightTopic;
+  metrics: TopicTraceMetric[];
+  stages: TopicTraceStage[];
+  timeline: TopicTimelineEntry[];
+  currentJudgement: {
+    title: string;
+    summary: string;
+    clues: string[];
+  };
 };
 
 export type GraphNode = {
