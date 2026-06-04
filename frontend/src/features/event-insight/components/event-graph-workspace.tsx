@@ -1,116 +1,255 @@
-import { ArrowDownTrayIcon, PlusIcon } from "@heroicons/react/24/outline";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FormEvent } from "react";
-import { useEffect, useState } from "react";
-import { formatLocalDateTime } from "../../../shared/utils/format-local-date-time";
-import { createEventInsightRelation } from "../api/create-relation";
+import { FormEvent, MouseEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { GraphEdge, GraphNode } from "../model/event-insight.types";
 import { useEventGraphQuery } from "../hooks/use-event-graph-query";
-import { EventInsightShell, InsightBadge, InsightPanel } from "./event-insight-shell";
+import {
+  EVENT_GRAPH_CANVAS_HEIGHT,
+  EVENT_GRAPH_CANVAS_WIDTH,
+  buildInitialCanvasPosition,
+  buildNodeDegreeMap,
+} from "../lib/event-graph-canvas-utils";
+import {
+  CanvasDeleteButton,
+  CanvasToolbar,
+  DotGrid,
+  EntityLegend,
+  GraphEdgePath,
+  GraphNodeButton,
+  GraphSvgDefs,
+  NodeEditDialog,
+  type EditingGraphNode,
+  type EventGraphCanvasNode,
+} from "./event-graph-canvas-parts";
 
-const EDGE_CLASSES = { cause: "bg-blue-600", parallel: "bg-violet-600", risk: "border-t-2 border-dashed border-rose-600", follow: "bg-emerald-600" };
+type CanvasNode = EventGraphCanvasNode;
 
-/** 渲染关系网络工作台，返回可选择节点的真实画布。 */
-export function EventGraphWorkspace() {
-  const queryClient = useQueryClient();
-  const graphQuery = useEventGraphQuery();
-  const graph = graphQuery.data;
-  const [selectedId, setSelectedId] = useState<string | undefined>();
-  const [isRelationOpen, setIsRelationOpen] = useState(false);
-  const [actionMessage, setActionMessage] = useState("");
-  const selectedNode = graph?.nodes.find((node) => node.id === selectedId) ?? graph?.nodes[0];
-  const relationSummary = graph?.edges.find((edge) => edge.sourceNodeId === selectedNode?.id || edge.targetNodeId === selectedNode?.id)?.summary;
-  const relationMutation = useMutation({
-    mutationFn: createEventInsightRelation,
-    onSuccess: () => {
-      setIsRelationOpen(false);
-      setActionMessage("关系已保存。");
-      queryClient.invalidateQueries({ queryKey: ["event-insight-graph"] });
-    },
-  });
-
-  useEffect(() => {
-    if (graph?.selectedNodeId) {
-      setSelectedId((current) => current ?? graph.selectedNodeId ?? undefined);
-    }
-  }, [graph?.selectedNodeId]);
-
-  return (
-    <EventInsightShell
-      title="关系网络"
-      description="查看通过质量审核后的事件网络。新增事件会自动入网，并根据事实线索与既有事件自发聚类、建立关系。"
-      actions={<><button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700" onClick={() => setIsRelationOpen(true)} type="button"><PlusIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />新增关系</button><button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => setActionMessage("视图已保存到当前工作区。")} type="button"><ArrowDownTrayIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />保存视图</button></>}
-    >
-      {actionMessage ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{actionMessage}</div> : null}
-      {isRelationOpen && graph?.nodes[0]?.eventId && graph?.nodes[1]?.eventId ? <RelationCreateForm isSaving={relationMutation.isPending} sourceEventId={graph.nodes[0].eventId} targetEventId={graph.nodes[1].eventId} onCancel={() => setIsRelationOpen(false)} onSubmit={(payload) => relationMutation.mutate(payload)} /> : null}
-      {graphQuery.isLoading ? <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">正在加载关系网络...</div> : null}
-      {graphQuery.isError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">关系网络加载失败，请检查事件网络数据。</div> : null}
-      {graph ? <>
-      <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-3">
-        <input aria-label="搜索图谱节点" className="h-9 w-64 rounded-md border border-slate-300 px-3 text-xs" placeholder="搜索事件、实体或主题" />
-        <select aria-label="关系网络时间范围" className="h-9 rounded-md border border-slate-300 px-3 text-xs"><option>最近 90 天</option></select>
-      </div>
-      <div className="grid min-h-[650px] gap-3 xl:grid-cols-[208px_minmax(0,1fr)_300px]">
-        <InsightPanel className="p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">关系类型</h3>
-          {["因果关系", "并行关系", "风险关系", "跟随关系"].map((item) => <label className="mt-3 flex items-center gap-2 text-xs text-slate-700" key={item}><input defaultChecked type="checkbox" />{item}</label>)}
-          <h3 className="mt-6 border-t border-slate-200 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">节点可信度</h3>
-          {["高可信", "中可信", "低可信"].map((item, index) => <label className="mt-3 flex items-center gap-2 text-xs text-slate-700" key={item}><input defaultChecked={index < 2} type="checkbox" />{item}</label>)}
-        </InsightPanel>
-        <InsightPanel className="relative min-h-[650px] bg-slate-50" >
-          <div aria-label="关系网络画布" className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_1px_1px,_#cbd5e1_1px,_transparent_0)] [background-size:18px_18px]">
-            {graph.edges.map((edge) => <i aria-label={edge.summary || edge.id} className={`absolute h-0.5 origin-left ${EDGE_CLASSES[edge.type]}`} key={edge.id} style={{ left: edge.left, top: edge.top, width: edge.width, transform: `rotate(${edge.rotate})` }} />)}
-            {graph.nodes.length === 0 ? <p className="m-4 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">暂无可展示节点。</p> : null}
-            {graph.nodes.map((node) => <button aria-label={`查看节点 ${node.title}`} className={`absolute w-40 rounded-md border bg-white p-3 text-left shadow-md ${selectedNode?.id === node.id ? "border-blue-600 ring-4 ring-blue-100" : "border-slate-300"}`} key={node.id} onClick={() => setSelectedId(node.id)} style={{ left: node.left, top: node.top }} type="button"><span className="text-[10px] text-slate-500">{node.kind}</span><strong className="mt-1 block text-xs leading-5 text-slate-950">{node.title}</strong><small className="mt-1 block text-[10px] text-slate-400">{formatLocalDateTime(node.happenedAt)}</small></button>)}
-          </div>
-        </InsightPanel>
-        <InsightPanel title="节点详情">
-          <div className="space-y-4 p-4">
-            {selectedNode ? <>
-            <h4 className="text-base font-semibold leading-6 text-slate-950">{selectedNode.title}</h4>
-            <p className="text-xs leading-6 text-slate-600">{selectedNode.summary}</p>
-            <InsightBadge tone={selectedNode.confidenceTone}>{selectedNode.confidence}</InsightBadge>
-            <dl className="grid grid-cols-[72px_1fr] gap-y-2 border-t border-slate-200 pt-3 text-xs leading-5">
-              <dt className="text-slate-500">节点类型</dt><dd className="text-slate-700">{selectedNode.kind}</dd>
-              <dt className="text-slate-500">发生时间</dt><dd className="text-slate-700">{formatLocalDateTime(selectedNode.happenedAt)}</dd>
-              <dt className="text-slate-500">关系概览</dt><dd className="text-slate-700">{relationSummary || "暂无关系摘要"}</dd>
-            </dl>
-            </> : <p className="text-sm text-slate-500">请选择一个节点查看详情。</p>}
-          </div>
-        </InsightPanel>
-      </div>
-      </> : null}
-    </EventInsightShell>
-  );
-}
-
-type RelationCreateFormProps = {
-  sourceEventId: number;
-  targetEventId: number;
-  isSaving: boolean;
-  onCancel: () => void;
-  onSubmit: (payload: { sourceEventId: number; targetEventId: number; relationType: "support"; relationSummary: string; strengthScore: number; confidenceScore: number }) => void;
+type DragState = {
+  nodeId: string;
+  offsetX: number;
+  offsetY: number;
 };
 
-/** 渲染关系创建表单。 */
-function RelationCreateForm({ sourceEventId, targetEventId, isSaving, onCancel, onSubmit }: RelationCreateFormProps) {
-  const [summary, setSummary] = useState("");
+type CanvasMoveEvent = MouseEvent<HTMLElement> | PointerEvent<HTMLElement>;
 
-  /** 提交人工关系。 */
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+/**
+ * 渲染 MiroFish 风格的关系网络画布。
+ *
+ * @returns 支持刷新、全屏、节点选择、拖拽、删除和双击编辑的关系网络页面。
+ */
+export function EventGraphWorkspace() {
+  const graphQuery = useEventGraphQuery();
+  const graph = graphQuery.data;
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [nodes, setNodes] = useState<CanvasNode[]>([]);
+  const [edges, setEdges] = useState<GraphEdge[]>([]);
+  const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [editingNode, setEditingNode] = useState<EditingGraphNode | null>(null);
+  const [showEdgeLabels, setShowEdgeLabels] = useState(true);
+  const [actionMessage, setActionMessage] = useState("");
+  const nodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
+  const visibleEdges = useMemo(
+    () => edges.filter((edge) => edge.sourceNodeId && edge.targetNodeId && nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId)),
+    [edges, nodeIds],
+  );
+  const degreeMap = useMemo(() => buildNodeDegreeMap(visibleEdges), [visibleEdges]);
+  const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+
+  useEffect(() => {
+    if (!graph) return;
+    setNodes(graph.nodes.map((node, index) => ({ ...node, ...buildInitialCanvasPosition(node, index) })));
+    setEdges(graph.edges);
+    setSelectedId(graph.selectedNodeId ?? graph.nodes[0]?.id);
+  }, [graph, graphQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    /** 处理键盘删除选中节点。 */
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      if (!selectedId || editingNode) return;
+      event.preventDefault();
+      deleteSelectedNode();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingNode, selectedId]);
+
+  /** 刷新图谱数据并恢复服务端位置。 */
+  async function handleRefresh() {
+    await graphQuery.refetch();
+    setActionMessage("关系网络已刷新。");
+  }
+
+  /** 请求浏览器进入全屏画布模式。 */
+  function handleFullscreen() {
+    void canvasRef.current?.requestFullscreen?.();
+  }
+
+  /** 删除当前选中节点及其关联边。 */
+  function deleteSelectedNode() {
+    if (!selectedId) return;
+    setNodes((current) => current.filter((node) => node.id !== selectedId));
+    setEdges((current) => current.filter((edge) => edge.sourceNodeId !== selectedId && edge.targetNodeId !== selectedId));
+    setSelectedId(undefined);
+    setActionMessage("节点已从当前画布删除。");
+  }
+
+  /**
+   * 将鼠标指针位置换算为画布坐标。
+   *
+   * @param event 指针事件。
+   * @returns 画布内坐标。
+   */
+  function getCanvasPoint(event: CanvasMoveEvent) {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const width = rect?.width && rect.width > 0 ? rect.width : EVENT_GRAPH_CANVAS_WIDTH;
+    const height = rect?.height && rect.height > 0 ? rect.height : EVENT_GRAPH_CANVAS_HEIGHT;
+    const left = rect?.left ?? 0;
+    const top = rect?.top ?? 0;
+    const clientX = Number.isFinite(event.clientX) ? event.clientX : left;
+    const clientY = Number.isFinite(event.clientY) ? event.clientY : top;
+    return {
+      x: ((clientX - left) / width) * EVENT_GRAPH_CANVAS_WIDTH,
+      y: ((clientY - top) / height) * EVENT_GRAPH_CANVAS_HEIGHT,
+    };
+  }
+
+  /**
+   * 开始拖动节点。
+   *
+   * @param event 指针按下事件。
+   * @param node 当前节点。
+   */
+  function handleNodeDragStart(event: MouseEvent<HTMLButtonElement> | PointerEvent<HTMLButtonElement>, node: CanvasNode) {
     event.preventDefault();
-    onSubmit({ sourceEventId, targetEventId, relationType: "support", relationSummary: summary.trim(), strengthScore: 0.7, confidenceScore: 0.8 });
+    const point = getCanvasPoint(event);
+    setSelectedId(node.id);
+    setDragState({ nodeId: node.id, offsetX: point.x - node.x, offsetY: point.y - node.y });
+  }
+
+  /**
+   * 拖动中更新节点坐标。
+   *
+   * @param event 指针移动事件。
+   */
+  function handleCanvasDragMove(event: MouseEvent<HTMLDivElement> | PointerEvent<HTMLDivElement>) {
+    if (!dragState) return;
+    const point = getCanvasPoint(event);
+    setNodes((current) =>
+      current.map((node) =>
+        node.id === dragState.nodeId
+          ? {
+              ...node,
+              x: Math.max(24, Math.min(EVENT_GRAPH_CANVAS_WIDTH - 24, point.x - dragState.offsetX)),
+              y: Math.max(24, Math.min(EVENT_GRAPH_CANVAS_HEIGHT - 24, point.y - dragState.offsetY)),
+            }
+          : node,
+      ),
+    );
+  }
+
+  /** 结束节点拖动。 */
+  function handleCanvasDragEnd() {
+    setDragState(null);
+  }
+
+  /** 保存双击编辑后的节点信息。 */
+  function handleEditSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingNode) return;
+    const formData = new FormData(event.currentTarget);
+    const title = String(formData.get("title") ?? "").trim();
+    const summary = String(formData.get("summary") ?? "").trim();
+    setNodes((current) =>
+      current.map((node) =>
+        node.id === editingNode.id
+          ? {
+              ...node,
+              title: title || node.title,
+              summary: summary || node.summary,
+            }
+          : node,
+      ),
+    );
+    setEditingNode(null);
+    setActionMessage("节点信息已更新。");
   }
 
   return (
-    <form className="rounded-lg border border-blue-100 bg-blue-50/50 p-4" onSubmit={handleSubmit}>
-      <label className="grid gap-2 text-xs font-semibold text-slate-700">
-        关系说明
-        <textarea className="min-h-20 rounded-md border border-slate-300 px-3 py-2 font-normal" onChange={(event) => setSummary(event.target.value)} value={summary} />
-      </label>
-      <div className="mt-3 flex justify-end gap-2">
-        <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700" onClick={onCancel} type="button">取消</button>
-        <button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" disabled={isSaving} type="submit">保存关系</button>
+    <section className="-m-8 h-[calc(100vh-5rem)] min-h-[720px] overflow-hidden bg-white">
+      <h2 className="sr-only">关系网络</h2>
+      <div
+        aria-label="关系网络画布"
+        className="relative h-full w-full cursor-default overflow-hidden bg-white text-slate-700"
+        onMouseLeave={handleCanvasDragEnd}
+        onMouseMove={handleCanvasDragMove}
+        onMouseUp={handleCanvasDragEnd}
+        onPointerLeave={handleCanvasDragEnd}
+        onPointerMove={handleCanvasDragMove}
+        onPointerUp={handleCanvasDragEnd}
+        ref={canvasRef}
+      >
+        <DotGrid />
+        <div className="absolute left-4 top-5 z-20 text-sm font-semibold text-slate-700">Graph Relationship Visualization</div>
+        <CanvasToolbar
+          onFullscreen={handleFullscreen}
+          onRefresh={handleRefresh}
+          onShowEdgeLabelsChange={setShowEdgeLabels}
+          showEdgeLabels={showEdgeLabels}
+        />
+        <EntityLegend />
+        <CanvasDeleteButton disabled={!selectedId} onDelete={deleteSelectedNode} />
+        {actionMessage ? (
+          <div className="absolute left-1/2 top-5 z-30 -translate-x-1/2 rounded-full border border-emerald-100 bg-white/95 px-4 py-2 text-sm text-emerald-700 shadow">
+            {actionMessage}
+          </div>
+        ) : null}
+        {graphQuery.isLoading ? (
+          <div className="absolute inset-0 z-40 grid place-items-center bg-white/60 text-sm text-slate-500">正在加载关系网络...</div>
+        ) : null}
+        {graphQuery.isError ? (
+          <div className="absolute inset-0 z-40 grid place-items-center bg-white/80 text-sm text-rose-700">关系网络加载失败，请检查事件网络数据。</div>
+        ) : null}
+        {nodes.length === 0 && !graphQuery.isLoading ? (
+          <div className="absolute left-5 top-16 rounded-md border border-dashed border-slate-300 bg-white/95 p-4 text-sm text-slate-500">暂无可展示节点。</div>
+        ) : null}
+        <svg
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full"
+          preserveAspectRatio="xMidYMid meet"
+          viewBox={`0 0 ${EVENT_GRAPH_CANVAS_WIDTH} ${EVENT_GRAPH_CANVAS_HEIGHT}`}
+        >
+          <GraphSvgDefs />
+          {visibleEdges.map((edge) => (
+            <GraphEdgePath edge={edge} key={edge.id} nodeMap={nodeMap} showLabel={showEdgeLabels} />
+          ))}
+        </svg>
+        <div
+          className="absolute inset-0"
+          style={{
+            height: EVENT_GRAPH_CANVAS_HEIGHT,
+            transformOrigin: "top left",
+            width: EVENT_GRAPH_CANVAS_WIDTH,
+          }}
+        >
+          {nodes.map((node) => {
+            return (
+              <GraphNodeButton
+                degree={degreeMap.get(node.id) ?? 0}
+                key={node.id}
+                node={node}
+                onDoubleClick={() => setEditingNode(node)}
+                onMouseDown={(event) => handleNodeDragStart(event, node)}
+                onPointerDown={(event) => handleNodeDragStart(event, node)}
+                selected={selectedId === node.id}
+              />
+            );
+          })}
+        </div>
       </div>
-    </form>
+      {editingNode ? (
+        <NodeEditDialog node={editingNode} onCancel={() => setEditingNode(null)} onSubmit={handleEditSubmit} />
+      ) : null}
+    </section>
   );
 }
