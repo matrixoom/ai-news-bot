@@ -1,9 +1,80 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { PropsWithChildren } from "react";
+import type { PropsWithChildren, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventGraphWorkspace } from "../components/event-graph-workspace";
 import { TopicTraceWorkspace } from "../components/topic-trace-workspace";
+
+vi.mock("@xyflow/react", async () => {
+  const React = await import("react");
+
+  type MockFlowNode = {
+    data: Record<string, unknown>;
+    draggable?: boolean;
+    id: string;
+    selected?: boolean;
+    type?: string;
+  };
+
+  type MockFlowEdge = {
+    data: Record<string, unknown>;
+    id: string;
+    type?: string;
+  };
+
+  return {
+    Background: () => <div data-testid="react-flow-background" />,
+    BackgroundVariant: { Dots: "dots" },
+    BaseEdge: ({ path }: { path: string }) => <path d={path} data-testid="react-flow-base-edge" />,
+    Controls: () => <div data-testid="react-flow-controls" />,
+    EdgeLabelRenderer: ({ children }: { children: ReactNode }) => <g data-testid="react-flow-edge-labels">{children}</g>,
+    Handle: () => <span data-testid="react-flow-handle" />,
+    MarkerType: { ArrowClosed: "arrowclosed" },
+    Position: { Bottom: "bottom", Left: "left", Right: "right", Top: "top" },
+    ReactFlowProvider: ({ children }: { children: ReactNode }) => <div data-testid="react-flow-provider">{children}</div>,
+    getBezierPath: () => ["M 0 0 Q 60 20 120 40", 60, 20],
+    useEdgesState: (initialEdges: MockFlowEdge[]) => {
+      const [edges, setEdges] = React.useState(initialEdges);
+      return [edges, setEdges, vi.fn()];
+    },
+    useNodesState: (initialNodes: MockFlowNode[]) => {
+      const [nodes, setNodes] = React.useState(initialNodes);
+      return [nodes, setNodes, vi.fn()];
+    },
+    useReactFlow: () => ({ fitView: vi.fn() }),
+    ReactFlow: ({
+      children,
+      edges,
+      edgeTypes,
+      nodes,
+      nodeTypes,
+    }: {
+      children: ReactNode;
+      edges: MockFlowEdge[];
+      edgeTypes: Record<string, React.ComponentType<Record<string, unknown>>>;
+      nodes: MockFlowNode[];
+      nodeTypes: Record<string, React.ComponentType<Record<string, unknown>>>;
+    }) => (
+      <div aria-label="关系网络画布" data-testid="react-flow-canvas">
+        {nodes.map((node) => {
+          const NodeComponent = nodeTypes[node.type ?? "eventNode"];
+          return (
+            <div data-draggable={String(node.draggable !== false)} data-testid={`rf-node-${node.id}`} key={node.id}>
+              <NodeComponent data={node.data} id={node.id} selected={node.selected ?? false} />
+            </div>
+          );
+        })}
+        <svg>
+          {edges.map((edge) => {
+            const EdgeComponent = edgeTypes[edge.type ?? "eventEdge"];
+            return <EdgeComponent data={edge.data} id={edge.id} key={edge.id} sourceX={0} sourceY={0} targetX={120} targetY={40} />;
+          })}
+        </svg>
+        {children}
+      </div>
+    ),
+  };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -31,18 +102,22 @@ describe("Event insight mock workspaces", () => {
     expect(screen.getByText("正在加载主题溯源...")).toBeInTheDocument();
   });
 
-  it("renders a full-screen relationship canvas without side panels", async () => {
+  it("renders a React Flow relationship canvas without side panels or entity legend", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(eventInsightFetch);
 
     renderWithQueryClient(<EventGraphWorkspace />);
 
     expect(screen.getByRole("heading", { name: "关系网络" })).toBeInTheDocument();
     expect(await screen.findByLabelText("关系网络画布")).toBeInTheDocument();
+    expect(screen.getByTestId("react-flow-canvas")).toBeInTheDocument();
+    expect(screen.getByTestId("react-flow-background")).toBeInTheDocument();
+    expect(screen.getByTestId("react-flow-controls")).toBeInTheDocument();
     expect(await screen.findByText("内存涨价推升光模块订单预期。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "刷新关系网络" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "全屏画布" })).toBeInTheDocument();
     expect(screen.queryByText("关系类型")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "节点详情" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Entity Types")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/frontend/modules/event-insight/graph", expect.any(Object));
     expect(fetchMock).not.toHaveBeenCalledWith("/api/frontend/modules/event-insight/topics", expect.any(Object));
   });
@@ -55,12 +130,13 @@ describe("Event insight mock workspaces", () => {
     expect(screen.getByText("正在加载关系网络...")).toBeInTheDocument();
   });
 
-  it("sizes nodes by connected edge count and supports edit, drag, and delete", async () => {
+  it("uses draggable graph-library nodes sized by connected edge count and supports edit and delete", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(eventInsightFetch);
 
     renderWithQueryClient(<EventGraphWorkspace />);
 
     expect(await screen.findByLabelText("关系网络画布")).toBeInTheDocument();
+    expect(await screen.findByTestId("rf-node-event-1")).toHaveAttribute("data-draggable", "true");
     const highDegreeNode = await screen.findByRole("button", { name: "查看节点 存储芯片报价上调" });
     const lowDegreeNode = screen.getByRole("button", { name: "查看节点 数据中心液冷方案渗透率持续上升" });
     expect(Number.parseFloat(highDegreeNode.style.width)).toBeGreaterThan(Number.parseFloat(lowDegreeNode.style.width));
@@ -72,12 +148,6 @@ describe("Event insight mock workspaces", () => {
     expect(screen.getByRole("button", { name: "查看节点 液冷方案渗透加速" })).toBeInTheDocument();
 
     const editedNode = screen.getByRole("button", { name: "查看节点 液冷方案渗透加速" });
-    const leftBeforeDrag = editedNode.style.left;
-    fireEvent.mouseDown(editedNode, { clientX: 200, clientY: 200 });
-    fireEvent.mouseMove(screen.getByLabelText("关系网络画布"), { clientX: 260, clientY: 230 });
-    fireEvent.mouseUp(screen.getByLabelText("关系网络画布"));
-    expect(editedNode.style.left).not.toBe(leftBeforeDrag);
-
     fireEvent.click(editedNode);
     fireEvent.click(screen.getByRole("button", { name: "删除选中节点" }));
     expect(screen.queryByRole("button", { name: "查看节点 液冷方案渗透加速" })).not.toBeInTheDocument();
