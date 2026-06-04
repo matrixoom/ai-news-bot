@@ -68,6 +68,18 @@ def register_rss_settings_routes(app: FastAPI, *, rss_config_service: RssConfigS
             logger.exception("rss source disable failed", extra={"source_id": source_id})
             return JSONResponse({"error": "rss_source_disable_failed"}, status_code=503)
 
+    @app.delete("/api/system/rss/sources/{source_id}")
+    def delete_rss_source(source_id: int) -> JSONResponse:
+        """删除 RSS 源配置；后端保留软删除记录以便审计历史来源。"""
+
+        try:
+            return JSONResponse(rss_config_service.delete_source(source_id))
+        except RssConfigNotFoundError:
+            return JSONResponse({"error": "rss_source_not_found"}, status_code=404)
+        except Exception:
+            logger.exception("rss source delete failed", extra={"source_id": source_id})
+            return JSONResponse({"error": "rss_source_delete_failed"}, status_code=503)
+
     @app.post("/api/system/rss/sources/{source_id}/fetch")
     def fetch_rss_source(source_id: int) -> JSONResponse:
         """手动抓取 RSS 源并接入 Event Insight 事件列表。"""

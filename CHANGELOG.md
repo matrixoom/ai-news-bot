@@ -6,7 +6,7 @@
 
 ### Added
 
-- System Settings 新增 RSS 源配置与手动抓取：支持新增/更新/禁用 RSS 源、保存每日抓取时间，并将 RSS 条目接入 Event Insight 事件列表。
+- System Settings 新增独立 RSS 源配置 Tab：首次展示 `fetcher.py` 原有默认 RSS 源，支持新增/更新/删除和手动抓取，并将 RSS 条目接入 Event Insight 事件列表。
 - System LLM Settings 新增连接测试调用日志接口：连接测试会发起真实 OpenAI-compatible 调用并写入脱敏 `llm_call_log`，前端支持编辑和禁用 provider。
 - Event Insight 事件列表、主题溯源和关系图补齐主要按钮交互：材料导入、事件编辑、批量处理、新建主题、新增关系和保存视图均绑定真实 API 或可见状态反馈。
 - Event Insight 新增 `POST /api/frontend/modules/event-insight/relations`，支持人工新增事件关系并更新关系图 SQLite 投影。

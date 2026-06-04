@@ -68,6 +68,24 @@ export async function createRssSource(payload: RssSourcePayload): Promise<{ sour
   return (await response.json()) as { source: RssSourceConfig };
 }
 
+/** 更新 RSS 源配置。 */
+export async function updateRssSource(sourceId: number, payload: RssSourcePayload): Promise<{ source: RssSourceConfig }> {
+  const response = await fetch(`/api/system/rss/sources/${sourceId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("RSS source update request failed");
+  return (await response.json()) as { source: RssSourceConfig };
+}
+
+/** 删除 RSS 源配置。 */
+export async function deleteRssSource(sourceId: number): Promise<{ source: RssSourceConfig }> {
+  const response = await fetch(`/api/system/rss/sources/${sourceId}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("RSS source delete request failed");
+  return (await response.json()) as { source: RssSourceConfig };
+}
+
 /** 手动抓取 RSS 源。 */
 export async function fetchRssSource(sourceId: number): Promise<{ importedCount: number; skippedCount: number }> {
   const response = await fetch(`/api/system/rss/sources/${sourceId}/fetch`, { method: "POST" });

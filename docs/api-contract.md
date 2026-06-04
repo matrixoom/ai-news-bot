@@ -857,7 +857,7 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 
 ### 4.10 System RSS Settings 接口
 
-用途：在 System 页面配置 RSS 源和每日抓取时间，RSS 条目会接入 Event Insight 的 `raw_document / event / evidence` 链路。
+用途：在 System 页面独立 RSS 源配置 Tab 中管理 RSS 源和每日抓取时间，RSS 条目会接入 Event Insight 的 `raw_document / event / evidence` 链路。首次读取时，后端会把 `src/news/fetcher.py` 中原有写死的默认 RSS 源导入 `rss_source_config`，后续以数据库配置为准。
 
 #### 4.10.1 `GET /api/system/rss/sources`
 
@@ -894,11 +894,15 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 
 更新 RSS 源。失败：`404 rss_source_not_found`。
 
-#### 4.10.4 `POST /api/system/rss/sources/{id}/disable`
+#### 4.10.4 `DELETE /api/system/rss/sources/{id}`
 
-禁用 RSS 源，不物理删除历史配置。
+删除 RSS 源。实现为软删除：设置 `enabled=false` 与 `disabled_at`，列表接口不再返回该源，历史事件来源仍可审计。失败：`404 rss_source_not_found`。
 
-#### 4.10.5 `POST /api/system/rss/sources/{id}/fetch`
+#### 4.10.5 `POST /api/system/rss/sources/{id}/disable`
+
+兼容旧前端的禁用接口。新 UI 使用 `DELETE /api/system/rss/sources/{id}`。
+
+#### 4.10.6 `POST /api/system/rss/sources/{id}/fetch`
 
 手动抓取 RSS 源，成功后将新增条目写入 Event Insight 事件列表。
 
@@ -912,7 +916,7 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 }
 ```
 
-#### 4.10.6 `PUT /api/system/rss/scheduler`
+#### 4.10.7 `PUT /api/system/rss/scheduler`
 
 保存每日 RSS 抓取配置。
 

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../../app/app";
 import { installWorkbenchFetchMock, pushPayload } from "../../../app/__tests__/workbench-api-mocks";
@@ -21,6 +21,8 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "大模型配置" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "大模型配置" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "RSS 源配置" })).toHaveAttribute("aria-selected", "false");
     expect(await screen.findByText("sk-...alue")).toBeInTheDocument();
     expect(screen.queryByText("sk-secret-value")).not.toBeInTheDocument();
     expect(screen.getByText("任务默认模型")).toBeInTheDocument();
@@ -47,7 +49,25 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "禁用配置" }));
     expect(await screen.findByText("模型配置已禁用。")).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "RSS 源配置" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "RSS 源配置" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "RSS 源配置" }));
+    expect(screen.getByRole("tab", { name: "RSS 源配置" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("heading", { name: "RSS 源配置" })).toBeInTheDocument();
+    expect(await screen.findByText("TechCrunch AI")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新增 RSS 源" }));
+    fireEvent.change(screen.getByLabelText("RSS 名称"), { target: { value: "AI 财经观察" } });
+    fireEvent.change(screen.getByLabelText("RSS URL"), { target: { value: "https://example.com/rss.xml" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存 RSS 源" }));
+    expect(await screen.findByText("AI 财经观察")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑 AI 财经观察" }));
+    fireEvent.change(screen.getByLabelText("RSS 名称"), { target: { value: "AI 财经观察更新" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存 RSS 源" }));
+    expect(await screen.findByText("AI 财经观察更新")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除 AI 财经观察更新" }));
+    await waitFor(() => expect(screen.queryByText("AI 财经观察更新")).not.toBeInTheDocument());
+
     fireEvent.click(screen.getByRole("button", { name: "新增 RSS 源" }));
     fireEvent.change(screen.getByLabelText("RSS 名称"), { target: { value: "AI 财经观察" } });
     fireEvent.change(screen.getByLabelText("RSS URL"), { target: { value: "https://example.com/rss.xml" } });

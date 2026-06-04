@@ -39,6 +39,7 @@ class RssConfigService:
     def list_sources(self) -> dict[str, Any]:
         """返回 RSS 源和全局调度配置。"""
 
+        self._ensure_default_sources()
         sources = [self._present_source(row) for row in self._repository.list_rss_sources()]
         return {"sources": sources, "scheduler": self._present_scheduler(self._repository.get_rss_scheduler_config())}
 
@@ -60,6 +61,14 @@ class RssConfigService:
         """禁用 RSS 源配置。"""
 
         row = self._repository.disable_rss_source(source_id)
+        if row is None:
+            raise RssConfigNotFoundError()
+        return {"source": self._present_source(row)}
+
+    def delete_source(self, source_id: int) -> dict[str, Any]:
+        """删除 RSS 源配置；内部采用软删除以保留历史事件来源。"""
+
+        row = self._repository.delete_rss_source(source_id)
         if row is None:
             raise RssConfigNotFoundError()
         return {"source": self._present_source(row)}
@@ -185,6 +194,14 @@ class RssConfigService:
             "max_items": max_items,
         }
 
+    def _ensure_default_sources(self) -> None:
+        """首次使用时把 `fetcher.py` 中写死的默认 RSS 源写入配置表。"""
+
+        if self._repository.count_rss_sources() > 0:
+            return
+        for source in _default_sources_from_fetcher():
+            self._repository.create_rss_source(source)
+
     def _present_source(self, row: dict[str, Any]) -> dict[str, Any]:
         """将 RSS 源行转换为前端契约。"""
 
@@ -238,3 +255,43 @@ def _normalize_published_at(value: str) -> str:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _default_sources_from_fetcher() -> list[dict[str, Any]]:
+    """从 NewsFetcher 默认属性收集可持久化的 RSS 源配置。
+
+    Returns:
+        可直接传给仓储创建方法的 RSS 源字段列表。
+    """
+
+    fetcher = NewsFetcher()
+    groups: list[tuple[str, dict[str, str]]] = [
+        ("en", fetcher.rss_feeds),
+        ("zh", fetcher.chinese_feeds),
+        ("ja", fetcher.japanese_feeds),
+        ("fr", fetcher.french_feeds),
+        ("es", fetcher.spanish_feeds),
+        ("de", fetcher.german_feeds),
+        ("ko", fetcher.korean_feeds),
+        ("pt", fetcher.portuguese_feeds),
+        ("it", fetcher.italian_feeds),
+        ("ru", fetcher.russian_feeds),
+        ("nl", fetcher.dutch_feeds),
+        ("ar", fetcher.arabic_feeds),
+        ("hi", fetcher.hindi_feeds),
+    ]
+    sources: list[dict[str, Any]] = []
+    for language, feeds in groups:
+        for name, url in feeds.items():
+            sources.append(
+                {
+                    "name": name,
+                    "url": url,
+                    "language": language,
+                    "category": "ai",
+                    "enabled": True,
+                    "fetch_time": "06:30",
+                    "max_items": 20,
+                }
+            )
+    return sources

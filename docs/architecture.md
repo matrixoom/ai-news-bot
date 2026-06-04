@@ -298,19 +298,20 @@ Controller:
 Service:
   src/services/rss_config_service.py
   - 管理 rss_source_config / rss_scheduler_config
+  - 首次读取时把 src/news/fetcher.py 原有默认源导入配置表
   - 使用 src/news/fetcher.py 抓取界面配置的 RSS URL
   - 将 RSS 条目写入 raw_document / event / evidence / event_operation_log
 
 Fetcher:
   src/news/fetcher.py
   - 支持外部传入 RSS 源配置
-  - 旧内置源仅作为兼容 fallback，不再是 System 抓取链路的唯一配置来源
+  - 旧内置源作为首次初始化来源和兼容 fallback，不再是 System 抓取链路的唯一配置来源
 ```
 
 边界：
 
 ```text
-1. RSS 源禁用不物理删除，保留历史配置和已入库事件。
+1. RSS 源删除采用软删除，不物理删除，保留历史配置和已入库事件；System 列表隐藏已删除源。
 2. RSS 手动抓取使用 content_hash 幂等跳过重复条目。
 3. RSS 入库事件 source_method=rss，默认 event_type=other，后续抽取任务可再结构化。
 4. 每日调度配置保存在 SQLite；本次接口提供配置和手动抓取入口，外层调度器按该配置触发。
