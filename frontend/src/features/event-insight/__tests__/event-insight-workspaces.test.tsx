@@ -43,7 +43,8 @@ describe("Event insight mock workspaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "查看节点 数据中心液冷方案渗透率持续上升" }));
 
     expect(screen.getByRole("heading", { name: "数据中心液冷方案渗透率持续上升" })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/frontend/modules/event-insight/graph?topicId=7"), expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("/api/frontend/modules/event-insight/graph", expect.any(Object));
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/frontend/modules/event-insight/topics", expect.any(Object));
   });
 
   it("shows event graph loading state", () => {
@@ -212,6 +213,7 @@ async function eventInsightFetch(input: RequestInfo | URL, init?: RequestInit) {
     return jsonResponse(topicTracePayload);
   }
   if (url.pathname === "/api/frontend/modules/event-insight/graph") {
+    if (url.search.includes("topicId")) throw new Error("Event graph must not depend on topicId");
     return jsonResponse(eventGraphPayload);
   }
   if (url.pathname === "/api/frontend/modules/event-insight/relations") {

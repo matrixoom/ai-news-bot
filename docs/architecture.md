@@ -396,26 +396,28 @@ Controller:
 
 Service:
   src/services/event_insight_service.py
-  - get_event_graph 生成前端节点、边和确定性布局
+  - get_event_graph 以事件列表中的合格事件生成前端节点、边和确定性布局
+  - _grow_event_network 在无 topicId 的事件网络入口中执行质量审核与轻量自动聚类
 
 Repository:
   src/services/event_insight_repository.py
   - create_event_relation 写入 SQLite 关系边
-  - list_event_graph_events 读取主题内或全局活跃事件节点
+  - list_event_graph_events 读取通过质量门槛的事件节点
   - list_event_graph_relations 读取节点集合内部关系
 
 Frontend:
   frontend/src/features/event-insight/components/event-graph-workspace.tsx
-  - 从真实 API 加载关系图，覆盖 loading/error/empty 和节点选择
+  - 从事件网络 API 加载关系图，不读取主题列表，不传 topicId
 ```
 
 关系图边界：
 
 ```text
 1. P9 不接 Neo4j；Neo4j 仍是后续可重建投影。
-2. P9 不自动生成关系，只展示 event_relation 中已有关系。
-3. 前端布局由后端 deterministic 百分比坐标提供，保证测试和回放稳定。
-4. 关系类型映射：cause -> cause，same_topic/support -> parallel，contradict -> risk，follow_up -> follow。
+2. 关系图默认依赖事件列表，不依赖主题溯源；主题溯源只负责单主题演进视角。
+3. 关系图读取时会把通过质量审核的 pending 事件投入网络，按文本线索和事件类型自动生成 rule 关系边。
+4. 前端布局由后端 deterministic 百分比坐标提供，保证测试和回放稳定。
+5. 关系类型映射：cause -> cause，same_topic/support -> parallel，contradict -> risk，follow_up -> follow。
 ```
 
 P10 新增主题选择硬化：
@@ -431,14 +433,14 @@ Service:
 
 Frontend:
   frontend/src/features/event-insight/hooks/use-topics-query.ts
-  - TopicTraceWorkspace 和 EventGraphWorkspace 先读取主题列表
+  - TopicTraceWorkspace 先读取主题列表
   - 自动选择第一条主题，避免固定 topicId=1 的隐式假设
 ```
 
 硬化边界：
 
 ```text
-1. P10 不自动创建主题；没有主题时前端展示空状态。
+1. P10 不自动创建主题；没有主题时主题溯源前端展示空状态。
 2. P10 不处理 npm audit 依赖升级，避免和功能交付混合。
 3. P10 只移除固定主题 ID 假设，不新增复杂主题管理页。
 ```
