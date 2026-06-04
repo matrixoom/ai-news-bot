@@ -4,22 +4,39 @@ import {
   PencilSquareIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
-import { FormEvent, type MouseEventHandler, type PointerEventHandler } from "react";
-import type { GraphEdge, GraphNode } from "../model/event-insight.types";
 import {
-  EVENT_GRAPH_CANVAS_HEIGHT,
-  EVENT_GRAPH_CANVAS_WIDTH,
-  getNodeColor,
-  getNodeRadiusByDegree,
-  truncateGraphLabel,
-} from "../lib/event-graph-canvas-utils";
+  BaseEdge,
+  EdgeLabelRenderer,
+  Handle,
+  Position,
+  getBezierPath,
+  type EdgeProps,
+  type NodeProps,
+} from "@xyflow/react";
+import { FormEvent } from "react";
+import type { Edge, Node } from "@xyflow/react";
+import type { GraphNode, InsightTone } from "../model/event-insight.types";
+import { getNodeColor, getNodeRadiusByDegree, truncateGraphLabel } from "../lib/event-graph-canvas-utils";
 
-export type EventGraphCanvasNode = GraphNode & {
-  x: number;
-  y: number;
+export type EditingGraphNode = Pick<GraphNode, "id" | "kind" | "summary" | "title">;
+
+export type EventFlowNodeData = Record<string, unknown> & {
+  confidenceTone: InsightTone;
+  degree: number;
+  kind: string;
+  onEdit: (node: EditingGraphNode) => void;
+  onSelect: (nodeId: string) => void;
+  summary: string;
+  title: string;
 };
 
-export type EditingGraphNode = Pick<EventGraphCanvasNode, "id" | "kind" | "summary" | "title">;
+export type EventFlowEdgeData = Record<string, unknown> & {
+  label: string;
+  showLabel: boolean;
+};
+
+export type EventFlowNode = Node<EventFlowNodeData, "eventNode">;
+export type EventFlowEdge = Edge<EventFlowEdgeData, "eventEdge">;
 
 /**
  * 渲染画布顶部刷新、全屏和边标签开关。
@@ -102,134 +119,87 @@ export function CanvasDeleteButton({ disabled, onDelete }: { disabled: boolean; 
 }
 
 /**
- * 渲染点阵背景。
+ * 渲染 React Flow 自定义圆形事件节点。
  *
- * @returns 画布底层点阵。
+ * @param props React Flow 注入的节点数据与选择状态。
+ * @returns 可选择、可双击编辑的关系网络节点。
  */
-export function DotGrid() {
-  return (
-    <div
-      aria-hidden="true"
-      className="absolute inset-0"
-      style={{
-        backgroundImage: "radial-gradient(circle, rgba(148, 163, 184, 0.38) 1.35px, transparent 1.35px)",
-        backgroundPosition: "0 0",
-        backgroundSize: "34px 34px",
-      }}
-    />
-  );
-}
+export function EventFlowNodeView({ data, id, selected }: NodeProps<EventFlowNode>) {
+  const radius = getNodeRadiusByDegree(data.degree);
+  const size = radius * 2;
+  const nodeForEdit: EditingGraphNode = {
+    id,
+    kind: data.kind,
+    summary: data.summary,
+    title: data.title,
+  };
 
-/**
- * 渲染 MiroFish 风格实体类型图例。
- *
- * @returns 左下角图例。
- */
-export function EntityLegend() {
   return (
-    <div className="absolute bottom-5 left-5 z-30 rounded-lg border border-slate-200 bg-white/95 p-4 text-sm shadow-lg">
-      <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-pink-500">Entity Types</h3>
-      <div className="grid grid-cols-2 gap-x-5 gap-y-2">
-        {ENTITY_LEGEND_ITEMS.map((item) => (
-          <span className="flex items-center gap-2 text-slate-500" key={item.label}>
-            <i className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-            {item.label}
-          </span>
-        ))}
-      </div>
+    <div className="relative flex items-center">
+      <Handle className="opacity-0" position={Position.Left} type="target" />
+      <button
+        aria-label={`查看节点 ${data.title}`}
+        aria-pressed={selected}
+        className="group relative rounded-full outline-none transition-[box-shadow,filter] hover:brightness-105 focus-visible:ring-4 focus-visible:ring-purple-200"
+        onClick={() => data.onSelect(id)}
+        onDoubleClick={() => data.onEdit(nodeForEdit)}
+        style={{
+          backgroundColor: getNodeColor(data.confidenceTone),
+          boxShadow: selected ? "0 0 0 5px rgba(126, 34, 206, 0.2), 0 8px 20px rgba(15, 23, 42, 0.16)" : "0 4px 12px rgba(15, 23, 42, 0.12)",
+          height: `${size}px`,
+          width: `${size}px`,
+        }}
+        type="button"
+      >
+        <span className="sr-only">{data.summary}</span>
+      </button>
+      <span className="pointer-events-none ml-2 max-w-[148px] truncate whitespace-nowrap text-left text-[11px] font-semibold text-slate-600">
+        {truncateGraphLabel(data.title)}
+      </span>
+      <Handle className="opacity-0" position={Position.Right} type="source" />
     </div>
   );
 }
 
 /**
- * 渲染图谱节点。
+ * 渲染 React Flow 自定义贝塞尔关系边。
  *
- * @param props 节点、度数、选择状态和交互回调。
- * @returns 画布上的圆形节点按钮。
+ * @param props React Flow 注入的边位置与数据。
+ * @returns 带可选标签的 MiroFish 风格关系线。
  */
-export function GraphNodeButton({
-  degree,
-  node,
-  selected,
-  onDoubleClick,
-  onMouseDown,
-  onPointerDown,
-}: {
-  degree: number;
-  node: EventGraphCanvasNode;
-  selected: boolean;
-  onDoubleClick: () => void;
-  onMouseDown: MouseEventHandler<HTMLButtonElement>;
-  onPointerDown: PointerEventHandler<HTMLButtonElement>;
-}) {
-  const radius = getNodeRadiusByDegree(degree);
+export function EventFlowEdgeView({
+  data,
+  markerEnd,
+  sourcePosition,
+  sourceX,
+  sourceY,
+  targetPosition,
+  targetX,
+  targetY,
+}: EdgeProps<EventFlowEdge>) {
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourcePosition,
+    sourceX,
+    sourceY,
+    targetPosition,
+    targetX,
+    targetY,
+  });
 
   return (
-    <button
-      aria-label={`查看节点 ${node.title}`}
-      aria-pressed={selected}
-      className="group absolute rounded-full outline-none transition-[box-shadow,filter] hover:brightness-105 focus-visible:ring-4 focus-visible:ring-purple-200"
-      onDoubleClick={onDoubleClick}
-      onMouseDown={onMouseDown}
-      onPointerDown={onPointerDown}
-      style={{
-        backgroundColor: getNodeColor(node.confidenceTone),
-        boxShadow: selected ? "0 0 0 5px rgba(126, 34, 206, 0.2), 0 8px 20px rgba(15, 23, 42, 0.16)" : "0 4px 12px rgba(15, 23, 42, 0.12)",
-        height: `${radius * 2}px`,
-        left: `${node.x - radius}px`,
-        top: `${node.y - radius}px`,
-        width: `${radius * 2}px`,
-      }}
-      type="button"
-    >
-      <span className="sr-only">{node.summary}</span>
-      <span className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 max-w-[128px] -translate-y-1/2 truncate whitespace-nowrap text-left text-[11px] font-medium text-slate-600">
-        {truncateGraphLabel(node.title)}
-      </span>
-    </button>
-  );
-}
-
-/**
- * 渲染一条图谱关系边。
- *
- * @param props 关系边、节点索引和标签显示状态。
- * @returns SVG 边路径。
- */
-export function GraphEdgePath({ edge, nodeMap, showLabel }: { edge: GraphEdge; nodeMap: Map<string, EventGraphCanvasNode>; showLabel: boolean }) {
-  if (!edge.sourceNodeId || !edge.targetNodeId) return null;
-  const source = nodeMap.get(edge.sourceNodeId);
-  const target = nodeMap.get(edge.targetNodeId);
-  if (!source || !target) return null;
-  const midX = (source.x + target.x) / 2;
-  const midY = (source.y + target.y) / 2;
-  const curveOffset = Math.min(56, Math.max(-56, (target.x - source.x) / 12));
-  const path = `M ${source.x} ${source.y} Q ${midX} ${midY - curveOffset} ${target.x} ${target.y}`;
-
-  return (
-    <g>
-      <path d={path} fill="none" markerEnd="url(#edge-arrow)" stroke="rgba(100, 116, 139, 0.34)" strokeLinecap="round" strokeWidth="2" />
-      {showLabel && edge.summary ? (
-        <text fill="#6b7280" fontSize="11" fontWeight="600" textAnchor="middle" x={midX} y={midY - curveOffset / 2 - 5}>
-          {truncateGraphLabel(edge.summary, 22)}
-        </text>
+    <>
+      <BaseEdge markerEnd={markerEnd} path={edgePath} style={{ stroke: "rgba(100, 116, 139, 0.34)", strokeWidth: 2 }} />
+      {data?.showLabel && data.label ? (
+        <EdgeLabelRenderer>
+          <div
+            className="pointer-events-none absolute max-w-[180px] -translate-x-1/2 -translate-y-1/2 truncate bg-white/65 px-1 text-[10px] font-semibold text-slate-500"
+            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          >
+            {truncateGraphLabel(data.label, 28)}
+          </div>
+        </EdgeLabelRenderer>
       ) : null}
-    </g>
-  );
-}
-
-/**
- * 渲染 SVG 箭头定义。
- *
- * @returns SVG defs。
- */
-export function GraphSvgDefs() {
-  return (
-    <defs>
-      <marker id="edge-arrow" markerHeight="7" markerWidth="7" orient="auto" refX="6" refY="3.5">
-        <path d="M0,0 L7,3.5 L0,7 Z" fill="rgba(100, 116, 139, 0.32)" />
-      </marker>
-    </defs>
+    </>
   );
 }
 
@@ -276,16 +246,3 @@ export function NodeEditDialog({
     </div>
   );
 }
-
-const ENTITY_LEGEND_ITEMS = [
-  { label: "University", color: "#ff6b35" },
-  { label: "Entity", color: "#0f5b89" },
-  { label: "Alumni", color: "#8e44ad" },
-  { label: "Organization", color: "#2aa876" },
-  { label: "Student", color: "#cf2e54" },
-  { label: "Person", color: "#2f9bd8" },
-  { label: "Media Outlet", color: "#9b59b6" },
-  { label: "Legal Authority", color: "#27ae60" },
-  { label: "Opinion Leader", color: "#f59e0b" },
-  { label: "Government Agency", color: "#f97316" },
-] as const;
