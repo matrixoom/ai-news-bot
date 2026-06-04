@@ -31,18 +31,18 @@ describe("Event insight mock workspaces", () => {
     expect(screen.getByText("正在加载主题溯源...")).toBeInTheDocument();
   });
 
-  it("renders the relationship graph canvas and selected-node details", async () => {
+  it("renders a full-screen relationship canvas without side panels", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(eventInsightFetch);
 
     renderWithQueryClient(<EventGraphWorkspace />);
 
     expect(screen.getByRole("heading", { name: "关系网络" })).toBeInTheDocument();
     expect(await screen.findByLabelText("关系网络画布")).toBeInTheDocument();
-    expect(screen.getByText("内存涨价推升光模块订单预期。")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "查看节点 数据中心液冷方案渗透率持续上升" }));
-
-    expect(screen.getByRole("heading", { name: "数据中心液冷方案渗透率持续上升" })).toBeInTheDocument();
+    expect(await screen.findByText("内存涨价推升光模块订单预期。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "刷新关系网络" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全屏画布" })).toBeInTheDocument();
+    expect(screen.queryByText("关系类型")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "节点详情" })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/frontend/modules/event-insight/graph", expect.any(Object));
     expect(fetchMock).not.toHaveBeenCalledWith("/api/frontend/modules/event-insight/topics", expect.any(Object));
   });
@@ -55,7 +55,35 @@ describe("Event insight mock workspaces", () => {
     expect(screen.getByText("正在加载关系网络...")).toBeInTheDocument();
   });
 
-  it("creates topics and graph relations from toolbar buttons", async () => {
+  it("sizes nodes by connected edge count and supports edit, drag, and delete", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(eventInsightFetch);
+
+    renderWithQueryClient(<EventGraphWorkspace />);
+
+    expect(await screen.findByLabelText("关系网络画布")).toBeInTheDocument();
+    const highDegreeNode = await screen.findByRole("button", { name: "查看节点 存储芯片报价上调" });
+    const lowDegreeNode = screen.getByRole("button", { name: "查看节点 数据中心液冷方案渗透率持续上升" });
+    expect(Number.parseFloat(highDegreeNode.style.width)).toBeGreaterThan(Number.parseFloat(lowDegreeNode.style.width));
+
+    fireEvent.doubleClick(lowDegreeNode);
+    fireEvent.change(screen.getByLabelText("节点标题"), { target: { value: "液冷方案渗透加速" } });
+    fireEvent.change(screen.getByLabelText("节点摘要"), { target: { value: "云厂商上修资本开支。" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存节点" }));
+    expect(screen.getByRole("button", { name: "查看节点 液冷方案渗透加速" })).toBeInTheDocument();
+
+    const editedNode = screen.getByRole("button", { name: "查看节点 液冷方案渗透加速" });
+    const leftBeforeDrag = editedNode.style.left;
+    fireEvent.mouseDown(editedNode, { clientX: 200, clientY: 200 });
+    fireEvent.mouseMove(screen.getByLabelText("关系网络画布"), { clientX: 260, clientY: 230 });
+    fireEvent.mouseUp(screen.getByLabelText("关系网络画布"));
+    expect(editedNode.style.left).not.toBe(leftBeforeDrag);
+
+    fireEvent.click(editedNode);
+    fireEvent.click(screen.getByRole("button", { name: "删除选中节点" }));
+    expect(screen.queryByRole("button", { name: "查看节点 液冷方案渗透加速" })).not.toBeInTheDocument();
+  });
+
+  it("creates topics from toolbar buttons and refreshes graph data", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(eventInsightFetch);
 
     renderWithQueryClient(<TopicTraceWorkspace />);
@@ -69,13 +97,8 @@ describe("Event insight mock workspaces", () => {
     renderWithQueryClient(<EventGraphWorkspace />);
 
     expect(await screen.findByLabelText("关系网络画布")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "新增关系" }));
-    fireEvent.change(screen.getByLabelText("关系说明"), { target: { value: "订单变化验证涨价链条。" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存关系" }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/frontend/modules/event-insight/relations", expect.objectContaining({ method: "POST" })));
-
-    fireEvent.click(screen.getByRole("button", { name: "保存视图" }));
-    expect(await screen.findByText("视图已保存到当前工作区。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "刷新关系网络" }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/frontend/modules/event-insight/graph")).length).toBeGreaterThan(1));
   });
 });
 
@@ -149,6 +172,18 @@ const eventGraphPayload = {
       top: "22%",
     },
     {
+      id: "event-3",
+      eventId: 3,
+      kind: "capacity",
+      title: "AI 服务器订单继续上修",
+      happenedAt: "2026-05-22T10:30:00+08:00",
+      confidence: "中可信 · 73",
+      confidenceTone: "amber",
+      summary: "AI 服务器供应链景气度延续。",
+      left: "74%",
+      top: "34%",
+    },
+    {
       id: "event-2",
       eventId: 2,
       kind: "supply_demand",
@@ -172,6 +207,17 @@ const eventGraphPayload = {
       top: "35%",
       width: "34%",
       rotate: "18deg",
+    },
+    {
+      id: "relation-2",
+      sourceNodeId: "event-1",
+      targetNodeId: "event-3",
+      type: "follow",
+      summary: "涨价信号延伸到服务器订单。",
+      left: "31%",
+      top: "28%",
+      width: "48%",
+      rotate: "6deg",
     },
   ],
   selectedNodeId: "event-1",
