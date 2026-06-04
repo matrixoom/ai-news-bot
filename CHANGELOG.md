@@ -6,6 +6,7 @@
 
 ### Added
 
+- Event Outlook 将 `事件关系图` 标签页展示名调整为 `关系网络`，保留 `event-graph` 路由参数兼容旧链接。
 - Event Insight 事件关系图改为事件网络入口：不再依赖主题溯源，合格事件会按质量审核规则自动入网并与既有事件建立规则关系边。
 - System Settings 新增独立 RSS 源配置 Tab：首次展示 `fetcher.py` 原有默认 RSS 源，支持新增/更新/删除和手动抓取，并将 RSS 条目接入 Event Insight 事件列表。
 - System LLM Settings 新增连接测试调用日志接口：连接测试会发起真实 OpenAI-compatible 调用并写入脱敏 `llm_call_log`，前端支持编辑和禁用 provider。

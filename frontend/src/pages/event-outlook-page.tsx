@@ -14,7 +14,7 @@ const EVENT_OUTLOOK_WORKSPACE_TABS: readonly ModuleTabDefinition<EventOutlookWor
   { value: "international", label: "国际" },
   { value: "events", label: "事件列表" },
   { value: "topic-trace", label: "主题溯源" },
-  { value: "event-graph", label: "事件关系图" },
+  { value: "event-graph", label: "关系网络" },
 ];
 
 /**

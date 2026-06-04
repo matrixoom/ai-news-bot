@@ -163,8 +163,8 @@ export const moduleDirectories: ModuleDirectory[] = [
       },
       {
         to: "/event-outlook?tab=event-graph",
-        title: "事件关系图",
-        ariaLabel: "Event Outlook > 事件关系图",
+        title: "关系网络",
+        ariaLabel: "Event Outlook > 关系网络",
         description: "Event relationship analysis canvas",
       },
     ],
