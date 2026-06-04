@@ -36,8 +36,8 @@ describe("Event insight mock workspaces", () => {
 
     renderWithQueryClient(<EventGraphWorkspace />);
 
-    expect(screen.getByRole("heading", { name: "事件关系图" })).toBeInTheDocument();
-    expect(await screen.findByLabelText("事件关系图画布")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "关系网络" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("关系网络画布")).toBeInTheDocument();
     expect(screen.getByText("内存涨价推升光模块订单预期。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "查看节点 数据中心液冷方案渗透率持续上升" }));
@@ -52,7 +52,7 @@ describe("Event insight mock workspaces", () => {
 
     renderWithQueryClient(<EventGraphWorkspace />);
 
-    expect(screen.getByText("正在加载事件关系图...")).toBeInTheDocument();
+    expect(screen.getByText("正在加载关系网络...")).toBeInTheDocument();
   });
 
   it("creates topics and graph relations from toolbar buttons", async () => {
@@ -68,7 +68,7 @@ describe("Event insight mock workspaces", () => {
 
     renderWithQueryClient(<EventGraphWorkspace />);
 
-    expect(await screen.findByLabelText("事件关系图画布")).toBeInTheDocument();
+    expect(await screen.findByLabelText("关系网络画布")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "新增关系" }));
     fireEvent.change(screen.getByLabelText("关系说明"), { target: { value: "订单变化验证涨价链条。" } });
     fireEvent.click(screen.getByRole("button", { name: "保存关系" }));

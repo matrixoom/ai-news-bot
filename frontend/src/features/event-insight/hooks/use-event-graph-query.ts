@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getEventInsightGraph } from "../api/get-event-graph";
 
-/** 查询 Event Insight 事件关系图。 */
+/** 查询 Event Insight 关系网络。 */
 export function useEventGraphQuery() {
   return useQuery({
     queryKey: ["event-insight-graph"],

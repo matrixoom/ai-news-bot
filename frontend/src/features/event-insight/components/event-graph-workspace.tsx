@@ -9,7 +9,7 @@ import { EventInsightShell, InsightBadge, InsightPanel } from "./event-insight-s
 
 const EDGE_CLASSES = { cause: "bg-blue-600", parallel: "bg-violet-600", risk: "border-t-2 border-dashed border-rose-600", follow: "bg-emerald-600" };
 
-/** 渲染事件关系图工作台，返回可选择节点的真实画布。 */
+/** 渲染关系网络工作台，返回可选择节点的真实画布。 */
 export function EventGraphWorkspace() {
   const queryClient = useQueryClient();
   const graphQuery = useEventGraphQuery();
@@ -36,18 +36,18 @@ export function EventGraphWorkspace() {
 
   return (
     <EventInsightShell
-      title="事件关系图"
+      title="关系网络"
       description="查看通过质量审核后的事件网络。新增事件会自动入网，并根据事实线索与既有事件自发聚类、建立关系。"
       actions={<><button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700" onClick={() => setIsRelationOpen(true)} type="button"><PlusIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />新增关系</button><button className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => setActionMessage("视图已保存到当前工作区。")} type="button"><ArrowDownTrayIcon aria-hidden="true" className="mr-1 inline h-4 w-4" />保存视图</button></>}
     >
       {actionMessage ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{actionMessage}</div> : null}
       {isRelationOpen && graph?.nodes[0]?.eventId && graph?.nodes[1]?.eventId ? <RelationCreateForm isSaving={relationMutation.isPending} sourceEventId={graph.nodes[0].eventId} targetEventId={graph.nodes[1].eventId} onCancel={() => setIsRelationOpen(false)} onSubmit={(payload) => relationMutation.mutate(payload)} /> : null}
-      {graphQuery.isLoading ? <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">正在加载事件关系图...</div> : null}
-      {graphQuery.isError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">事件关系图加载失败，请检查事件网络数据。</div> : null}
+      {graphQuery.isLoading ? <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">正在加载关系网络...</div> : null}
+      {graphQuery.isError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">关系网络加载失败，请检查事件网络数据。</div> : null}
       {graph ? <>
       <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-3">
         <input aria-label="搜索图谱节点" className="h-9 w-64 rounded-md border border-slate-300 px-3 text-xs" placeholder="搜索事件、实体或主题" />
-        <select aria-label="关系图时间范围" className="h-9 rounded-md border border-slate-300 px-3 text-xs"><option>最近 90 天</option></select>
+        <select aria-label="关系网络时间范围" className="h-9 rounded-md border border-slate-300 px-3 text-xs"><option>最近 90 天</option></select>
       </div>
       <div className="grid min-h-[650px] gap-3 xl:grid-cols-[208px_minmax(0,1fr)_300px]">
         <InsightPanel className="p-4">
@@ -57,7 +57,7 @@ export function EventGraphWorkspace() {
           {["高可信", "中可信", "低可信"].map((item, index) => <label className="mt-3 flex items-center gap-2 text-xs text-slate-700" key={item}><input defaultChecked={index < 2} type="checkbox" />{item}</label>)}
         </InsightPanel>
         <InsightPanel className="relative min-h-[650px] bg-slate-50" >
-          <div aria-label="事件关系图画布" className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_1px_1px,_#cbd5e1_1px,_transparent_0)] [background-size:18px_18px]">
+          <div aria-label="关系网络画布" className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_1px_1px,_#cbd5e1_1px,_transparent_0)] [background-size:18px_18px]">
             {graph.edges.map((edge) => <i aria-label={edge.summary || edge.id} className={`absolute h-0.5 origin-left ${EDGE_CLASSES[edge.type]}`} key={edge.id} style={{ left: edge.left, top: edge.top, width: edge.width, transform: `rotate(${edge.rotate})` }} />)}
             {graph.nodes.length === 0 ? <p className="m-4 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">暂无可展示节点。</p> : null}
             {graph.nodes.map((node) => <button aria-label={`查看节点 ${node.title}`} className={`absolute w-40 rounded-md border bg-white p-3 text-left shadow-md ${selectedNode?.id === node.id ? "border-blue-600 ring-4 ring-blue-100" : "border-slate-300"}`} key={node.id} onClick={() => setSelectedId(node.id)} style={{ left: node.left, top: node.top }} type="button"><span className="text-[10px] text-slate-500">{node.kind}</span><strong className="mt-1 block text-xs leading-5 text-slate-950">{node.title}</strong><small className="mt-1 block text-[10px] text-slate-400">{formatLocalDateTime(node.happenedAt)}</small></button>)}
