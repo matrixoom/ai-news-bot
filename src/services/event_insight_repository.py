@@ -1583,10 +1583,22 @@ class EventInsightRepository:
                 """
                 SELECT *
                 FROM rss_source_config
+                WHERE disabled_at IS NULL
                 ORDER BY enabled DESC, updated_at DESC, id DESC
                 """
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def count_rss_sources(self) -> int:
+        """统计 RSS 源配置总数，包含已删除记录。
+
+        Returns:
+            RSS 源配置记录数量。
+        """
+
+        with self._session() as connection:
+            row = connection.execute("SELECT COUNT(*) AS total FROM rss_source_config").fetchone()
+        return int(row["total"] if row else 0)
 
     def get_rss_source(self, source_id: int) -> dict[str, Any] | None:
         """按主键读取 RSS 源配置。
@@ -1619,6 +1631,28 @@ class EventInsightRepository:
                 UPDATE rss_source_config
                 SET enabled = 0, disabled_at = ?, updated_at = ?
                 WHERE id = ?
+                """,
+                (timestamp, timestamp, source_id),
+            )
+        return self.get_rss_source(source_id) if cursor.rowcount else None
+
+    def delete_rss_source(self, source_id: int) -> dict[str, Any] | None:
+        """软删除 RSS 源配置。
+
+        Args:
+            source_id: RSS 源主键。
+
+        Returns:
+            删除后的 RSS 源；不存在时返回 None。
+        """
+
+        timestamp = utc_now_iso()
+        with self._session() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE rss_source_config
+                SET enabled = 0, disabled_at = ?, updated_at = ?
+                WHERE id = ? AND disabled_at IS NULL
                 """,
                 (timestamp, timestamp, source_id),
             )

@@ -13,6 +13,7 @@ type WorkbenchPayloads = {
   eventInsight: Record<string, unknown>;
   llmProviders: Record<string, unknown>;
   llmTaskConfigs: Record<string, unknown>;
+  rssSources: Record<string, unknown>;
 };
 
 type WorkbenchOverrides = Partial<WorkbenchPayloads>;
@@ -638,6 +639,22 @@ export const llmTaskConfigsPayload: WorkbenchPayloads["llmTaskConfigs"] = {
   ],
 };
 
+export const rssSourcesPayload: WorkbenchPayloads["rssSources"] = {
+  sources: [
+    {
+      id: 1,
+      name: "TechCrunch AI",
+      url: "https://techcrunch.com/tag/artificial-intelligence/feed/",
+      language: "en",
+      category: "ai",
+      enabled: true,
+      fetchTime: "06:30",
+      maxItems: 20,
+    },
+  ],
+  scheduler: { enabled: true, timezone: "Asia/Shanghai", dailyFetchTime: "06:30" },
+};
+
 const employmentMacroDataPayload: WorkbenchPayloads["macroData"] = {
   generated_at: "2026-05-01T08:00:00Z",
   module: {
@@ -703,15 +720,13 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     eventInsight: overrides.eventInsight ?? eventInsightPayload,
     llmProviders: overrides.llmProviders ?? llmProvidersPayload,
     llmTaskConfigs: overrides.llmTaskConfigs ?? llmTaskConfigsPayload,
+    rssSources: overrides.rssSources ?? rssSourcesPayload,
   };
 
   let pushState: any = clone(payloads.push);
   let eventOutlookState: any = clone(payloads.eventOutlook);
   let llmProvidersState: any = clone(payloads.llmProviders);
-  let rssState: any = {
-    sources: [],
-    scheduler: { enabled: true, timezone: "Asia/Shanghai", dailyFetchTime: "06:30" },
-  };
+  let rssState: any = clone(payloads.rssSources);
 
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -787,7 +802,7 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
     if (url.pathname === "/api/system/rss/sources" && method === "POST") {
       const body = await readJsonBody(input, init?.body);
       const source = {
-        id: rssState.sources.length + 1,
+        id: Math.max(0, ...rssState.sources.map((item: any) => Number(item.id))) + 1,
         name: body.name,
         url: body.url,
         language: body.language ?? "zh",
@@ -797,6 +812,30 @@ export function installWorkbenchFetchMock(overrides: WorkbenchOverrides = {}) {
         maxItems: body.maxItems ?? 20,
       };
       rssState = { ...rssState, sources: [...rssState.sources, source] };
+      return jsonResponse({ source });
+    }
+
+    if (url.pathname.match(/^\/api\/system\/rss\/sources\/\d+$/) && method === "PUT") {
+      const sourceId = Number(url.pathname.split("/").pop());
+      const body = await readJsonBody(input, init?.body);
+      const source = rssState.sources.find((item: any) => item.id === sourceId);
+      Object.assign(source, {
+        name: body.name ?? source.name,
+        url: body.url ?? source.url,
+        language: body.language ?? source.language,
+        category: body.category ?? source.category,
+        enabled: body.enabled ?? source.enabled,
+        fetchTime: body.fetchTime ?? source.fetchTime,
+        maxItems: body.maxItems ?? source.maxItems,
+      });
+      return jsonResponse({ source });
+    }
+
+    if (url.pathname.match(/^\/api\/system\/rss\/sources\/\d+$/) && method === "DELETE") {
+      const sourceId = Number(url.pathname.split("/").pop());
+      const source = rssState.sources.find((item: any) => item.id === sourceId);
+      if (source) source.enabled = false;
+      rssState = { ...rssState, sources: rssState.sources.filter((item: any) => item.id !== sourceId) };
       return jsonResponse({ source });
     }
 

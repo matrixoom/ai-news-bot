@@ -82,6 +82,12 @@ class RssSettingsApiTests(unittest.TestCase):
 
     def test_rss_source_crud_and_manual_fetch_creates_event_insight_event(self) -> None:
         """校验 RSS 源可配置、可抓取，并把新闻事件写入事件列表。"""
+        defaults_response = self.client.get("/api/system/rss/sources")
+        self.assertEqual(defaults_response.status_code, 200)
+        default_names = {item["name"] for item in defaults_response.json()["sources"]}
+        self.assertIn("TechCrunch AI", default_names)
+        self.assertIn("JiQiZhiXin (机器之心)", default_names)
+
         create_response = self.client.post(
             "/api/system/rss/sources",
             json={
@@ -124,9 +130,14 @@ class RssSettingsApiTests(unittest.TestCase):
         self.assertEqual(events[0]["title"], "AI 服务器拉动存储芯片需求")
         self.assertEqual(events[0]["sourceMethod"], "rss")
 
-        disable_response = self.client.post(f"/api/system/rss/sources/{source['id']}/disable")
-        self.assertEqual(disable_response.status_code, 200)
-        self.assertFalse(disable_response.json()["source"]["enabled"])
+        delete_response = self.client.delete(f"/api/system/rss/sources/{source['id']}")
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertFalse(delete_response.json()["source"]["enabled"])
+
+        list_response = self.client.get("/api/system/rss/sources")
+        self.assertEqual(list_response.status_code, 200)
+        visible_names = {item["name"] for item in list_response.json()["sources"]}
+        self.assertNotIn("AI 财经观察更新", visible_names)
 
     def test_rss_scheduler_settings_are_persisted(self) -> None:
         """校验 RSS 全局调度设置可在 System 页面持久化。"""

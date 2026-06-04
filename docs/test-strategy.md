@@ -164,11 +164,11 @@ cmd /c npm --prefix frontend run test -- src/features/settings/__tests__/setting
 覆盖点：
 
 ```text
-1. RSS 源支持新增、更新、禁用和手动抓取。
+1. RSS 源支持默认源初始化、新增、更新、删除和手动抓取。
 2. RSS 调度设置持久化到 `rss_scheduler_config`。
 3. RSS 抓取条目写入 raw_document / event / evidence，并可从 Event Insight 事件列表检索。
 4. 重复 RSS 条目通过 content_hash 跳过，不重复造事件。
-5. Settings 页面可新增 RSS 源并触发抓取，抓取后刷新 Event Insight 事件列表缓存。
+5. Settings 页面通过独立 RSS 源配置 Tab 管理 RSS 源，抓取后刷新 Event Insight 事件列表缓存。
 ```
 
 ### 3.9 Event Insight 抽取与证据链改动

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createLlmProvider, createRssSource, disableLlmProvider, fetchRssSource, getLlmProviders, getLlmTaskConfigs, getRssSources, testLlmProvider, updateLlmProvider } from "../api/llm-settings-api";
-import type { LlmProviderPayload } from "../model/llm-settings.types";
+import { createLlmProvider, createRssSource, deleteRssSource, disableLlmProvider, fetchRssSource, getLlmProviders, getLlmTaskConfigs, getRssSources, testLlmProvider, updateLlmProvider, updateRssSource } from "../api/llm-settings-api";
+import type { LlmProviderPayload, RssSourcePayload } from "../model/llm-settings.types";
 
 /** 查询 LLM provider 列表。 */
 export function useLlmProvidersQuery() {
@@ -65,6 +65,24 @@ export function useCreateRssSourceMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createRssSource,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rss-sources"] }),
+  });
+}
+
+/** 更新 RSS 源后刷新列表。 */
+export function useUpdateRssSourceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sourceId, payload }: { sourceId: number; payload: RssSourcePayload }) => updateRssSource(sourceId, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rss-sources"] }),
+  });
+}
+
+/** 删除 RSS 源后刷新列表。 */
+export function useDeleteRssSourceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteRssSource,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["rss-sources"] }),
   });
 }
