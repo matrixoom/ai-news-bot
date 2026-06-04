@@ -6,11 +6,12 @@
 
 ### Added
 
+- Event Insight 事件关系图改为事件网络入口：不再依赖主题溯源，合格事件会按质量审核规则自动入网并与既有事件建立规则关系边。
 - System Settings 新增独立 RSS 源配置 Tab：首次展示 `fetcher.py` 原有默认 RSS 源，支持新增/更新/删除和手动抓取，并将 RSS 条目接入 Event Insight 事件列表。
 - System LLM Settings 新增连接测试调用日志接口：连接测试会发起真实 OpenAI-compatible 调用并写入脱敏 `llm_call_log`，前端支持编辑和禁用 provider。
 - Event Insight 事件列表、主题溯源和关系图补齐主要按钮交互：材料导入、事件编辑、批量处理、新建主题、新增关系和保存视图均绑定真实 API 或可见状态反馈。
 - Event Insight 新增 `POST /api/frontend/modules/event-insight/relations`，支持人工新增事件关系并更新关系图 SQLite 投影。
-- Event Insight 新增 P10 发布硬化：新增 `GET /api/frontend/modules/event-insight/topics` 主题列表接口，主题溯源页和事件关系图页改为先读取可选主题，移除固定 `topicId=1` 假设。
+- Event Insight 新增 P10 发布硬化：新增 `GET /api/frontend/modules/event-insight/topics` 主题列表接口，主题溯源页改为先读取可选主题，移除固定 `topicId=1` 假设。
 - Event Insight 新增 P9 事件关系图 SQLite 投影：`GET /api/frontend/modules/event-insight/graph` 返回真实事件节点和 `event_relation` 关系边，前端关系图从 mock 切换为 API 加载并支持节点详情。
 - Event Insight 新增 P8 主题溯源真实数据链路：`GET /api/frontend/modules/event-insight/topics/{topicId}/trace` 返回主题、指标、阶段、时间线和证据摘要，前端主题溯源页从 mock 切换为 API 加载。
 - Event Insight 新增 P7 检索、重复候选与规则聚类服务：中文 n-gram fallback 召回 active 事件，重复候选仅写入 `duplicate_event_candidate`，规则聚类仅关联 `topic_event`，并提供 sqlite-vec 可选探测能力。

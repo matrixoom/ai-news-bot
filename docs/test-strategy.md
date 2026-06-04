@@ -231,11 +231,11 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 覆盖点：
 
 ```text
-1. Graph API 返回 topic 范围内的事件节点和这些节点之间的 event_relation 边。
-2. 关系类型映射为前端可绘制类型，不泄露后端枚举差异。
-3. topicId 不存在时返回 404。
+1. Graph API 默认返回通过质量审核的事件列表节点，不依赖主题溯源。
+2. pending 合格事件读取图谱时自动入网，并按文本线索生成 rule 关系边。
+3. 低置信度或 D 级证据事件不会进入默认事件网络。
 4. `POST /api/frontend/modules/event-insight/relations` 可创建人工关系并更新图谱投影。
-5. 前端事件关系图从真实 API 加载，覆盖 loading、边摘要、节点选择详情、新增关系和保存视图反馈。
+5. 前端事件关系图从真实 API 加载，不请求主题列表、不传 topicId，覆盖 loading、边摘要、节点选择详情、新增关系和保存视图反馈。
 6. P9 不依赖 Neo4j，不影响 Event Outlook 静态日历。
 ```
 
@@ -251,8 +251,8 @@ cmd /c npm --prefix frontend run build
 
 ```text
 1. 主题列表 API 返回可选择主题，并按最近更新排序。
-2. 主题溯源页和关系图页不再固定 topicId=1，会先读取主题列表再请求详情。
-3. 没有主题时前端展示空状态，不误请求不存在主题。
+2. 主题溯源页不再固定 topicId=1，会先读取主题列表再请求详情。
+3. 关系图页不再读取主题列表，直接读取事件网络图。
 4. P7-P9 的检索、抽取、主题溯源和关系图契约保持可回归。
 5. Settings LLM Runtime 仍可加载任务配置，不受 Event Insight 页面硬化影响。
 ```

@@ -998,6 +998,54 @@ class EventInsightRepository:
             )
         return int(cursor.lastrowid)
 
+    def event_relation_exists(self, *, source_event_id: int, target_event_id: int) -> bool:
+        """判断两个事件之间是否已有未归档关系。
+
+        Args:
+            source_event_id: 来源事件主键。
+            target_event_id: 目标事件主键。
+
+        Returns:
+            任一方向存在关系时返回 True。
+        """
+
+        with self._session() as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM event_relation
+                WHERE archived_at IS NULL
+                  AND (
+                    (source_event_id = ? AND target_event_id = ?)
+                    OR (source_event_id = ? AND target_event_id = ?)
+                  )
+                LIMIT 1
+                """,
+                (source_event_id, target_event_id, target_event_id, source_event_id),
+            ).fetchone()
+        return row is not None
+
+    def update_event_graph_status(self, *, event_id: int, graph_status: str) -> None:
+        """更新事件关系图处理状态。
+
+        Args:
+            event_id: 事件主键。
+            graph_status: 新图谱状态。
+
+        Returns:
+            无返回值。
+        """
+
+        with self._session() as connection:
+            connection.execute(
+                """
+                UPDATE event
+                SET graph_status = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (graph_status, utc_now_iso(), event_id),
+            )
+
     def list_event_graph_events(self, topic_id: int | None = None, *, limit: int = 40) -> list[dict[str, Any]]:
         """读取事件关系图节点候选。
 
@@ -1011,7 +1059,12 @@ class EventInsightRepository:
 
         params: list[Any] = []
         join_sql = ""
-        where_clauses = ["e.archived_at IS NULL", "e.manual_status = 'active'"]
+        where_clauses = [
+            "e.archived_at IS NULL",
+            "e.manual_status = 'active'",
+            "e.confidence_score >= 0.6",
+            "e.evidence_level <> 'D'",
+        ]
         if topic_id is not None:
             join_sql = "JOIN topic_event te ON te.event_id = e.id"
             where_clauses.append("te.topic_id = ?")

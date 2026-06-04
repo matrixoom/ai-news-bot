@@ -561,11 +561,18 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 
 #### 4.7.11 `GET /api/frontend/modules/event-insight/graph`
 
-用途：返回事件关系图的 SQLite 投影。该接口读取 `event`、`topic_event` 和 `event_relation`，只展示事实库中已存在的关系边，不调用 LLM，不依赖 Neo4j。
+用途：返回事件关系图的 SQLite 投影。该接口以事件列表中的事实事件为输入，不依赖主题溯源；默认会把通过质量审核的 active 事件投入事件网络，并用轻量规则与既有事件自动聚类、生成 `event_relation` 关系边。不调用 LLM，不依赖 Neo4j。
 
 查询参数：
 
-- `topicId`：可选，传入时只返回该主题内事件节点和这些节点之间的关系边；主题不存在返回 404。
+- `topicId`：兼容旧查询的可选过滤参数；新前端不再传入。传入时只返回该主题内事件节点和这些节点之间的关系边；主题不存在返回 404。
+
+质量审核规则：
+
+- `manual_status=active` 且未归档。
+- `confidence_score >= 0.6`。
+- `evidence_level <> D`。
+- 通过审核的 pending 事件会在图谱读取时更新为 `graph_status=relation_built` 或 `clustered`。
 
 成功：`200`
 

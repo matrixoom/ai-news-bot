@@ -208,6 +208,35 @@ class EventInsightApiTests(unittest.TestCase):
         self.assertEqual(payload["edges"][0]["type"], "cause")
         self.assertEqual(payload["edges"][0]["summary"], "内存涨价推升光模块订单预期。")
 
+    def test_event_graph_auto_grows_from_qualified_event_list_events_without_topic(self) -> None:
+        """校验合格事件不依赖主题即可自动入网并建立关系。"""
+        new_event_id = self.repository.create_event(
+            title="AI 服务器需求继续推升 DRAM 报价",
+            summary="AI 服务器采购维持高位，DRAM 合约价继续上涨。",
+            event_time="2026-05-21T10:30:00+08:00",
+            event_type="price_change",
+            confidence_score=0.84,
+        )
+        low_quality_event_id = self.repository.create_event(
+            title="低置信度传闻",
+            summary="缺少来源确认。",
+            event_time="2026-05-22T10:30:00+08:00",
+            event_type="price_change",
+            confidence_score=0.31,
+        )
+
+        response = self.client.get("/api/frontend/modules/event-insight/graph")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        event_ids = {node["eventId"] for node in payload["nodes"]}
+        self.assertIn(self.event_id, event_ids)
+        self.assertIn(new_event_id, event_ids)
+        self.assertNotIn(low_quality_event_id, event_ids)
+        auto_edges = [edge for edge in payload["edges"] if "事件网络自动聚类" in edge["summary"]]
+        self.assertTrue(auto_edges)
+        self.assertEqual(self.repository.get_event(new_event_id)["graph_status"], "relation_built")
+
     def test_event_graph_returns_404_for_missing_topic(self) -> None:
         """校验关系图主题不存在时返回稳定错误码。"""
         response = self.client.get("/api/frontend/modules/event-insight/graph?topicId=9999")

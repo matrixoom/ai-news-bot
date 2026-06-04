@@ -292,6 +292,9 @@ class EventInsightService:
         if topic_id is not None and self._repository.get_topic(topic_id) is None:
             raise EventInsightNotFoundError(f"topic {topic_id} not found")
 
+        if topic_id is None:
+            self._grow_event_network()
+
         event_rows = self._repository.list_event_graph_events(topic_id=topic_id)
         event_ids = [int(row["id"]) for row in event_rows]
         relation_rows = self._repository.list_event_graph_relations(event_ids)
@@ -405,6 +408,43 @@ class EventInsightService:
                 "confidenceScore": float(body.get("confidenceScore") or 0),
             },
         }
+
+    def _grow_event_network(self) -> None:
+        """将通过质量审核的事件自动投入事件关系网络。"""
+
+        event_rows = self._repository.list_event_graph_events(topic_id=None, limit=80)
+        for event in event_rows:
+            event_id = int(event["id"])
+            if str(event.get("graph_status") or "pending") not in {"pending", "failed"}:
+                continue
+            relation_created = False
+            for candidate in event_rows:
+                candidate_id = int(candidate["id"])
+                if candidate_id == event_id:
+                    continue
+                decision = _judge_event_relation(event, candidate)
+                if decision is None:
+                    continue
+                source_event_id, target_event_id = _order_relation_direction(event, candidate)
+                if self._repository.event_relation_exists(
+                    source_event_id=source_event_id,
+                    target_event_id=target_event_id,
+                ):
+                    continue
+                self._repository.create_event_relation(
+                    source_event_id=source_event_id,
+                    target_event_id=target_event_id,
+                    relation_type=decision["relation_type"],
+                    relation_summary=decision["relation_summary"],
+                    strength_score=decision["strength_score"],
+                    confidence_score=decision["confidence_score"],
+                    generation_method="rule",
+                )
+                relation_created = True
+            self._repository.update_event_graph_status(
+                event_id=event_id,
+                graph_status="relation_built" if relation_created else "clustered",
+            )
 
     def _require_event(self, event_id: int) -> dict[str, Any]:
         """读取事件，不存在时抛出业务异常。
@@ -586,6 +626,93 @@ def _json_safe(row: dict[str, Any]) -> dict[str, Any]:
     """
 
     return {key: value for key, value in row.items()}
+
+
+def _judge_event_relation(event: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any] | None:
+    """基于事件文本和类型判断是否应自动建立关系边。
+
+    Args:
+        event: 待入网事件。
+        candidate: 网络中已有或同批候选事件。
+
+    Returns:
+        达到阈值时返回关系字段，否则返回 None。
+    """
+
+    event_tokens = _event_tokens(event)
+    candidate_tokens = _event_tokens(candidate)
+    overlap = event_tokens & candidate_tokens
+    if not overlap:
+        return None
+    same_type = str(event.get("event_type") or "") == str(candidate.get("event_type") or "")
+    score = len(overlap) / max(1, min(len(event_tokens), len(candidate_tokens)))
+    if not same_type and score < 0.18:
+        return None
+    if same_type and score < 0.08 and len(overlap) < 2:
+        return None
+
+    relation_type = "same_topic" if same_type else "support"
+    if not same_type and str(event.get("event_time") or "") > str(candidate.get("event_time") or ""):
+        relation_type = "follow_up"
+    clue = "、".join(sorted(overlap)[:4])
+    return {
+        "relation_type": relation_type,
+        "relation_summary": f"事件网络自动聚类：两个事件共享 {clue} 等线索。",
+        "strength_score": round(min(0.92, 0.55 + score), 2),
+        "confidence_score": round(min(0.9, 0.62 + score / 2), 2),
+    }
+
+
+def _order_relation_direction(event: dict[str, Any], candidate: dict[str, Any]) -> tuple[int, int]:
+    """按事件时间确定关系边方向。
+
+    Args:
+        event: 当前事件。
+        candidate: 候选事件。
+
+    Returns:
+        source_event_id 与 target_event_id。
+    """
+
+    event_time = str(event.get("event_time") or "")
+    candidate_time = str(candidate.get("event_time") or "")
+    if candidate_time <= event_time:
+        return int(candidate["id"]), int(event["id"])
+    return int(event["id"]), int(candidate["id"])
+
+
+def _event_tokens(row: dict[str, Any]) -> set[str]:
+    """提取事件聚类用的轻量文本 token。
+
+    Args:
+        row: 事件字段。
+
+    Returns:
+        去停用词后的 token 集合。
+    """
+
+    text = f"{row.get('title') or ''} {row.get('summary') or ''}".lower()
+    import re
+
+    ascii_tokens = {token for token in re.findall(r"[a-z0-9]{2,}", text) if token not in _GRAPH_STOP_WORDS}
+    cjk_chars = re.findall(r"[\u4e00-\u9fff]", text)
+    cjk_tokens = {"".join(cjk_chars[index : index + 2]) for index in range(max(0, len(cjk_chars) - 1))}
+    return {token for token in [*ascii_tokens, *cjk_tokens] if token and token not in _GRAPH_STOP_WORDS}
+
+
+_GRAPH_STOP_WORDS = {
+    "ai",
+    "和",
+    "的",
+    "了",
+    "在",
+    "与",
+    "及",
+    "或",
+    "等",
+    "继续",
+    "维持",
+}
 
 
 def _build_topic_metrics(
