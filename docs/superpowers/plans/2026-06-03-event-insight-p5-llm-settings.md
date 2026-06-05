@@ -14,7 +14,7 @@
 - [x] Add `002_llm_runtime` migration with provider/task/call-log tables.
 - [x] Add local secret cipher, repository, config service, task router, and OpenAI-compatible provider.
 - [x] Register `/api/system/llm/*` routes and inject service in FastAPI app.
-- [x] Adapt ArkResearchProvider to OpenAI-compatible factory while preserving Event Outlook output contract.
+- [x] Adapt ArkResearchProvider to OpenAI-compatible factory while preserving Outlook output contract.
 - [x] Run backend focused gate:
 
 ```powershell

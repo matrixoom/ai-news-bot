@@ -34,7 +34,7 @@ export const appRoutes: RouteObject[] = [
       {
         path: "event-outlook",
         element: <EventOutlookPage />,
-        handle: { title: "Event Outlook", description: "Forward calendar for technology, policy, and finance events" },
+        handle: { title: "Outlook", description: "Forward calendar for technology, policy, and finance events" },
       },
       {
         path: "notes",

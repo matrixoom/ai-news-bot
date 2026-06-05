@@ -23,7 +23,7 @@ class EmptyResearchProvider:
 
 
 class EventOutlookTimelineStoreTests(unittest.TestCase):
-    """校验 Event Outlook 时间轴事件会持久化到本地 SQLite。"""
+    """校验 Outlook 时间轴事件会持久化到本地 SQLite。"""
 
     def setUp(self) -> None:
         self.db_path = Path(".tmp-events-tests") / "event-outlook" / f"{self.id().split('.')[-1]}.db"
@@ -117,7 +117,7 @@ class EventOutlookTimelineStoreTests(unittest.TestCase):
 
 
 class EventOutlookTimelineApiTests(unittest.TestCase):
-    """校验前端 Event Outlook API 契约。"""
+    """校验前端 Outlook API 契约。"""
 
     def setUp(self) -> None:
         self.db_path = Path(".tmp-events-tests") / "event-outlook-api" / f"{self.id().split('.')[-1]}.db"

@@ -2,14 +2,14 @@
 
 ## 1. 背景说明
 
-TrendInsight 当前已经具备宏观数据、市场数据、趋势模型、推送中心、事件展望等模块。现有页面中，左侧导航包含 `Event Outlook` 分组，当前主要用于展示国内、国际维度的事件日历、重大会议、宏观节点、政策节点等信息。
+TrendInsight 当前已经具备宏观数据、市场数据、趋势模型、推送中心、事件展望等模块。现有页面中，左侧导航包含 `Outlook` 分组，当前主要用于展示国内、国际维度的事件日历、重大会议、宏观节点、政策节点等信息。
 
-现计划在 `Event Outlook` 模块下新增事件洞察能力，用于跟踪财经热点新闻、公告、财报、会议纪要、研报、行业报告等信息，从中抽取结构化事件，构建事件时间线和事件关系图，辅助用户还原热点主题的发酵路径，发现潜在投资研究线索。
+现计划在 `Outlook` 模块下新增事件洞察能力，用于跟踪财经热点新闻、公告、财报、会议纪要、研报、行业报告等信息，从中抽取结构化事件，构建事件时间线和事件关系图，辅助用户还原热点主题的发酵路径，发现潜在投资研究线索。
 
 必须明确区分两个业务域：
 
 ```text
-现有 Event Outlook 国内 / 国际页面：
+现有 Outlook 国内 / 国际页面：
   面向未来将要发生的事件。
   本质是静态日历，用于跟踪会议、政策窗口、宏观节点和科技活动。
 
@@ -18,7 +18,7 @@ TrendInsight 当前已经具备宏观数据、市场数据、趋势模型、推�
   本质是证据发现与研究分析系统，用于抽取事实事件、构建主题时间线和关系图。
 ```
 
-两者只共享左侧 `Event Outlook` 导航分组和整体视觉风格，不共享事件表、处理状态、Service、Repository 或 API 契约。新增能力不得改变现有静态日历的业务语义。
+两者只共享左侧 `Outlook` 导航分组和整体视觉风格，不共享事件表、处理状态、Service、Repository 或 API 契约。新增能力不得改变现有静态日历的业务语义。
 
 本模块的目标不是做短线热点追涨工具，也不是自动荐股系统，而是建设一个本地运行的投资研究辅助工具，核心是：
 
@@ -33,7 +33,7 @@ TrendInsight 当前已经具备宏观数据、市场数据、趋势模型、推�
 第一阶段重点建设以下页面：
 
 ```text
-Event Outlook
+Outlook
   ├── 国内
   ├── 国际
   ├── 事件列表
@@ -167,9 +167,9 @@ Neo4j 图谱写入
 第一阶段核心交付页面：
 
 ```text
-1. Event Outlook / 事件列表
-2. Event Outlook / 主题溯源
-3. Event Outlook / 事件关系图
+1. Outlook / 事件列表
+2. Outlook / 主题溯源
+3. Outlook / 事件关系图
 4. System Settings / 大模型配置
 ```
 
@@ -177,12 +177,12 @@ Neo4j 图谱写入
 
 ## 4. 导航设计
 
-### 4.1 Event Outlook 导航调整
+### 4.1 Outlook 导航调整
 
 当前左侧导航中已有：
 
 ```text
-Event Outlook
+Outlook
   ├── 国内
   └── 国际
 ```
@@ -190,7 +190,7 @@ Event Outlook
 调整后建议为：
 
 ```text
-Event Outlook
+Outlook
   ├── 国内
   ├── 国际
   ├── 事件列表
@@ -279,7 +279,7 @@ System
 
 ```text
 1. 新增页面应复用当前项目已有 Layout、Sidebar、Card、Button、Table、Drawer、Modal 等基础组件。
-2. 新增页面不应破坏国内/国际 Event Outlook 页面。
+2. 新增页面不应破坏国内/国际 Outlook 页面。
 3. 页面视觉应与当前 TrendInsight 保持一致。
 4. 不要强行引入新的 UI 框架。
 5. 如果项目已有图表封装，应优先复用。
@@ -3149,7 +3149,7 @@ event_operation_log：修订前后值、原因和操作人
 ```text
 调研当前项目页面结构、导航结构、样式体系
 调研历史 LLM 接入方法
-Event Outlook 下新增事件列表、主题溯源、事件关系图入口
+Outlook 下新增事件列表、主题溯源、事件关系图入口
 System Settings 下新增大模型配置入口
 完成页面骨架和 mock 数据展示
 ```
@@ -3318,10 +3318,10 @@ Codex 实现时必须遵守：
 ```text
 1. 先调研当前项目结构，再实施新增页面。
 2. 新增页面必须适配当前项目已有风格，不要写死全新的 UI 体系。
-3. 不要破坏现有 Event Outlook 国内/国际页面。
+3. 不要破坏现有 Outlook 国内/国际页面。
 4. 现有国内/国际页面是未来事件静态日历，继续使用现有 timeline_events、EventsOutlookService、EventsOutlookStore 和 /api/frontend/modules/event-outlook 契约。
 5. 新增事件洞察是独立研究域，不得复用静态日历表或把洞察工作区 Tab 传给静态日历 region。
-6. Event Outlook 下新增“事件列表”“主题溯源”“事件关系图”。
+6. Outlook 下新增“事件列表”“主题溯源”“事件关系图”。
 7. System -> Settings 下新增“大模型配置”页面或 Tab。
 8. 项目中已有 BaseLLMProvider 和 ArkResearchProvider，必须按迁移顺序复用或适配，不要重复造轮子。
 9. 如已有通用 API 客户端、配置加密、Settings 表单组件，应优先复用。
@@ -3405,7 +3405,7 @@ Neo4j 降级提示
 第一阶段完成后，系统应具备：
 
 ```text
-Event Outlook 下新增：
+Outlook 下新增：
   - 事件列表
   - 主题溯源
   - 事件关系图

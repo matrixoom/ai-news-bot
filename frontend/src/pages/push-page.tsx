@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { previewPush } from "../features/push/api/preview-push";
 import { getPushMarketChartRefresh, startPushMarketChartRefresh } from "../features/push/api/refresh-push-market-charts";
 import { triggerPush } from "../features/push/api/trigger-push";
@@ -11,16 +11,13 @@ import { PushSettingsDialog } from "../features/push/components/push-settings-di
 import { usePushModuleQuery } from "../features/push/hooks/use-push-module-query";
 import { adaptPushMarketChartRefreshJob, adaptPushModule, adaptPushPreview, adaptPushRecentRun } from "../features/push/model/push-module-adapter";
 import { PUSH_MODULE_TABS, type PushConfig, type PushMarketChartRefreshJobRaw, type PushWorkspaceViewModel } from "../features/push/model/push-module.types";
-import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
-import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
+import { resolveModuleTab } from "../shared/lib/module-tabs";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
-import { ModuleTabBar } from "../shared/ui/module-tab-bar";
 import { EmptyPanelState, ErrorPanelState, LoadingPanelState } from "../shared/ui/panel-state";
 
 type FlashState = { tone: "success" | "error" | "neutral"; message: string } | null;
 
 export function PushPage() {
-  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveModuleTab(searchParams.get("tab"), PUSH_MODULE_TABS, "schedules");
   const queryClient = useQueryClient();
@@ -51,15 +48,6 @@ export function PushPage() {
     setSearchParams(nextSearchParams, { replace: true });
   }, [activeTab, searchParams, setSearchParams]);
 
-  const toolbar = (
-    <ModuleTabBar
-      activeTab={activeTab}
-      ariaLabel="Push module tabs"
-      pathname={location.pathname}
-      searchParams={buildModuleTabSearchParams(searchParams, activeTab)}
-      tabs={PUSH_MODULE_TABS}
-    />
-  );
   const saveMutation = useMutation({
     mutationFn: async () => updatePushConfig(mustDraft(draft)),
     onSuccess: (payload) => {
@@ -169,12 +157,11 @@ export function PushPage() {
     return (
       <ModulePageFrame
         description={frameDescription}
-        lastUpdated={null}
         main={<LoadingPanelState title="Loading push workspace" description="Fetching the latest configuration, preview, and run history." />}
         contentLayoutClassName="grid gap-6"
+        showHeader={false}
         side={null}
         title="Push Center"
-        toolbar={toolbar}
       />
     );
   }
@@ -183,7 +170,6 @@ export function PushPage() {
     return (
       <ModulePageFrame
         description={frameDescription}
-        lastUpdated={null}
         main={
           <ErrorPanelState
             title="Push module unavailable"
@@ -202,9 +188,9 @@ export function PushPage() {
           />
         }
         contentLayoutClassName="grid gap-6"
+        showHeader={false}
         side={null}
         title="Push Center"
-        toolbar={toolbar}
       />
     );
   }
@@ -213,12 +199,11 @@ export function PushPage() {
     return (
       <ModulePageFrame
         description={query.data.pageDescription}
-        lastUpdated={<LastUpdatedBadge value={query.data.generatedAt} />}
         main={<EmptyPanelState title="Push workspace empty" description="The backend returned an empty push payload." />}
         contentLayoutClassName="grid gap-6"
+        showHeader={false}
         side={null}
         title={query.data.pageTitle}
-        toolbar={toolbar}
       />
     );
   }
@@ -259,11 +244,10 @@ export function PushPage() {
       <ModulePageFrame
         contentLayoutClassName="grid gap-6"
         description={workspace.pageDescription}
-        lastUpdated={<LastUpdatedBadge value={workspace.generatedAt} />}
         main={main}
         side={null}
+        showHeader={false}
         title={workspace.pageTitle}
-        toolbar={toolbar}
       />
       {activeTab === "schedules" && isSettingsOpen ? (
         <PushSettingsDialog

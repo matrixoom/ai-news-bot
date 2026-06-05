@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { MarketChartCard } from "../features/market-data/components/market-chart-card";
 import { RealEstateChartCard } from "../features/market-data/components/real-estate-chart-card";
 import { useMarketDataModuleQuery } from "../features/market-data/hooks/use-market-data-module-query";
@@ -9,20 +9,17 @@ import {
   type MarketDataRangeSelection,
   type MarketDataTab,
 } from "../features/market-data/model/market-data.types";
-import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
+import { resolveModuleTab } from "../shared/lib/module-tabs";
 import {
   MARKET_CHART_FREQUENCIES_KEY,
   MARKET_CHART_RANGES_KEY,
   readJSONPreference,
   writeJSONPreference,
 } from "../shared/lib/workbench-preferences";
-import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
-import { ModuleTabBar } from "../shared/ui/module-tab-bar";
 import { EmptyPanelState, ErrorPanelState, LoadingPanelState } from "../shared/ui/panel-state";
 
 export function MarketPage() {
-  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveModuleTab(searchParams.get("tab"), MARKET_DATA_TABS, "commodities");
   const query = useMarketDataModuleQuery(activeTab);
@@ -49,16 +46,6 @@ export function MarketPage() {
     nextSearchParams.set("tab", activeTab);
     setSearchParams(nextSearchParams, { replace: true });
   }, [activeTab, searchParams, setSearchParams]);
-
-  const toolbar = (
-    <ModuleTabBar
-      activeTab={activeTab}
-      ariaLabel="Market Data category tabs"
-      pathname={location.pathname}
-      searchParams={buildModuleTabSearchParams(searchParams, activeTab)}
-      tabs={MARKET_DATA_TABS}
-    />
-  );
 
   const defaultRange = query.data?.default_range ?? "1y";
   const rangeOptions = useMemo(
@@ -106,10 +93,9 @@ export function MarketPage() {
       <ModulePageFrame
         contentLayoutClassName="grid gap-6"
         description="Commodities, precious metals, and stock indices."
-        lastUpdated={null}
         main={<LoadingPanelState title="Loading market data" description="Fetching chart definitions and data ranges." />}
+        showHeader={false}
         title="Market Data"
-        toolbar={toolbar}
       />
     );
   }
@@ -119,10 +105,9 @@ export function MarketPage() {
       <ModulePageFrame
         contentLayoutClassName="grid gap-6"
         description="Commodities, precious metals, and stock indices."
-        lastUpdated={null}
         main={<ErrorPanelState title="Market data unavailable" description="The market data payload could not be loaded." />}
+        showHeader={false}
         title="Market Data"
-        toolbar={toolbar}
       />
     );
   }
@@ -133,7 +118,6 @@ export function MarketPage() {
     <ModulePageFrame
       contentLayoutClassName="grid gap-6"
       description={query.data.module.description}
-      lastUpdated={<LastUpdatedBadge value={query.data.generated_at} />}
       main={
         charts.length === 0 ? (
           <EmptyPanelState title="No market charts" description="The selected category has no chart definitions yet." />
@@ -170,8 +154,8 @@ export function MarketPage() {
           </div>
         )
       }
+      showHeader={false}
       title="Market Data"
-      toolbar={toolbar}
     />
   );
 }

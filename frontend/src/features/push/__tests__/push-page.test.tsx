@@ -40,7 +40,7 @@ describe("PushPage", () => {
     expect(screen.queryByRole("heading", { name: "Schedule editor" })).not.toBeInTheDocument();
     expect(screen.queryByText("Config path")).not.toBeInTheDocument();
     expect(screen.queryByText(/\.data[\\/]push_center\.json/)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "Schedules" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
     expect(screen.getByTitle("Push preview")).toBeInTheDocument();
     expect(screen.queryByText("Text fallback")).not.toBeInTheDocument();
@@ -60,10 +60,11 @@ describe("PushPage", () => {
     expect(screen.queryByRole("button", { name: "Send now" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "关闭推送设置" }));
-    await user.click(screen.getByRole("link", { name: "History" }));
+    await user.click(screen.getByRole("button", { name: /expand push center directory/i }));
+    await user.click(screen.getByRole("link", { name: "Push Center > History" }));
 
     expect(window.location.search).toContain("tab=history");
-    expect(screen.getByRole("link", { name: "History" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Push Center > History" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByTitle("Push preview")).not.toBeInTheDocument();
     expect(screen.queryByText("Text fallback")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Run controls" })).not.toBeInTheDocument();
@@ -83,23 +84,24 @@ describe("PushPage", () => {
     renderPushApp("/push?tab=overview");
 
     expect(await screen.findByTitle("Push preview")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Schedules" })).toHaveAttribute("aria-current", "page");
+    expect(window.location.search).toContain("tab=schedules");
+    expect(screen.queryByRole("link", { name: "Schedules" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
   });
 
-  it("renders workspace and history timestamps in the browser local timezone", async () => {
+  it("renders history timestamps in the browser local timezone", async () => {
     installWorkbenchFetchMock({ push: pushPayload, market: marketPayload });
     const user = userEvent.setup();
 
     renderPushApp("/push?tab=schedules");
 
-    expect(await screen.findByText(formatExpectedLocalTime(String(pushPayload.generated_at)))).toBeInTheDocument();
-    expect(screen.queryByText(/UTC/)).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("link", { name: "History" }));
+    expect(await screen.findByTitle("Push preview")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /expand push center directory/i }));
+    await user.click(screen.getByRole("link", { name: "Push Center > History" }));
 
     expect(await screen.findByText(formatExpectedLocalTime("2026-03-30T08:00:00+08:00"))).toBeInTheDocument();
     expect(screen.queryByText("2026-03-30T08:00:00+08:00")).not.toBeInTheDocument();
+    expect(screen.queryByText(/UTC/)).not.toBeInTheDocument();
   });
 
   it("saves configuration and refreshes preview from the current draft", async () => {

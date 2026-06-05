@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | `/` | GET | SPA 可用时重定向到 `/push`；否则返回 workbench unavailable |
 | `/macro-data` | GET | Macro Data SPA 入口 |
-| `/event-outlook` | GET | Event Outlook SPA 入口，国内/国际时间轴 |
+| `/event-outlook` | GET | Outlook SPA 入口，国内/国际时间轴 |
 | `/notes` | GET | Notes SPA 入口，当前为空目录页 |
 | `/market-data` | GET | Market Data SPA 入口 |
 | `/push` | GET | Push Center SPA 入口 |
@@ -239,7 +239,7 @@ uv run python main.py macro-sync
 - `400`：`invalid_market_data_chart_id`
 - `503`：`frontend_market_data_sync_failed`
 
-### 4.5 Event Outlook 时间轴接口
+### 4.5 Outlook 时间轴接口
 
 #### 4.5.1 `GET /api/frontend/modules/event-outlook`
 
@@ -250,7 +250,7 @@ uv run python main.py macro-sync
 - `end_date`：可选，`YYYY-MM-DD`；默认起始日期后一年
 - `refresh`：可选，传 `1` 时刷新内置科技、时政、财经未来事件种子
 
-用途：返回 Event Outlook 一级模块的国内/国际时间轴数据。事件持久化在 `.data/events_outlook.db` 的 `timeline_events` 表中，`category` 取值为 `technology | politics | finance`，前端分别以三种颜色展示。
+用途：返回 Outlook 一级模块的国内/国际时间轴数据。事件持久化在 `.data/events_outlook.db` 的 `timeline_events` 表中，`category` 取值为 `technology | politics | finance`，前端分别以三种颜色展示。
 
 成功：`200`
 
@@ -259,7 +259,7 @@ uv run python main.py macro-sync
   "generated_at": "2026-05-06T00:00:00Z",
   "module": {
     "id": "event-outlook",
-    "title": "Event Outlook",
+    "title": "Outlook",
     "description": "Forward calendar for technology, policy, and finance events."
   },
   "region": "domestic",
@@ -338,7 +338,7 @@ uv run python main.py macro-sync
 
 ### 4.6 Event Insight 导入与任务接口
 
-Event Insight 使用独立前缀，不复用 Event Outlook 静态日历接口：
+Event Insight 使用独立前缀，不复用 Outlook 静态日历接口：
 
 ```text
 /api/frontend/modules/event-insight/*
@@ -437,7 +437,7 @@ Event Insight 使用独立前缀，不复用 Event Outlook 静态日历接口：
 
 ### 4.7 Event Insight 事件工作台接口
 
-Event Insight 事件工作台用于管理已经发生或正在被研究的事实事件，不表示未来日历。Event Outlook 仍保留为静态未来事件时间线，两者不共用数据表和接口。
+Event Insight 事件工作台用于管理已经发生或正在被研究的事实事件，不表示未来日历。Outlook 仍保留为静态未来事件时间线，两者不共用数据表和接口。
 
 #### 4.7.1 `GET /api/frontend/modules/event-insight/events`
 

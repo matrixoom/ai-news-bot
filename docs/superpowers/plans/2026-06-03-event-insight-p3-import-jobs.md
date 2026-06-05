@@ -85,7 +85,7 @@ POST URL import stores URL metadata without fetching remote content
 POST file import copies into a controlled relative data directory
 file import rejects path traversal
 GET job returns status payload
-existing Event Outlook static calendar route still works
+existing Outlook static calendar route still works
 ```
 
 - [x] **Step 2: Run focused test and verify RED**

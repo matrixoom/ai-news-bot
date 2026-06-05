@@ -15,7 +15,7 @@ describe("Workbench shell", () => {
     return render(<App />);
   }
 
-  it("renders the remaining Macro Data, Event Outlook, Notes, Push Center, and Settings routes", async () => {
+  it("renders the remaining Macro Data, Outlook, Notes, Push Center, and Settings routes", async () => {
     installWorkbenchFetchMock({ push: pushPayload });
 
     renderApp("/macro-data");
@@ -24,7 +24,7 @@ describe("Workbench shell", () => {
     cleanup();
     installWorkbenchFetchMock({ push: pushPayload });
     renderApp("/event-outlook");
-    expect((await screen.findAllByRole("heading", { name: "Event Outlook" })).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole("heading", { name: "Outlook" })).length).toBeGreaterThan(0);
 
     cleanup();
     installWorkbenchFetchMock({ push: pushPayload });
@@ -77,12 +77,12 @@ describe("Workbench shell", () => {
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "News" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Market" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Event Outlook" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Event Outlook > 国内" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Event Outlook > 国际" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Event Outlook > 事件列表" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Event Outlook > 主题溯源" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Event Outlook > 关系网络" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Outlook" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Outlook > 国内" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Outlook > 国际" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Outlook > 事件列表" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Outlook > 主题溯源" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Outlook > 关系网络" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Notes" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Market ticker" })).not.toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("Workbench shell", () => {
 
     expect(links).toHaveLength(7);
     expect(within(primaryNavigation).getByRole("link", { name: "Macro Data" })).toBeInTheDocument();
-    expect(within(primaryNavigation).getByRole("link", { name: "Event Outlook" })).toBeInTheDocument();
+    expect(within(primaryNavigation).getByRole("link", { name: "Outlook" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Notes" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Push Center" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Market Data" })).toBeInTheDocument();
@@ -174,5 +174,33 @@ describe("Workbench shell", () => {
 
     expect((await screen.findAllByRole("heading", { name: "Market Data" })).length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Commodities, precious metals, and stock indices")).toHaveLength(0);
+  });
+
+  it("does not render redundant module workspace labels in data and push tabs", async () => {
+    installWorkbenchFetchMock({ push: pushPayload });
+
+    renderApp("/macro-data?tab=credit");
+    expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
+    expect(await screen.findByText("新增人民币贷款")).toBeInTheDocument();
+    expect(screen.queryByText("Module workspace")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updated")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "信贷" })).not.toBeInTheDocument();
+
+    cleanup();
+    installWorkbenchFetchMock({ push: pushPayload });
+    renderApp("/market-data?tab=real_estate");
+    expect((await screen.findAllByRole("heading", { name: "Market Data" })).length).toBeGreaterThan(0);
+    expect(window.location.search).toContain("tab=real_estate");
+    expect(screen.queryByText("Module workspace")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updated")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "房地产" })).not.toBeInTheDocument();
+
+    cleanup();
+    installWorkbenchFetchMock({ push: pushPayload });
+    renderApp("/push?tab=history");
+    expect(await screen.findByText("Market Daily")).toBeInTheDocument();
+    expect(screen.queryByText("Module workspace")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updated")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "History" })).not.toBeInTheDocument();
   });
 });

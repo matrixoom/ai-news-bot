@@ -384,7 +384,7 @@ Frontend:
 ```text
 1. P8 不调用 LLM 生成主题摘要，当前判断由现有 topic.summary 与最新事件组成。
 2. P8 不创建事件关系边，不投影 Neo4j。
-3. P8 读取 SQLite 事实库，不复用 Event Outlook 静态日历。
+3. P8 读取 SQLite 事实库，不复用 Outlook 静态日历。
 ```
 
 P9 新增事件关系图投影链路：

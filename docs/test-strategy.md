@@ -91,7 +91,7 @@ uv run python -m pytest tests/test_event_insight_repository.py tests/test_event_
 4. event_field_override 独立保存人工覆盖，不改写模型事实。
 5. duplicate_event_candidate 保留来源事件、候选事件和方法。
 6. graph_sync_outbox 通过 idempotency_key 防止重复投影。
-7. 现有 Event Outlook 静态日历回归不受影响。
+7. 现有 Outlook 静态日历回归不受影响。
 ```
 
 ### 3.6 Event Insight 导入与任务改动
@@ -110,7 +110,7 @@ uv run python -m pytest tests/test_event_insight_jobs.py tests/test_event_insigh
 5. text/url/file 三种导入返回 202 + jobId。
 6. URL 导入不抓取远端正文。
 7. 文件导入拒绝路径穿越，并复制到受控相对目录。
-8. 新增 Event Insight API 不影响 Event Outlook 静态日历。
+8. 新增 Event Insight API 不影响 Outlook 静态日历。
 ```
 
 ### 3.7 Event Insight 事件工作台改动
@@ -130,7 +130,7 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 5. 主题创建、事件关联主题和批量操作返回稳定契约。
 6. 批量操作采用部分成功，不因单条失败吞掉成功项。
 7. 前端事件列表从真实 Event Insight API 加载，覆盖 loading、empty、选择详情。
-8. Event Insight 与 Event Outlook 静态日历接口隔离。
+8. Event Insight 与 Outlook 静态日历接口隔离。
 ```
 
 ### 3.8 LLM Runtime 与 Settings 改动
@@ -149,7 +149,7 @@ cmd /c npm --prefix frontend run test -- src/features/settings/__tests__/setting
 4. 被任务映射引用的 provider 禁用返回 409 provider_in_use。
 5. Settings 页面从真实 API 加载 provider 与任务映射。
 6. Settings 页面保存新 provider 后不展示明文密钥。
-7. ArkResearchProvider 保持 Event Outlook 静态日历契约不变。
+7. ArkResearchProvider 保持 Outlook 静态日历契约不变。
 8. 连接测试写入 `connection_test` 调用日志，日志不包含明文 API Key。
 9. Settings 页面支持编辑、禁用 provider，并展示真实测试反馈。
 ```
@@ -217,7 +217,7 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 1. 主题 trace API 返回 topic、metrics、stages、timeline 和 currentJudgement。
 2. timeline 只读取 topic_event 关联事件，并按事件时间倒序排列。
 3. 证据链批量加载，前端可展示事件证据摘录。
-4. 主题不存在时返回 404，不影响事件列表和静态 Event Outlook。
+4. 主题不存在时返回 404，不影响事件列表和静态 Outlook。
 5. 前端主题溯源页从真实 API 加载，覆盖 loading、error 和空时间线展示。
 ```
 
@@ -236,7 +236,7 @@ cmd /c npm --prefix frontend run test -- src/features/event-insight/__tests__/ev
 3. 低置信度或 D 级证据事件不会进入默认事件网络。
 4. `POST /api/frontend/modules/event-insight/relations` 可创建人工关系并更新图谱投影。
 5. 前端事件关系图从真实 API 加载，不请求主题列表、不传 topicId，覆盖 loading、边摘要、节点选择详情、新增关系和保存视图反馈。
-6. P9 不依赖 Neo4j，不影响 Event Outlook 静态日历。
+6. P9 不依赖 Neo4j，不影响 Outlook 静态日历。
 ```
 
 ### 3.13 Event Insight 发布硬化改动

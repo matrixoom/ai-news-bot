@@ -72,7 +72,7 @@ POST /events/{eventId}/ignore soft ignores an event
 POST /topics creates topic
 POST /events/{eventId}/link-topic links event to topic
 POST /events/batch-action returns partial success
-existing Event Outlook static calendar still works
+existing Outlook static calendar still works
 ```
 
 - [x] **Step 2: Run focused backend tests and verify RED**

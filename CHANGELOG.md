@@ -6,8 +6,8 @@
 
 ### Added
 
-- Event Outlook 关系网络页改用成熟 React 图谱库 `@xyflow/react` 重做为 MiroFish 风格全屏画布：支持刷新、全屏、边标签开关、节点选择、拖拽、删除和双击编辑，移除左下角实体类型图例，节点面积按连接关系数量递增。
-- Event Outlook 将 `事件关系图` 标签页展示名调整为 `关系网络`，保留 `event-graph` 路由参数兼容旧链接。
+- Outlook 关系网络页改用成熟 React 图谱库 `@xyflow/react` 重做为 MiroFish 风格全屏画布：支持刷新、全屏、边标签开关、节点选择、拖拽、删除和双击编辑，移除左下角实体类型图例，节点面积按连接关系数量递增。
+- Outlook 将 `事件关系图` 标签页展示名调整为 `关系网络`，保留 `event-graph` 路由参数兼容旧链接。
 - Event Insight 事件关系图改为事件网络入口：不再依赖主题溯源，合格事件会按质量审核规则自动入网并与既有事件建立规则关系边。
 - System Settings 新增独立 RSS 源配置 Tab：首次展示 `fetcher.py` 原有默认 RSS 源，支持新增/更新/删除和手动抓取，并将 RSS 条目接入 Event Insight 事件列表。
 - System LLM Settings 新增连接测试调用日志接口：连接测试会发起真实 OpenAI-compatible 调用并写入脱敏 `llm_call_log`，前端支持编辑和禁用 provider。
@@ -23,16 +23,16 @@
 - Event Insight 新增材料导入与本地任务队列接口，支持 text/url/受控 JSON file 导入、`parse_document` 任务创建、任务状态查询、幂等键、租约恢复、attempt 日志和路径穿越校验。
 - Event Insight 新增独立 `.data/event_insight.db` SQLite 事实库、`001_event_insight_core` migration、Repository 基础写读能力和数据层回归测试，覆盖 FTS 同步、外键、人工覆盖、重复候选与 graph outbox 幂等。
 - Event Insight 完成 P0 技术验证记录，明确 sqlite-vec 可加载、FTS5 中文召回需要 n-gram 辅助、Neo4j 必须可选降级、关系图首版优先复用 ECharts，并补充后续检索与图谱测试 fixture。
-- Event Outlook 新增 `事件列表 / 主题溯源 / 事件关系图` 三个 Mock 研究工作台，Settings 新增展示型大模型配置页；本阶段先交付可浏览前端效果，静态日历保持原有行为，真实数据链路将在后续增量接入。
+- Outlook 新增 `事件列表 / 主题溯源 / 事件关系图` 三个 Mock 研究工作台，Settings 新增展示型大模型配置页；本阶段先交付可浏览前端效果，静态日历保持原有行为，真实数据链路将在后续增量接入。
 - Push Center `Schedules` 页面改为全宽日报预览，计划任务与投递配置收纳到齿轮设置弹窗；预览页使用 Heroicons 图标提供设置、全量刷新、刷新预览和立即发送操作。
 - Push preview 宽基指数图表新增 `3个月 / 6个月 / 1年 / 2年 / 3年` 时间范围，默认推送近 `1年`；切换范围会使用本地历史重绘，全量刷新按当前范围拉取并仅按日期 `upsert`，保留 SQLite 中既有历史。
 - Macro Data 就业指标 `中国社会保险基金支出:失业保险:累计值` 补入 2005-2024 年共 20 个年度官方整理点位，旧样例库会在启动时替换为该序列。
 - Macro Data 就业指标 2024 年点位按人社部统计公报口径规范为 `1842` 亿元，财政部 `1842.21` 亿元决算数保留为交叉校验来源。
 - Macro Data 新增 `就业` 子标签页，注册 `中国社会保险基金支出:失业保险:累计值` 年度折线图，并为该指标创建独立 SQLite 事实表。
-- 新增与 Macro Data 平级的 Event Outlook 一级目录页，提供国内/国际子标签、自绘横向时间轴、画布内日期范围筛选、弹窗手工录入和编辑事件能力。
-- Event Outlook 新增科技、时政、财经三类未来一年事件，三类在时间轴中分别用不同颜色展示；事件持久化到 `.data/events_outlook.db` 的 `timeline_events` 表。
+- 新增与 Macro Data 平级的 Outlook 一级目录页，提供国内/国际子标签、自绘横向时间轴、画布内日期范围筛选、弹窗手工录入和编辑事件能力。
+- Outlook 新增科技、时政、财经三类未来一年事件，三类在时间轴中分别用不同颜色展示；事件持久化到 `.data/events_outlook.db` 的 `timeline_events` 表。
 - 新增 Notes 一级目录页，当前作为空白工作区入口预留。
-- 新增 Event Outlook 前端接口：`/api/frontend/modules/event-outlook`、`/api/frontend/modules/event-outlook/events` 与 `/api/frontend/modules/event-outlook/events/{event_id}`。
+- 新增 Outlook 前端接口：`/api/frontend/modules/event-outlook`、`/api/frontend/modules/event-outlook/events` 与 `/api/frontend/modules/event-outlook/events/{event_id}`。
 - Macro Data 景气标签新增 `综合PMI` 指标，随制造业/非制造业 PMI 一起注册、同步并以同样的折线图样式展示。
 - Macro Data 信贷标签在 `新增人民币贷款` 下方新增 `居民活期存款` 宽图表，复用“总量虚线 + 分项堆叠柱 + 同名虚线折线”格式，并新增居民存款总计、活期、定期及其他三张事实表。
 - 新增与 Push Center 平级的 Macro Data 模块，提供 `GDP / 信贷 / 杠杆率 / 物价` 子标签页、ECharts 图表、预设时间跨度和自定义日期范围。
@@ -55,8 +55,8 @@
 - 推送中心宽基指数全量刷新不再只做按日期 `upsert`：完整历史帧会事务性替换最近 92 天窗口，短序列或空结果则保留上次可用历史并在进度弹窗中提示，避免旧脏点残留或上游异常清空图表。国内宽基指数历史改为优先使用响应更稳定的新浪日线，东方财富保留为回退源。
 - 修复 Market Data 全球期货历史把最高价误当收盘价的问题；布伦特、黄金、白银、铜在东方财富历史端点异常时会回退到新浪外盘日线。单图手动刷新不再触发同分类其他指标，空结果也不会覆盖已有 SQLite 历史。
 - 推送中心宽基指数刷新在周末不再尝试拼接盘中报价，避免非交易日出现误导性的快照校验日志。
-- Event Outlook 时间轴改为单画布布局，事件通过上下连线挂载到主时间轴；同一日期的多个事件按紧凑层级堆叠，并使用清新淡色系区分科技、时政、财经分类。
-- Event Outlook 页面移除外层模块标题卡片，仅保留时间轴画布；画布支持鼠标框选缩放和滚轮按指针位置缩放。
+- Outlook 时间轴改为单画布布局，事件通过上下连线挂载到主时间轴；同一日期的多个事件按紧凑层级堆叠，并使用清新淡色系区分科技、时政、财经分类。
+- Outlook 页面移除外层模块标题卡片，仅保留时间轴画布；画布支持鼠标框选缩放和滚轮按指针位置缩放。
 - Pytest 默认收集范围限定为 `tests/`，避免继续递归执行已归档到 `to_delete/tests/` 的历史用例。
 - Macro Data 的 `新增人民币贷款` 与 `居民活期存款` 组合柱线图 tooltip 按业务序列名去重，避免同名柱状图与折线图在悬浮框中重复展示同一数值。
 - 推送中心市场日报组合图下方柱体改为每日成交量，表格中的收盘、MA20 与乖离率字段保持不变；市场历史库新增可选 `volume` 字段并兼容旧 SQLite 数据。

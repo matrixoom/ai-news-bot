@@ -2,7 +2,7 @@
 
 ## 1. 验证范围
 
-本记录用于关闭 Event Insight 后续 P2/P5/P7/P9 会依赖的环境敏感决策。P0 不新增生产代码、不新增接口、不修改现有 Event Outlook 静态日历行为。
+本记录用于关闭 Event Insight 后续 P2/P5/P7/P9 会依赖的环境敏感决策。P0 不新增生产代码、不新增接口、不修改现有 Outlook 静态日历行为。
 
 验证日期：2026-06-03  
 验证分支：`feature/event-insight-p0-validation`  
@@ -283,7 +283,7 @@ src/providers/live_data.py 中 ArkResearchProvider 直接创建 OpenAI(api_key, 
 1. P5 扩展 BaseLLMProvider：base_url、timeout、structured output、embedding。
 2. P5 新增 OpenAICompatibleProvider，覆盖 OpenAI、DeepSeek、Ark 和其他兼容供应商。
 3. P5 新增 LlmTaskRouter，按 task_type 路由到 provider/model。
-4. P5 先让 ArkResearchProvider 通过统一 client factory 构建客户端，但保持现有 Event Outlook 返回契约不变。
+4. P5 先让 ArkResearchProvider 通过统一 client factory 构建客户端，但保持现有 Outlook 返回契约不变。
 5. P6 事件抽取、P8 主题摘要、P9 关系判断必须只通过 LlmTaskRouter 调用模型。
 ```
 

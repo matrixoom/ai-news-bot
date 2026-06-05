@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { MacroChartCard } from "../features/macro-data/components/macro-chart-card";
 import { useMacroDataModuleQuery } from "../features/macro-data/hooks/use-macro-data-module-query";
 import {
@@ -8,20 +8,17 @@ import {
   type MacroDataRangeSelection,
   type MacroDataTab,
 } from "../features/macro-data/model/macro-data.types";
-import { buildModuleTabSearchParams, resolveModuleTab } from "../shared/lib/module-tabs";
+import { resolveModuleTab } from "../shared/lib/module-tabs";
 import {
   MACRO_CHART_FREQUENCIES_KEY,
   MACRO_CHART_RANGES_KEY,
   readJSONPreference,
   writeJSONPreference,
 } from "../shared/lib/workbench-preferences";
-import { LastUpdatedBadge } from "../shared/ui/last-updated-badge";
 import { ModulePageFrame } from "../shared/ui/module-page-frame";
-import { ModuleTabBar } from "../shared/ui/module-tab-bar";
 import { EmptyPanelState, ErrorPanelState, LoadingPanelState } from "../shared/ui/panel-state";
 
 export function MacroPage() {
-  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveModuleTab(searchParams.get("tab"), MACRO_DATA_TABS, "gdp");
   const query = useMacroDataModuleQuery(activeTab);
@@ -48,16 +45,6 @@ export function MacroPage() {
     nextSearchParams.set("tab", activeTab);
     setSearchParams(nextSearchParams, { replace: true });
   }, [activeTab, searchParams, setSearchParams]);
-
-  const toolbar = (
-    <ModuleTabBar
-      activeTab={activeTab}
-      ariaLabel="Macro Data category tabs"
-      pathname={location.pathname}
-      searchParams={buildModuleTabSearchParams(searchParams, activeTab)}
-      tabs={MACRO_DATA_TABS}
-    />
-  );
 
   const defaultRange = query.data?.default_range ?? "1y";
   const rangeOptions = useMemo(
@@ -109,10 +96,9 @@ export function MacroPage() {
       <ModulePageFrame
         contentLayoutClassName="grid gap-6"
         description="GDP, credit, and inflation indicators."
-        lastUpdated={null}
         main={<LoadingPanelState title="Loading macro data" description="Fetching chart definitions and data ranges." />}
+        showHeader={false}
         title="Macro Data"
-        toolbar={toolbar}
       />
     );
   }
@@ -122,10 +108,9 @@ export function MacroPage() {
       <ModulePageFrame
         contentLayoutClassName="grid gap-6"
         description="GDP, credit, and inflation indicators."
-        lastUpdated={null}
         main={<ErrorPanelState title="Macro data unavailable" description="The macro data payload could not be loaded." />}
+        showHeader={false}
         title="Macro Data"
-        toolbar={toolbar}
       />
     );
   }
@@ -136,7 +121,6 @@ export function MacroPage() {
     <ModulePageFrame
       contentLayoutClassName="grid gap-6"
       description={query.data.module.description}
-      lastUpdated={<LastUpdatedBadge value={query.data.generated_at} />}
       main={
         charts.length === 0 ? (
           <EmptyPanelState title="No macro charts" description="The selected category has no chart definitions yet." />
@@ -158,8 +142,8 @@ export function MacroPage() {
           </div>
         )
       }
+      showHeader={false}
       title="Macro Data"
-      toolbar={toolbar}
     />
   );
 }

@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class _UnavailableEventOutlookResearchProvider:
-    """Event Outlook 默认研究 provider，用于测试桩未暴露研究能力时的兜底。
+    """Outlook 默认研究 provider，用于测试桩未暴露研究能力时的兜底。
 
     Args:
         无初始化参数。
@@ -42,7 +42,7 @@ class _UnavailableEventOutlookResearchProvider:
     provider_key = "event-outlook-unavailable"
 
     def collect_outlook(self, **_: object) -> list[object]:
-        """返回空事件研究结果，避免非 Event Outlook 测试被外部依赖影响。"""
+        """返回空事件研究结果，避免非 Outlook 测试被外部依赖影响。"""
         return []
 
     def healthcheck(self) -> ProviderStatus:
@@ -50,13 +50,13 @@ class _UnavailableEventOutlookResearchProvider:
         return ProviderStatus(
             provider_key=self.provider_key,
             availability=ProviderAvailability.UNAVAILABLE,
-            detail="event outlook research provider is not configured",
+            detail="Outlook research provider is not configured",
             checked_at="1970-01-01T00:00:00Z",
         )
 
 
 def _resolve_event_outlook_research_provider(dashboard_service: object) -> object:
-    """解析 Event Outlook 可用的研究 provider。
+    """解析 Outlook 可用的研究 provider。
 
     Args:
         dashboard_service: 当前注入的 Dashboard 服务或测试替身。
@@ -104,7 +104,7 @@ def create_fastapi_app(
         dashboard_service: Dashboard 聚合服务。
         push_center_service: 推送中心服务。
         macro_data_service: Macro Data 模块服务。
-        event_outlook_service: Event Outlook 时间轴服务。
+        event_outlook_service: Outlook 时间轴服务。
         event_insight_import_service: Event Insight 材料导入服务。
         event_insight_job_service: Event Insight 任务状态服务。
         event_insight_service: Event Insight 事件工作台服务。
@@ -315,7 +315,7 @@ def create_fastapi_app(
         end_date: str | None = None,
         refresh: bool = False,
     ) -> JSONResponse:
-        """返回 Event Outlook 时间轴模块数据。"""
+        """返回 Outlook 时间轴模块数据。"""
         try:
             return JSONResponse(
                 event_service.build_timeline_payload(
@@ -328,29 +328,29 @@ def create_fastapi_app(
         except EventOutlookValidationError:
             return JSONResponse({"error": "invalid_event_outlook_range"}, status_code=400)
         except Exception:
-            logger.exception("frontend event outlook module failed", extra={"region": region})
+            logger.exception("frontend Outlook module failed", extra={"region": region})
             return JSONResponse({"error": "frontend_event_outlook_module_unavailable"}, status_code=503)
 
     @app.post("/api/frontend/modules/event-outlook/events")
     def frontend_event_outlook_create_event(payload: dict | None = None) -> JSONResponse:
-        """手工新增 Event Outlook 时间轴事件。"""
+        """手工新增 Outlook 时间轴事件。"""
         try:
             return JSONResponse(event_service.create_timeline_event(payload), status_code=201)
         except EventOutlookValidationError:
             return JSONResponse({"error": "invalid_event_outlook_payload"}, status_code=400)
         except Exception:
-            logger.exception("frontend event outlook create failed")
+            logger.exception("frontend Outlook create failed")
             return JSONResponse({"error": "frontend_event_outlook_create_failed"}, status_code=503)
 
     @app.put("/api/frontend/modules/event-outlook/events/{event_id}")
     def frontend_event_outlook_update_event(event_id: int, payload: dict | None = None) -> JSONResponse:
-        """编辑 Event Outlook 时间轴事件标题和摘要。"""
+        """编辑 Outlook 时间轴事件标题和摘要。"""
         try:
             return JSONResponse(event_service.update_timeline_event(event_id, payload))
         except EventOutlookValidationError:
             return JSONResponse({"error": "invalid_event_outlook_payload"}, status_code=400)
         except Exception:
-            logger.exception("frontend event outlook update failed", extra={"event_id": event_id})
+            logger.exception("frontend Outlook update failed", extra={"event_id": event_id})
             return JSONResponse({"error": "frontend_event_outlook_update_failed"}, status_code=503)
 
     register_event_insight_routes(
