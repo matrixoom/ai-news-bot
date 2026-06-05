@@ -4,7 +4,7 @@
 
 **Goal:** Incrementally deliver the Event Insight research workflow without changing the existing domestic and international future-event calendar behavior.
 
-**Architecture:** Keep the current `Event Outlook` future calendar intact and add a separate `event-insight` domain. SQLite remains the fact database, local workers execute durable asynchronous jobs, LLM calls go through a unified task router, and Neo4j remains a rebuildable graph projection. Each package below produces working, testable software and can be reviewed before the next package begins.
+**Architecture:** Keep the current `Outlook` future calendar intact and add a separate `event-insight` domain. SQLite remains the fact database, local workers execute durable asynchronous jobs, LLM calls go through a unified task router, and Neo4j remains a rebuildable graph projection. Each package below produces working, testable software and can be reviewed before the next package begins.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLite, FTS5, sqlite-vec, Neo4j Community, React 18, TypeScript, Vite, TanStack Query, Tailwind CSS, Vitest, pytest.
 
@@ -165,9 +165,9 @@ docs: record event insight technical validation
 **Scope:**
 
 ```text
-Add Event Outlook > 事件列表.
-Add Event Outlook > 主题溯源.
-Add Event Outlook > 事件关系图.
+Add Outlook > 事件列表.
+Add Outlook > 主题溯源.
+Add Outlook > 事件关系图.
 Route domestic and international to the existing timeline canvas.
 Route the three new tabs to mock-backed research page shells.
 Add a display-only Settings > 大模型配置 mock workspace.

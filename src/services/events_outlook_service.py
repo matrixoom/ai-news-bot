@@ -24,7 +24,7 @@ TIMELINE_EVENT_CATEGORIES = {"technology", "politics", "finance"}
 
 
 class EventOutlookValidationError(ValueError):
-    """Event Outlook 参数校验错误。"""
+    """Outlook 参数校验错误。"""
 
 
 class EventsOutlookService:
@@ -50,7 +50,7 @@ class EventsOutlookService:
         end_date: str | None = None,
         refresh: bool = False,
     ) -> dict[str, object]:
-        """构建 Event Outlook 时间轴模块数据。
+        """构建 Outlook 时间轴模块数据。
 
         Args:
             region: 子标签区域，domestic 或 international。
@@ -86,7 +86,7 @@ class EventsOutlookService:
             "generated_at": now.isoformat(timespec="seconds").replace("+00:00", "Z"),
             "module": {
                 "id": "event-outlook",
-                "title": "Event Outlook",
+                "title": "Outlook",
                 "description": "Forward calendar for technology, policy, and finance events.",
             },
             "region": effective_region,

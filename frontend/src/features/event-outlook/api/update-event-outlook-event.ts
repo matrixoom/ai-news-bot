@@ -17,7 +17,7 @@ export async function updateEventOutlookEvent(input: UpdateEventOutlookEventInpu
   });
 
   if (!response.ok) {
-    throw new Error("Event Outlook update request failed");
+    throw new Error("Outlook update request failed");
   }
 
   const payload = (await response.json()) as { event: EventOutlookEvent };

@@ -27,7 +27,7 @@ cmd /c npm --prefix frontend run build
 
 ## 当前边界
 
-1. Event Insight 是已发生事实事件洞察，不复用 Event Outlook 未来静态日历。
+1. Event Insight 是已发生事实事件洞察，不复用 Outlook 未来静态日历。
 2. SQLite 是事实主库；Neo4j 仍是后续可重建投影。
 3. P10 不自动生成主题、不自动确认重复事件、不自动生成关系边。
 4. 前端主题溯源和关系图需要先存在主题；没有主题时展示空状态。

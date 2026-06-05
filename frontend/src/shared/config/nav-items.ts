@@ -14,7 +14,7 @@ export type ModuleDirectory = {
 
 export const moduleRootNavItems: NavItem[] = [
   { to: "/macro-data", title: "Macro Data", description: "GDP, credit, leverage, and prices" },
-  { to: "/event-outlook", title: "Event Outlook", description: "Technology, policy, and finance event calendar" },
+  { to: "/event-outlook", title: "Outlook", description: "Technology, policy, and finance event calendar" },
   { to: "/notes", title: "Notes", description: "Workspace notes" },
   { to: "/push", title: "Push Center", description: "Templates and schedules" },
   { to: "/market-data", title: "Market Data", description: "Commodities, precious metals, and stock indices" },
@@ -140,31 +140,31 @@ export const moduleDirectories: ModuleDirectory[] = [
       {
         to: "/event-outlook?tab=domestic",
         title: "国内",
-        ariaLabel: "Event Outlook > 国内",
+        ariaLabel: "Outlook > 国内",
         description: "China-region technology, policy, and finance events",
       },
       {
         to: "/event-outlook?tab=international",
         title: "国际",
-        ariaLabel: "Event Outlook > 国际",
+        ariaLabel: "Outlook > 国际",
         description: "Global technology, policy, and finance events",
       },
       {
         to: "/event-outlook?tab=events",
         title: "事件列表",
-        ariaLabel: "Event Outlook > 事件列表",
+        ariaLabel: "Outlook > 事件列表",
         description: "Structured events extracted from research materials",
       },
       {
         to: "/event-outlook?tab=topic-trace",
         title: "主题溯源",
-        ariaLabel: "Event Outlook > 主题溯源",
+        ariaLabel: "Outlook > 主题溯源",
         description: "Topic evolution with evidence-backed stages",
       },
       {
         to: "/event-outlook?tab=event-graph",
         title: "关系网络",
-        ariaLabel: "Event Outlook > 关系网络",
+        ariaLabel: "Outlook > 关系网络",
         description: "Event relationship analysis canvas",
       },
     ],

@@ -130,7 +130,7 @@ class LlmSettingsApiTests(unittest.TestCase):
         self.assertEqual(disable_response.json()["error"], "provider_in_use")
 
     def test_event_outlook_static_calendar_still_works(self) -> None:
-        """校验 LLM Settings API 不影响 Event Outlook 静态日历。"""
+        """校验 LLM Settings API 不影响 Outlook 静态日历。"""
         response = self.client.get("/api/frontend/modules/event-outlook?region=domestic&refresh=1")
 
         self.assertEqual(response.status_code, 200)

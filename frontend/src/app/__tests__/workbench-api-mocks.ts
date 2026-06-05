@@ -504,7 +504,7 @@ export const eventOutlookPayload: WorkbenchPayloads["eventOutlook"] = {
   generated_at: "2026-05-05T12:00:00Z",
   module: {
     id: "event-outlook",
-    title: "Event Outlook",
+    title: "Outlook",
     description: "Forward calendar for technology, policy, and finance events.",
   },
   region: "domestic",

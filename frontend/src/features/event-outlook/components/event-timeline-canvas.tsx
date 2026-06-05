@@ -232,7 +232,7 @@ function positionTimelineEvents(events: EventOutlookEvent[], startDate: Date, en
 }
 
 /**
- * 渲染 Event Outlook 横向时间轴画布。
+ * 渲染 Outlook 横向时间轴画布。
  * @param props 事件、时间范围、工具栏与事件选择回调。
  * @returns 可交互的时间轴画布组件。
  */

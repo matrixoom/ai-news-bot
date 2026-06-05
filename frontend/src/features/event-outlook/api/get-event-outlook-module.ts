@@ -19,7 +19,7 @@ export async function getEventOutlookModule(options: GetEventOutlookModuleOption
   });
 
   if (!response.ok) {
-    throw new Error("Event Outlook module request failed");
+    throw new Error("Outlook module request failed");
   }
 
   return (await response.json()) as EventOutlookPayload;

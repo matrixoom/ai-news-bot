@@ -60,7 +60,7 @@ const defaultEventForm: EventFormState = {
 /**
  * 渲染未来事件静态日历，提供时间轴筛选、录入与编辑。
  * @param region 静态日历区域。
- * @returns Event Outlook 静态日历工作区。
+ * @returns Outlook 静态日历工作区。
  */
 export function EventOutlookCalendarWorkspace({ region }: { region: EventOutlookRegion }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -183,11 +183,11 @@ export function EventOutlookCalendarWorkspace({ region }: { region: EventOutlook
   }
 
   if (query.isPending) {
-    return <LoadingPanelState title="Loading event outlook" description="Fetching timeline events and local range settings." />;
+    return <LoadingPanelState title="Loading Outlook" description="Fetching timeline events and local range settings." />;
   }
 
   if (query.isError || !query.data) {
-    return <ErrorPanelState title="Event outlook unavailable" description="The timeline payload could not be loaded." />;
+    return <ErrorPanelState title="Outlook unavailable" description="The timeline payload could not be loaded." />;
   }
 
   return (
@@ -201,7 +201,7 @@ export function EventOutlookCalendarWorkspace({ region }: { region: EventOutlook
             toolbar={
               <>
                 <div className="grid gap-1">
-                  <strong className="text-base font-semibold leading-tight text-slate-950">Event Outlook</strong>
+                  <strong className="text-base font-semibold leading-tight text-slate-950">Outlook</strong>
                   <span className="text-xs text-slate-500">2026 重点事件观察</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">

@@ -18,7 +18,7 @@ const EVENT_OUTLOOK_WORKSPACE_TABS: readonly ModuleTabDefinition<EventOutlookWor
 ];
 
 /**
- * 渲染 Event Outlook 页面，并隔离未来日历与事件洞察工作台。
+ * 渲染 Outlook 页面，并隔离未来日历与事件洞察工作台。
  *
  * @returns 根据 URL Tab 选择后的工作区。
  */

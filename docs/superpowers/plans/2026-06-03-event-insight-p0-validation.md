@@ -44,7 +44,7 @@ Record the verification work as a standalone increment so later packages can cit
 uv run python -m pytest tests/test_event_outlook_timeline.py -q
 ```
 
-Expected: existing Event Outlook future-calendar regression passes.
+Expected: existing Outlook future-calendar regression passes.
 
 ### Task 2: Validate SQLite Search And Vector Choices
 

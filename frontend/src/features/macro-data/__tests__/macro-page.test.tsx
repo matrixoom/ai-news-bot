@@ -21,13 +21,14 @@ describe("MacroDataPage", () => {
     renderMacroApp();
 
     expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "GDP" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "信贷" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "景气" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "外贸" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "物价" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "货币" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "就业" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data > GDP" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Macro Data > 信贷" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data > 景气" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data > 外贸" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data > 物价" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data > 货币" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Macro Data > 就业" })).toBeInTheDocument();
+    expect(screen.queryByText("Module workspace")).not.toBeInTheDocument();
     expect(await screen.findByText("名义与实际GDP总量")).toBeInTheDocument();
     expect(await screen.findByText(/名义GDP \/ 实际GDP/)).toBeInTheDocument();
     expect(await screen.findByText("GDP增速")).toBeInTheDocument();
@@ -54,7 +55,7 @@ describe("MacroDataPage", () => {
     await waitFor(() => {
       expect(window.location.search).toContain("tab=gdp");
     });
-    expect(await screen.findByRole("link", { name: "GDP" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("link", { name: "Macro Data > GDP" })).toHaveAttribute("aria-current", "page");
   });
 
   it("lets a chart switch to a custom date range", async () => {
@@ -90,7 +91,7 @@ describe("MacroDataPage", () => {
     renderMacroApp("/macro-data?tab=credit");
 
     expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "信贷" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Macro Data > 信贷" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("新增人民币贷款")).toBeInTheDocument();
     expect(await screen.findByText("居民活期存款")).toBeInTheDocument();
     expect(await screen.findByText("社会融资规模")).toBeInTheDocument();
@@ -107,7 +108,7 @@ describe("MacroDataPage", () => {
     renderMacroApp("/macro-data?tab=employment");
 
     expect((await screen.findAllByRole("heading", { name: "Macro Data" })).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "就业" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Macro Data > 就业" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("中国社会保险基金支出:失业保险:累计值")).toBeInTheDocument();
     expect(screen.getAllByText(/中国社会保险基金支出:失业保险:累计值/).length).toBeGreaterThan(0);
   });

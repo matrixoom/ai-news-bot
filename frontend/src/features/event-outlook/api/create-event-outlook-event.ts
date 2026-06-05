@@ -18,7 +18,7 @@ export async function createEventOutlookEvent(input: CreateEventOutlookEventInpu
   });
 
   if (!response.ok) {
-    throw new Error("Event Outlook create request failed");
+    throw new Error("Outlook create request failed");
   }
 
   const payload = (await response.json()) as { event: EventOutlookEvent };

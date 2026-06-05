@@ -170,7 +170,7 @@ Run the Task 3 command. Expected: PASS.
 
 - [ ] **Step 1: Record the visible increment**
 
-Add one `Added` entry stating that Event Outlook now exposes three Mock research pages and Settings exposes the display-only LLM configuration page.
+Add one `Added` entry stating that Outlook now exposes three Mock research pages and Settings exposes the display-only LLM configuration page.
 
 - [ ] **Step 2: Run full frontend verification**
 
@@ -187,7 +187,7 @@ Expected: all frontend tests pass and Vite build succeeds.
 uv run python -m pytest tests/test_event_outlook_timeline.py -q
 ```
 
-Expected: existing Event Outlook backend regression passes.
+Expected: existing Outlook backend regression passes.
 
 - [ ] **Step 4: Manual route verification**
 
