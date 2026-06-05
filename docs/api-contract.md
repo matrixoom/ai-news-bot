@@ -239,6 +239,148 @@ uv run python main.py macro-sync
 - `400`：`invalid_market_data_chart_id`
 - `503`：`frontend_market_data_sync_failed`
 
+### 4.4.2 `GET /api/frontend/modules/market-data/stocks`
+
+用途：股票市场页读取 A 股全市场股票与 ETF 标的列表。服务在本地标的池为空时会尝试通过 AkShare 首次同步股票代码/名称并落库，避免每次搜索都访问外部接口。
+
+查询参数：
+
+- `query`：股票代码、带后缀代码或名称关键字。
+- `instrument_type`：`all | stock | etf`，默认 `all`。
+- `market_board`：`all | 沪市主板 | 深市主板 | 科创板 | 创业板 | 北交所 | ETF`，默认 `all`。
+- `listing_status`：`all | listed`，默认 `all`。
+- `limit` / `offset`：分页参数，`limit` 最大 200。
+
+成功：`200`
+
+```json
+{
+  "items": [
+    {
+      "symbol": "000001.SZ",
+      "code": "000001",
+      "exchange": "SZ",
+      "name": "平安银行",
+      "instrument_type": "stock",
+      "market_board": "深市主板",
+      "listing_status": "listed"
+    }
+  ],
+  "total": 1,
+  "universe_count": 5238,
+  "warning_message": ""
+}
+```
+
+失败：
+
+- `400`：`invalid_stock_market_filter`
+- `503`：`frontend_stock_instruments_unavailable`
+
+### 4.4.3 `POST /api/frontend/modules/market-data/stocks/sync-universe`
+
+用途：手动刷新 A 股/ETF 基础标的池。股票来自 AkShare `stock_info_a_code_name`，ETF 来自 `fund_etf_spot_em`。本地表以 `symbol` 幂等 upsert，不删除既有标的。
+
+成功：`200`
+
+```json
+{
+  "ok": true,
+  "counts": {
+    "stock": 5200,
+    "etf": 438,
+    "total": 5638
+  }
+}
+```
+
+失败：`503`，`frontend_stock_universe_sync_failed`
+
+### 4.4.4 `GET /api/frontend/modules/market-data/stocks/{symbol}`
+
+用途：返回选中股票/ETF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 3 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
+
+查询参数：
+
+- `range`：`1m | 3m | 6m | 1y | 3y | 5y | custom`，默认 `3m`。
+- `start_date` / `end_date`：自定义日期，`YYYY-MM-DD`。
+- `financial_report_type`：`quarterly | yearly`，默认 `quarterly`。
+
+日线同步策略：
+
+- A 股使用 AkShare `stock_zh_a_hist`，ETF 使用 `fund_etf_hist_em`。
+- 本地事实表以 `(symbol, trade_date)` 作为幂等键，刷新同一天只更新，不重复插入。
+- 服务会为 MA120 额外拉取起始日前约 220 天缓冲数据，返回 payload 仍只包含用户所选时间跨度。
+- 外部接口失败时保留本地已有历史，并在 `sync_state.warning_message` 返回可展示提示。
+
+成功：`200`
+
+```json
+{
+  "instrument": { "symbol": "000001.SZ", "name": "平安银行" },
+  "range": { "type": "3m", "start_date": "2026-03-05", "end_date": "2026-06-05" },
+  "daily_bars": [
+    {
+      "date": "2026-06-05",
+      "open": 11.2,
+      "close": 11.5,
+      "high": 11.8,
+      "low": 11.1,
+      "volume": 1234500,
+      "ma5": 11.42,
+      "ma10": 11.35,
+      "ma20": 11.18,
+      "ma60": 10.88,
+      "ma120": 10.42
+    }
+  ],
+  "profile": {
+    "company_name": "平安银行股份有限公司",
+    "industry": "银行",
+    "sector": "银行",
+    "attributes": ["价值股"]
+  },
+  "financials": {
+    "report_type": "quarterly",
+    "unit": "亿元",
+    "series": [
+      { "metric": "revenue", "label": "营业收入", "points": [] },
+      { "metric": "expense", "label": "营业支出", "points": [] },
+      { "metric": "cash_flow", "label": "经营活动现金流", "points": [] },
+      { "metric": "asset", "label": "资产合计", "points": [] },
+      { "metric": "liability", "label": "负债合计", "points": [] }
+    ]
+  }
+}
+```
+
+失败：
+
+- `400`：`invalid_stock_symbol_or_range`
+- `503`：`frontend_stock_detail_unavailable`
+
+### 4.4.5 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
+
+用途：手动刷新选中股票/ETF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。
+
+请求体：
+
+```json
+{
+  "range": "3m",
+  "start_date": null,
+  "end_date": null,
+  "financial_report_type": "quarterly"
+}
+```
+
+成功：`200`，响应同详情接口，并额外包含 `refresh_result`。
+
+失败：
+
+- `400`：`invalid_stock_symbol_or_range`
+- `503`：`frontend_stock_detail_sync_failed`
+
 ### 4.5 Outlook 时间轴接口
 
 #### 4.5.1 `GET /api/frontend/modules/event-outlook`

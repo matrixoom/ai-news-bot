@@ -20,6 +20,8 @@ from ...services.market_data_service import MarketDataService
 from ...services.market_data_repository import MarketDataValidationError
 from ...services.push_center_service import PushCenterService
 from ...services.rss_config_service import RssConfigService
+from ...services.stock_market_service import StockMarketService
+from ...services.stock_market_repository import StockMarketValidationError
 from ...providers.contracts import ProviderAvailability, ProviderStatus
 from .event_insight_routes import register_event_insight_routes
 from .llm_settings_routes import register_llm_settings_routes
@@ -91,6 +93,7 @@ def create_fastapi_app(
     push_center_service: PushCenterService | None = None,
     macro_data_service: MacroDataService | None = None,
     market_data_service: MarketDataService | None = None,
+    stock_market_service: StockMarketService | None = None,
     event_outlook_service: EventsOutlookService | None = None,
     event_insight_import_service: EventInsightImportService | None = None,
     event_insight_job_service: EventInsightJobService | None = None,
@@ -104,6 +107,7 @@ def create_fastapi_app(
         dashboard_service: Dashboard 聚合服务。
         push_center_service: 推送中心服务。
         macro_data_service: Macro Data 模块服务。
+        stock_market_service: Market Data 股票市场服务。
         event_outlook_service: Outlook 时间轴服务。
         event_insight_import_service: Event Insight 材料导入服务。
         event_insight_job_service: Event Insight 任务状态服务。
@@ -121,6 +125,7 @@ def create_fastapi_app(
     )
     macro_service = macro_data_service or MacroDataService()
     market_service = market_data_service or MarketDataService()
+    stock_service = stock_market_service or StockMarketService()
     event_service = event_outlook_service or EventsOutlookService(
         research_provider=_resolve_event_outlook_research_provider(service)
     )
@@ -307,6 +312,87 @@ def create_fastapi_app(
         except Exception:
             logger.exception("frontend market data sync failed", extra={"chart_id": chart_id})
             return JSONResponse({"error": "frontend_market_data_sync_failed"}, status_code=503)
+
+    @app.get("/api/frontend/modules/market-data/stocks")
+    def frontend_stock_market_instruments(
+        query: str = "",
+        instrument_type: str = "all",
+        market_board: str = "all",
+        listing_status: str = "all",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> JSONResponse:
+        """返回股票市场 A 股/ETF 标的列表。"""
+        try:
+            return JSONResponse(
+                stock_service.build_instruments_payload(
+                    query=query,
+                    instrument_type=instrument_type,
+                    market_board=market_board,
+                    listing_status=listing_status,
+                    limit=limit,
+                    offset=offset,
+                )
+            )
+        except StockMarketValidationError:
+            return JSONResponse({"error": "invalid_stock_market_filter"}, status_code=400)
+        except Exception:
+            logger.exception("frontend stock instrument list failed")
+            return JSONResponse({"error": "frontend_stock_instruments_unavailable"}, status_code=503)
+
+    @app.post("/api/frontend/modules/market-data/stocks/sync-universe")
+    def frontend_stock_market_sync_universe() -> JSONResponse:
+        """手动刷新 A 股/ETF 标的列表。"""
+        try:
+            return JSONResponse(stock_service.sync_universe())
+        except Exception:
+            logger.exception("frontend stock universe sync failed")
+            return JSONResponse({"error": "frontend_stock_universe_sync_failed"}, status_code=503)
+
+    @app.get("/api/frontend/modules/market-data/stocks/{symbol}")
+    def frontend_stock_market_detail(
+        symbol: str,
+        range: str = "3m",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        financial_report_type: str = "quarterly",
+    ) -> JSONResponse:
+        """返回选中股票行情、概况与财报详情。"""
+        try:
+            return JSONResponse(
+                stock_service.build_stock_detail_payload(
+                    symbol,
+                    range_type=range,
+                    start_date=start_date,
+                    end_date=end_date,
+                    financial_report_type=financial_report_type,
+                )
+            )
+        except StockMarketValidationError:
+            return JSONResponse({"error": "invalid_stock_symbol_or_range"}, status_code=400)
+        except Exception:
+            logger.exception("frontend stock detail failed", extra={"symbol": symbol})
+            return JSONResponse({"error": "frontend_stock_detail_unavailable"}, status_code=503)
+
+    @app.post("/api/frontend/modules/market-data/stocks/{symbol}/sync")
+    def frontend_stock_market_sync_detail(symbol: str, payload: dict | None = None) -> JSONResponse:
+        """手动刷新选中股票指定窗口日线数据。"""
+        body = payload or {}
+        try:
+            return JSONResponse(
+                stock_service.refresh_stock_detail(
+                    symbol,
+                    range_type=str(body.get("range", "3m")),
+                    start_date=str(body["start_date"]) if body.get("start_date") else None,
+                    end_date=str(body["end_date"]) if body.get("end_date") else None,
+                    financial_report_type=str(body.get("financial_report_type", "quarterly")),
+                )
+            )
+        except StockMarketValidationError:
+            return JSONResponse({"error": "invalid_stock_symbol_or_range"}, status_code=400)
+        except Exception:
+            logger.exception("frontend stock detail sync failed", extra={"symbol": symbol})
+            return JSONResponse({"error": "frontend_stock_detail_sync_failed"}, status_code=503)
 
     @app.get("/api/frontend/modules/event-outlook")
     def frontend_event_outlook_module(
