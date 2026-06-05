@@ -154,8 +154,8 @@ class PushWorkflowTests(unittest.TestCase):
         self.assertEqual(trend["chart_points"][-1]["ma20_price"], 3850.0)
         self.assertEqual(trend["chart_points"][-1]["deviation_pct"], 1.3)
 
-    def test_report_service_renders_mobile_scalable_svg_charts(self):
-        """校验邮件图表不用固定像素宽度，避免手机邮箱裁切 SVG。"""
+    def test_report_service_renders_wide_mobile_scalable_svg_charts(self):
+        """校验市场日报图表填满预览双栏，同时保留移动端缩放能力。"""
         snapshot = DashboardSnapshot(
             generated_at="2026-03-26T08:00:00Z",
             news_mode="hybrid",
@@ -195,9 +195,9 @@ class PushWorkflowTests(unittest.TestCase):
 
         html = PushReportService().build_email_html(snapshot, module_ids=["market"])
 
-        self.assertIn('max-width:344px;width:100%;', html)
+        self.assertIn('max-width:520px;width:100%;', html)
         self.assertIn("max-width:100%", html)
-        self.assertIn('width="344"', html)
+        self.assertIn('width="520"', html)
 
     def test_report_service_renders_market_volume_bars(self):
         """校验市场日报组合图下方柱体展示成交量，而不是继续依赖乖离率。"""

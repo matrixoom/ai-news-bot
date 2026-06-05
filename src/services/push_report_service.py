@@ -492,7 +492,7 @@ class PushReportService:
                 'style="height:112px;border:1px dashed #d0c3a8;color:#6e654f;">暂无趋势数据</td></tr></table>'
             )
 
-        width = 344.0
+        width = 520.0
         height = 126.0
         left = 14.0
         right = 14.0
@@ -582,7 +582,7 @@ class PushReportService:
         range_spec = resolve_push_market_chart_range(market_chart_range)
 
         return f"""
-<div style="max-width:344px;width:100%;">
+<div style="max-width:520px;width:100%;">
   <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:12px;color:#6e654f;margin-bottom:6px;">
     <tr>
       <td style="padding:0 14px 0 0;white-space:nowrap;"><span style="display:inline-block;width:12px;height:2px;background:#f6a313;vertical-align:middle;margin-right:6px;"></span>Close</td>
