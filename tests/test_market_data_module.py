@@ -23,6 +23,9 @@ from src.services.market_data_sync_service import (
     _load_gold_rows,
     _load_silver_rows,
 )
+from src.services.stock_market_repository import StockMarketRepository
+from src.services.stock_market_service import StockMarketService
+from src.services.stock_market_sync_service import StockMarketSyncService
 
 
 class MarketDataHousingTests(unittest.TestCase):
@@ -124,6 +127,171 @@ class MarketDataHousingTests(unittest.TestCase):
         self.assertIn("北京 全局走势", series_by_name)
         self.assertEqual(series_by_name["北京 同比"]["points"][0]["value"], 10.0)
         self.assertEqual(series_by_name["北京 全局走势"]["points"][0]["unit"], "指数")
+
+
+class StockMarketModuleTests(unittest.TestCase):
+    """校验股票市场标的、日线与懒加载链路。"""
+
+    def setUp(self) -> None:
+        self.db_path = Path(".tmp-events-tests") / "stock-market" / f"{self.id().split('.')[-1]}.db"
+        if self.db_path.exists():
+            self.db_path.unlink()
+
+    def test_stock_universe_sync_persists_a_share_and_etf_symbols(self) -> None:
+        """校验 A 股与 ETF 标的统一持久化，并可按名称或代码搜索。"""
+        repository = StockMarketRepository(self.db_path)
+        syncer = StockMarketSyncService(
+            repository=repository,
+            stock_universe_loader=lambda: pd.DataFrame(
+                [
+                    {"code": "000001", "name": "平安银行"},
+                    {"code": "688111", "name": "金山办公"},
+                ]
+            ),
+            etf_universe_loader=lambda: pd.DataFrame([{"代码": "159915", "名称": "创业板ETF"}]),
+        )
+
+        result = syncer.sync_universe()
+        items, total = repository.search_instruments(query="平安", limit=10, offset=0)
+
+        self.assertEqual(result["total"], 3)
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0].symbol, "000001.SZ")
+        self.assertEqual(repository.get_instrument("688111.SH").market_board, "科创板")
+        self.assertEqual(repository.get_instrument("159915.SZ").instrument_type, "etf")
+
+    def test_daily_bar_upsert_is_idempotent_and_keeps_latest_values(self) -> None:
+        """校验同一交易日重复写入只更新一行，不产生重复行情。"""
+        repository = StockMarketRepository(self.db_path)
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+
+        repository.upsert_daily_bars(
+            "000001.SZ",
+            [
+                {
+                    "trade_date": "2026-05-29",
+                    "open_price": 10,
+                    "close_price": 11,
+                    "high_price": 12,
+                    "low_price": 9,
+                    "volume": 100,
+                    "ma5": None,
+                    "ma10": None,
+                    "ma20": None,
+                    "ma60": None,
+                    "ma120": None,
+                }
+            ],
+        )
+        repository.upsert_daily_bars(
+            "000001.SZ",
+            [
+                {
+                    "trade_date": "2026-05-29",
+                    "open_price": 10,
+                    "close_price": 12.5,
+                    "high_price": 13,
+                    "low_price": 9.5,
+                    "volume": 200,
+                    "ma5": 12.5,
+                    "ma10": None,
+                    "ma20": None,
+                    "ma60": None,
+                    "ma120": None,
+                }
+            ],
+        )
+
+        points = repository.load_daily_bars(symbol="000001.SZ", start_date="2026-05-01", end_date="2026-06-30")
+
+        self.assertEqual(len(points), 1)
+        self.assertEqual(points[0].close_price, 12.5)
+        self.assertEqual(points[0].volume, 200)
+
+    def test_stock_detail_lazy_loads_three_month_window_when_history_absent(self) -> None:
+        """校验首次查看股票详情时，会懒加载日线并返回概况和财报数据。"""
+        repository = StockMarketRepository(self.db_path)
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        daily_frame = pd.DataFrame(
+            [
+                {"日期": f"2026-03-{day:02d}", "开盘": 10 + day, "收盘": 11 + day, "最高": 12 + day, "最低": 9 + day, "成交量": 1000 + day}
+                for day in range(1, 8)
+            ]
+        )
+        profile_frame = pd.DataFrame(
+            [
+                {"item": "公司名称", "value": "平安银行股份有限公司"},
+                {"item": "行业", "value": "银行"},
+                {"item": "地区", "value": "深圳"},
+                {"item": "上市时间", "value": "19910403"},
+            ]
+        )
+        benefit_frame = pd.DataFrame(
+            [
+                {"报告期": "2026-03-31", "*营业总收入": "352.77亿", "*营业支出": "178.88亿"},
+                {"报告期": "2025-12-31", "*营业总收入": "1314.42亿", "*营业支出": "800.34亿"},
+            ]
+        )
+        cash_frame = pd.DataFrame(
+            [
+                {"报告期": "2026-03-31", "*经营活动产生的现金流量净额": "378.02亿"},
+                {"报告期": "2025-12-31", "*经营活动产生的现金流量净额": "3158.58亿"},
+            ]
+        )
+        debt_frame = pd.DataFrame(
+            [
+                {"报告期": "2026-03-31", "*负债合计": "5.49万亿", "*资产合计": "6.03万亿"},
+                {"报告期": "2025-12-31", "*负债合计": "5.37万亿", "*资产合计": "5.93万亿"},
+            ]
+        )
+        syncer = StockMarketSyncService(
+            repository=repository,
+            stock_daily_loader=lambda **_: daily_frame,
+            profile_loader=lambda **_: profile_frame,
+            benefit_loader=lambda **_: benefit_frame,
+            cash_loader=lambda **_: cash_frame,
+            debt_loader=lambda **_: debt_frame,
+        )
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        payload = service.build_stock_detail_payload(
+            "000001.SZ",
+            range_type="custom",
+            start_date="2026-03-01",
+            end_date="2026-03-31",
+            financial_report_type="quarterly",
+        )
+
+        self.assertEqual(payload["instrument"]["name"], "平安银行")
+        self.assertEqual(len(payload["daily_bars"]), 7)
+        self.assertEqual(payload["daily_bars"][4]["ma5"], 14.0)
+        self.assertEqual(payload["profile"]["industry"], "银行")
+        revenue_series = next(series for series in payload["financials"]["series"] if series["metric"] == "revenue")
+        self.assertEqual(revenue_series["points"][0]["value"], 352.77)
 
 
 class MarketIndexVolumeTests(unittest.TestCase):

@@ -6,6 +6,7 @@
 
 ### Added
 
+- Market Data 股票市场页新增 A 股/ETF 标的池、选股懒加载日线、K 线均线图、公司概况和财报图；后端新增股票标的、OHLCV+MA、概况、财报与同步状态 SQLite 表，并提供 `/api/frontend/modules/market-data/stocks*` 接口。
 - Outlook 关系网络页改用成熟 React 图谱库 `@xyflow/react` 重做为 MiroFish 风格全屏画布：支持刷新、全屏、边标签开关、节点选择、拖拽、删除和双击编辑，移除左下角实体类型图例，节点面积按连接关系数量递增。
 - Outlook 将 `事件关系图` 标签页展示名调整为 `关系网络`，保留 `event-graph` 路由参数兼容旧链接。
 - Event Insight 事件关系图改为事件网络入口：不再依赖主题溯源，合格事件会按质量审核规则自动入网并与既有事件建立规则关系边。
