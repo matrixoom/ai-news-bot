@@ -9,15 +9,27 @@ export function useStockMarketInstrumentsQuery(filters: {
   instrumentType: string;
   marketBoard: string;
   listingStatus?: string;
+  page: number;
+  pageSize: number;
 }) {
   return useQuery({
-    queryKey: ["stock-market-instruments", filters.query, filters.instrumentType, filters.marketBoard, filters.listingStatus ?? "all"],
+    queryKey: [
+      "stock-market-instruments",
+      filters.query,
+      filters.instrumentType,
+      filters.marketBoard,
+      filters.listingStatus ?? "all",
+      filters.page,
+      filters.pageSize,
+    ],
     queryFn: ({ signal }) =>
       getStockMarketInstruments({
         query: filters.query,
         instrumentType: filters.instrumentType,
         marketBoard: filters.marketBoard,
         listingStatus: filters.listingStatus ?? "all",
+        page: filters.page,
+        pageSize: filters.pageSize,
         signal,
       }),
   });
