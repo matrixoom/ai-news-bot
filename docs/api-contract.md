@@ -279,7 +279,7 @@ uv run python main.py macro-sync
 
 ### 4.4.3 `POST /api/frontend/modules/market-data/stocks/sync-universe`
 
-用途：手动刷新 A 股/ETF 基础标的池。股票来自 AkShare `stock_info_a_code_name`，ETF 来自 `fund_etf_spot_em`。本地表以 `symbol` 幂等 upsert，不删除既有标的。
+用途：手动刷新 A 股/ETF 基础标的池。股票优先来自 AkShare `stock_info_a_code_name`，失败时回退 A 股快照端点；ETF 优先来自 `fund_etf_spot_em`，失败时回退同花顺/新浪 ETF 端点。本地表以 `symbol` 幂等 upsert，不删除既有标的。股票与 ETF 分段容错，任一来源失败时不阻断另一来源入库，失败详情通过 `warnings` 返回。
 
 成功：`200`
 
@@ -290,11 +290,12 @@ uv run python main.py macro-sync
     "stock": 5200,
     "etf": 438,
     "total": 5638
-  }
+  },
+  "warnings": []
 }
 ```
 
-失败：`503`，`frontend_stock_universe_sync_failed`
+失败：仅数据库写入等内部错误返回 `503 frontend_stock_universe_sync_failed`；外部行情源代理失败通常返回 `200` 并在 `warnings` 中说明。
 
 ### 4.4.4 `GET /api/frontend/modules/market-data/stocks/{symbol}`
 

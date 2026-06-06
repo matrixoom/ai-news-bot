@@ -160,6 +160,24 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(repository.get_instrument("688111.SH").market_board, "科创板")
         self.assertEqual(repository.get_instrument("159915.SZ").instrument_type, "etf")
 
+    def test_stock_universe_sync_keeps_stock_rows_when_etf_source_fails(self) -> None:
+        """校验 ETF 上游失败不会拖垮 A 股标的入库。"""
+        repository = StockMarketRepository(self.db_path)
+        syncer = StockMarketSyncService(
+            repository=repository,
+            stock_universe_loader=lambda: pd.DataFrame([{"code": "000001", "name": "平安银行"}]),
+            etf_universe_loader=Mock(side_effect=RuntimeError("ETF proxy unavailable")),
+        )
+
+        result = syncer.sync_universe()
+        items, total = repository.search_instruments(query="000001", limit=10, offset=0)
+
+        self.assertEqual(result["stock"], 1)
+        self.assertEqual(result["etf"], 0)
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0].symbol, "000001.SZ")
+        self.assertIn("ETF", result["warnings"][0])
+
     def test_daily_bar_upsert_is_idempotent_and_keeps_latest_values(self) -> None:
         """校验同一交易日重复写入只更新一行，不产生重复行情。"""
         repository = StockMarketRepository(self.db_path)

@@ -8,14 +8,16 @@ export function useStockMarketInstrumentsQuery(filters: {
   query: string;
   instrumentType: string;
   marketBoard: string;
+  listingStatus?: string;
 }) {
   return useQuery({
-    queryKey: ["stock-market-instruments", filters.query, filters.instrumentType, filters.marketBoard],
+    queryKey: ["stock-market-instruments", filters.query, filters.instrumentType, filters.marketBoard, filters.listingStatus ?? "all"],
     queryFn: ({ signal }) =>
       getStockMarketInstruments({
         query: filters.query,
         instrumentType: filters.instrumentType,
         marketBoard: filters.marketBoard,
+        listingStatus: filters.listingStatus ?? "all",
         signal,
       }),
   });

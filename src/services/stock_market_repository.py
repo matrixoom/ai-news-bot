@@ -27,6 +27,7 @@ class StockInstrument:
     market_board: str
     listing_status: str
     updated_at: str
+    latest_price: float | None = None
 
 
 @dataclass(frozen=True)
@@ -220,8 +221,15 @@ class StockMarketRepository:
             ).fetchone()
             rows = connection.execute(
                 f"""
-                SELECT symbol, code, exchange, name, instrument_type, market_board, listing_status, updated_at
-                FROM market_stock_instrument
+                SELECT i.symbol, i.code, i.exchange, i.name, i.instrument_type, i.market_board, i.listing_status, i.updated_at,
+                       (
+                           SELECT b.close_price
+                           FROM market_stock_daily_bar AS b
+                           WHERE b.symbol = i.symbol
+                           ORDER BY b.trade_date DESC
+                           LIMIT 1
+                       ) AS latest_price
+                FROM market_stock_instrument AS i
                 {where_clause}
                 ORDER BY
                     CASE instrument_type WHEN 'stock' THEN 0 ELSE 1 END,
@@ -738,6 +746,7 @@ class StockMarketRepository:
             market_board=str(row["market_board"]),
             listing_status=str(row["listing_status"]),
             updated_at=str(row["updated_at"]),
+            latest_price=_optional_float(row["latest_price"]) if "latest_price" in row.keys() else None,
         )
 
     def _build_daily_bar(self, row: sqlite3.Row) -> StockDailyBar:

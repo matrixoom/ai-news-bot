@@ -12,12 +12,14 @@ export async function getStockMarketInstruments(options: {
   query: string;
   instrumentType: string;
   marketBoard: string;
+  listingStatus?: string;
   signal?: AbortSignal;
 }): Promise<StockInstrumentListPayload> {
   const params = new URLSearchParams({
     query: options.query,
     instrument_type: options.instrumentType,
     market_board: options.marketBoard,
+    listing_status: options.listingStatus ?? "all",
     limit: "100",
     offset: "0",
   });
