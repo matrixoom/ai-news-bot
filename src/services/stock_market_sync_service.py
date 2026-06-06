@@ -171,19 +171,80 @@ def _ak_etf_universe() -> Any:
 
 
 def _ak_stock_daily(**kwargs: Any) -> Any:
-    """读取 A 股历史日线。"""
+    """读取 A 股历史日线，东方财富失败时回退腾讯/新浪兼容端点。"""
 
     import akshare as ak
 
-    return ak.stock_zh_a_hist(period="daily", adjust="", **kwargs)
+    symbol = str(kwargs["symbol"])
+    start_date = str(kwargs["start_date"])
+    end_date = str(kwargs["end_date"])
+    exchange = _exchange_for_code(symbol)
+    prefixed_symbol = f"{exchange.lower()}{symbol}" if exchange else symbol
+    return _first_successful_akshare_call(
+        [
+            (
+                "stock_zh_a_hist",
+                lambda: ak.stock_zh_a_hist(
+                    symbol=symbol,
+                    period="daily",
+                    start_date=start_date,
+                    end_date=end_date,
+                    adjust="",
+                ),
+            ),
+            (
+                "stock_zh_a_hist_tx",
+                lambda: ak.stock_zh_a_hist_tx(
+                    symbol=prefixed_symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    adjust="",
+                ),
+            ),
+            (
+                "stock_zh_a_daily",
+                lambda: _filter_history_frame_by_date(
+                    ak.stock_zh_a_daily(symbol=prefixed_symbol, start_date=start_date, end_date=end_date, adjust=""),
+                    start_date=start_date,
+                    end_date=end_date,
+                ),
+            ),
+        ]
+    )
 
 
 def _ak_etf_daily(**kwargs: Any) -> Any:
-    """读取 ETF 历史日线。"""
+    """读取 ETF 历史日线，东方财富失败时回退新浪端点。"""
 
     import akshare as ak
 
-    return ak.fund_etf_hist_em(period="daily", adjust="", **kwargs)
+    symbol = str(kwargs["symbol"])
+    start_date = str(kwargs["start_date"])
+    end_date = str(kwargs["end_date"])
+    exchange = _exchange_for_code(symbol)
+    prefixed_symbol = f"{exchange.lower()}{symbol}" if exchange else symbol
+    return _first_successful_akshare_call(
+        [
+            (
+                "fund_etf_hist_em",
+                lambda: ak.fund_etf_hist_em(
+                    symbol=symbol,
+                    period="daily",
+                    start_date=start_date,
+                    end_date=end_date,
+                    adjust="",
+                ),
+            ),
+            (
+                "fund_etf_hist_sina",
+                lambda: _filter_history_frame_by_date(
+                    ak.fund_etf_hist_sina(symbol=prefixed_symbol),
+                    start_date=start_date,
+                    end_date=end_date,
+                ),
+            ),
+        ]
+    )
 
 
 def _ak_stock_profile(**kwargs: Any) -> Any:
@@ -241,6 +302,32 @@ def _first_successful_akshare_call(loaders: Sequence[tuple[str, Callable[[], Any
     raise RuntimeError("; ".join(errors))
 
 
+def _filter_history_frame_by_date(frame: Any, *, start_date: str, end_date: str) -> Any:
+    """过滤不支持日期参数的 AkShare 历史表。
+
+    Args:
+        frame: AkShare 返回的 DataFrame。
+        start_date: `YYYYMMDD` 起始日期。
+        end_date: `YYYYMMDD` 结束日期。
+
+    Returns:
+        按日期过滤后的 DataFrame；缺少日期列时返回原表。
+    """
+
+    date_column = None
+    for candidate in ("日期", "date", "trade_date"):
+        if candidate in getattr(frame, "columns", []):
+            date_column = candidate
+            break
+    if date_column is None:
+        return frame
+    start_text = _compact_date(start_date)
+    end_text = _compact_date(end_date)
+    copied = frame.copy()
+    date_values = copied[date_column].astype(str).map(_compact_date)
+    return copied[(date_values >= start_text) & (date_values <= end_text)]
+
+
 def _compact_error_message(error: Exception) -> str:
     """压缩外部数据源异常，避免长 URL 和代理栈进入前端提示。
 
@@ -260,6 +347,13 @@ def _compact_error_message(error: Exception) -> str:
     if "invalid argument" in lowered:
         return "上游端点参数或本地网络环境异常"
     return message[:180]
+
+
+def _compact_date(raw_value: str) -> str:
+    """将日期文本压缩为 YYYYMMDD 便于比较。"""
+
+    digits = re.sub(r"\D", "", str(raw_value))
+    return digits[:8]
 
 
 def _stock_universe_from_frame(frame: Any) -> list[dict[str, str]]:

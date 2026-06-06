@@ -12,7 +12,7 @@ from .stock_market_repository import (
     StockMarketRepository,
     StockMarketValidationError,
 )
-from .stock_market_sync_service import StockMarketSyncService
+from .stock_market_sync_service import StockMarketSyncService, _compact_error_message
 
 
 STOCK_MARKET_RANGES = {"1m", "3m", "6m", "1y", "3y", "5y", "custom"}
@@ -139,8 +139,8 @@ class StockMarketService:
                     end_date=date.fromisoformat(default_range.end_date),
                 )
             except Exception as error:
-                logger.exception("stock lazy daily sync failed", extra={"symbol": instrument.symbol})
-                warning = f"首次行情同步失败：{error}"
+                warning = f"首次行情同步失败：{_compact_error_message(error)}"
+                logger.warning("stock lazy daily sync failed for %s: %s", instrument.symbol, warning)
                 self._repository.record_sync_warning(instrument.symbol, warning)
         self._ensure_profile_and_financials(instrument)
         return self._build_detail_payload(
@@ -163,17 +163,24 @@ class StockMarketService:
 
         instrument = self._require_instrument(symbol)
         resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
-        result = self._sync_service.sync_symbol_window(
-            instrument,
-            start_date=date.fromisoformat(resolved_range.start_date),
-            end_date=date.fromisoformat(resolved_range.end_date),
-        )
+        warning = ""
+        result = {"daily_bars": 0}
+        try:
+            result = self._sync_service.sync_symbol_window(
+                instrument,
+                start_date=date.fromisoformat(resolved_range.start_date),
+                end_date=date.fromisoformat(resolved_range.end_date),
+            )
+        except Exception as error:
+            warning = f"行情刷新失败：{_compact_error_message(error)}"
+            logger.warning("stock daily refresh failed for %s: %s", instrument.symbol, warning)
+            self._repository.record_sync_warning(instrument.symbol, warning)
         self._ensure_profile_and_financials(instrument)
         payload = self._build_detail_payload(
             instrument,
             resolved_range=resolved_range,
             financial_report_type=financial_report_type,
-            warning_message="",
+            warning_message=warning,
         )
         payload["refresh_result"] = result
         return payload
@@ -254,14 +261,16 @@ class StockMarketService:
             try:
                 self._sync_service.sync_profile(instrument)
             except Exception as error:
-                logger.exception("stock profile sync failed", extra={"symbol": instrument.symbol})
-                self._repository.record_sync_warning(instrument.symbol, f"公司概况同步失败：{error}")
+                warning = f"公司概况同步失败：{_compact_error_message(error)}"
+                logger.warning("stock profile sync failed for %s: %s", instrument.symbol, warning)
+                self._repository.record_sync_warning(instrument.symbol, warning)
         if instrument.instrument_type == "stock" and not self._repository.has_financial_metrics(instrument.symbol):
             try:
                 self._sync_service.sync_financials(instrument)
             except Exception as error:
-                logger.exception("stock financial sync failed", extra={"symbol": instrument.symbol})
-                self._repository.record_sync_warning(instrument.symbol, f"财报同步失败：{error}")
+                warning = f"财报同步失败：{_compact_error_message(error)}"
+                logger.warning("stock financial sync failed for %s: %s", instrument.symbol, warning)
+                self._repository.record_sync_warning(instrument.symbol, warning)
 
     def _financial_payload(self, metrics: list[Any], report_type: str) -> dict[str, Any]:
         """将财务指标列表按指标分组成图表友好的结构。"""

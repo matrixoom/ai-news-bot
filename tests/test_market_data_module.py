@@ -25,7 +25,7 @@ from src.services.market_data_sync_service import (
 )
 from src.services.stock_market_repository import StockMarketRepository
 from src.services.stock_market_service import StockMarketService
-from src.services.stock_market_sync_service import StockMarketSyncService
+from src.services.stock_market_sync_service import StockMarketSyncService, _ak_etf_daily
 
 
 class MarketDataHousingTests(unittest.TestCase):
@@ -310,6 +310,54 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(payload["profile"]["industry"], "银行")
         revenue_series = next(series for series in payload["financials"]["series"] if series["metric"] == "revenue")
         self.assertEqual(revenue_series["points"][0]["value"], 352.77)
+
+    def test_stock_detail_logs_compact_warning_when_lazy_daily_sync_fails(self) -> None:
+        """校验日线懒加载失败时只记录短 warning，不输出完整异常栈。"""
+        repository = StockMarketRepository(self.db_path)
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "159007.SZ",
+                    "code": "159007",
+                    "exchange": "SZ",
+                    "name": "华泰柏瑞中证畜牧养殖",
+                    "instrument_type": "etf",
+                    "market_board": "ETF",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        syncer = StockMarketSyncService(
+            repository=repository,
+            etf_daily_loader=Mock(side_effect=RuntimeError("ProxyError: Unable to connect to proxy")),
+        )
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        with patch("src.services.stock_market_service.logger.exception") as exception_logger:
+            payload = service.build_stock_detail_payload("159007.SZ")
+
+        exception_logger.assert_not_called()
+        self.assertIn("代理连接失败", payload["sync_state"]["warning_message"])
+
+    def test_etf_daily_loader_falls_back_to_sina_history(self) -> None:
+        """校验 ETF 东方财富日线失败时回退新浪历史日线。"""
+        fake_akshare = SimpleNamespace(
+            fund_etf_hist_em=Mock(side_effect=RuntimeError("ProxyError: Unable to connect to proxy")),
+            fund_etf_hist_sina=Mock(
+                return_value=pd.DataFrame(
+                    [
+                        {"date": "2026-03-01", "open": 1.0, "close": 1.1, "high": 1.2, "low": 0.9, "volume": 1000},
+                        {"date": "2026-06-01", "open": 2.0, "close": 2.1, "high": 2.2, "low": 1.9, "volume": 2000},
+                    ]
+                )
+            ),
+        )
+
+        with patch.dict("sys.modules", {"akshare": fake_akshare}):
+            frame = _ak_etf_daily(symbol="159007", start_date="20260501", end_date="20260606")
+
+        self.assertEqual(frame.to_dict("records"), [{"date": "2026-06-01", "open": 2.0, "close": 2.1, "high": 2.2, "low": 1.9, "volume": 2000}])
+        fake_akshare.fund_etf_hist_sina.assert_called_once_with(symbol="sz159007")
 
 
 class MarketIndexVolumeTests(unittest.TestCase):
