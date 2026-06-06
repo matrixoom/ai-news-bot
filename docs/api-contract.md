@@ -310,9 +310,10 @@ uv run python main.py macro-sync
 日线同步策略：
 
 - A 股使用 AkShare `stock_zh_a_hist`，ETF 使用 `fund_etf_hist_em`。
+- A 股日线在东方财富端点失败时回退 `stock_zh_a_hist_tx` / `stock_zh_a_daily`；ETF 日线在东方财富端点失败时回退 `fund_etf_hist_sina`。
 - 本地事实表以 `(symbol, trade_date)` 作为幂等键，刷新同一天只更新，不重复插入。
 - 服务会为 MA120 额外拉取起始日前约 220 天缓冲数据，返回 payload 仍只包含用户所选时间跨度。
-- 外部接口失败时保留本地已有历史，并在 `sync_state.warning_message` 返回可展示提示。
+- 外部接口失败时保留本地已有历史，并在 `sync_state.warning_message` 返回可展示的短提示；服务不会把代理失败的完整 traceback 写入前端响应。
 
 成功：`200`
 
