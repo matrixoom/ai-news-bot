@@ -54,6 +54,7 @@ const LISTING_STATUS_OPTIONS = [
 
 const FINANCIAL_ORDER = ["revenue", "expense", "cash_flow", "asset", "liability"];
 const INSTRUMENT_PAGE_SIZE = 10;
+type StockDetailTab = "overview" | "financial";
 
 /**
  * 渲染股票市场页，布局对齐截图中的交易终端式信息密度。
@@ -68,6 +69,7 @@ export function StockMarketWorkspace() {
   const [financialReportType, setFinancialReportType] = useState<StockFinancialReportType>("quarterly");
   const [instrumentPage, setInstrumentPage] = useState(1);
   const [isInstrumentListCollapsed, setIsInstrumentListCollapsed] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState<StockDetailTab>("overview");
 
   const instrumentsQuery = useStockMarketInstrumentsQuery({
     query: searchText,
@@ -181,59 +183,75 @@ export function StockMarketWorkspace() {
                 priceChange={priceChange}
                 priceChangeRate={priceChangeRate}
               />
-              <div className="grid gap-3 border-t border-slate-100 p-3 xl:grid-cols-[minmax(0,1fr)_304px]">
-                <main className="min-w-0">
-                  <RangeToolbar
-                    endDate={range.endDate}
-                    onRangeChange={setRange}
-                    onRefresh={() => refreshMutation.mutate()}
-                    range={range}
-                    refreshPending={refreshMutation.isPending}
-                    startDate={range.startDate}
-                  />
-                  <DailyQuoteLine bars={detailQuery.data?.daily_bars ?? []} latestBar={latestBar} previousBar={previousBar} />
-                  <KlinePanel
-                    bars={detailQuery.data?.daily_bars ?? []}
-                    isError={detailQuery.isError}
-                    isPending={detailQuery.isPending}
-                    symbol={selectedInstrument.symbol}
-                    warning={detailQuery.data?.sync_state.warning_message ?? ""}
-                  />
+              <StockDetailTabs activeTab={activeDetailTab} onTabChange={setActiveDetailTab} />
+              {activeDetailTab === "overview" ? (
+                <div
+                  aria-labelledby="stock-detail-tab-overview"
+                  className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_304px]"
+                  id="stock-detail-panel-overview"
+                  role="tabpanel"
+                >
+                  <main className="min-w-0">
+                    <RangeToolbar
+                      endDate={range.endDate}
+                      onRangeChange={setRange}
+                      onRefresh={() => refreshMutation.mutate()}
+                      range={range}
+                      refreshPending={refreshMutation.isPending}
+                      startDate={range.startDate}
+                    />
+                    <DailyQuoteLine bars={detailQuery.data?.daily_bars ?? []} latestBar={latestBar} previousBar={previousBar} />
+                    <KlinePanel
+                      bars={detailQuery.data?.daily_bars ?? []}
+                      isError={detailQuery.isError}
+                      isPending={detailQuery.isPending}
+                      symbol={selectedInstrument.symbol}
+                      warning={detailQuery.data?.sync_state.warning_message ?? ""}
+                    />
+                  </main>
+
+                  <aside className="space-y-3">
+                    <SideInfoPanel
+                      title="基础信息"
+                      rows={[
+                        ["股票代码", selectedInstrument.symbol],
+                        ["所属交易所", selectedInstrument.exchange === "SH" ? "上海证券交易所" : selectedInstrument.exchange === "SZ" ? "深圳证券交易所" : "北京证券交易所"],
+                        ["上市日期", detailQuery.data?.profile.listing_date || "--"],
+                        ["所属板块", detailQuery.data?.profile.sector || selectedInstrument.market_board],
+                        ["行业", detailQuery.data?.profile.industry || "--"],
+                        ["地区", detailQuery.data?.profile.region || "--"],
+                      ]}
+                    />
+                    <SideInfoPanel
+                      title="行情数据"
+                      rows={[
+                        ["最新价", latestBar ? formatNumber(latestBar.close, 2) : "--"],
+                        ["涨跌额", latestBar ? formatSigned(priceChange, 2) : "--"],
+                        ["涨跌幅", latestBar ? `${formatSigned(priceChangeRate, 2)}%` : "--"],
+                        ["成交量", latestBar ? formatCompactNumber(latestBar.volume) : "--"],
+                        ["最高价", latestBar ? formatNumber(latestBar.high, 2) : "--"],
+                        ["最低价", latestBar ? formatNumber(latestBar.low, 2) : "--"],
+                        ["同步时间", detailQuery.data?.sync_state.synced_at ? formatLocalDateTime(detailQuery.data.sync_state.synced_at) : "--"],
+                      ]}
+                      valueTone
+                    />
+                  </aside>
+                </div>
+              ) : (
+                <div
+                  aria-labelledby="stock-detail-tab-financial"
+                  className="p-4"
+                  id="stock-detail-panel-financial"
+                  role="tabpanel"
+                >
                   <FinancialCards
                     isPending={detailQuery.isPending}
                     onReportTypeChange={setFinancialReportType}
                     reportType={financialReportType}
                     series={detailQuery.data?.financials.series ?? []}
                   />
-                </main>
-
-                <aside className="space-y-3">
-                  <SideInfoPanel
-                    title="基础信息"
-                    rows={[
-                      ["股票代码", selectedInstrument.symbol],
-                      ["所属交易所", selectedInstrument.exchange === "SH" ? "上海证券交易所" : selectedInstrument.exchange === "SZ" ? "深圳证券交易所" : "北京证券交易所"],
-                      ["上市日期", detailQuery.data?.profile.listing_date || "--"],
-                      ["所属板块", detailQuery.data?.profile.sector || selectedInstrument.market_board],
-                      ["行业", detailQuery.data?.profile.industry || "--"],
-                      ["地区", detailQuery.data?.profile.region || "--"],
-                    ]}
-                  />
-                  <SideInfoPanel
-                    title="行情数据"
-                    rows={[
-                      ["最新价", latestBar ? formatNumber(latestBar.close, 2) : "--"],
-                      ["涨跌额", latestBar ? formatSigned(priceChange, 2) : "--"],
-                      ["涨跌幅", latestBar ? `${formatSigned(priceChangeRate, 2)}%` : "--"],
-                      ["成交量", latestBar ? formatCompactNumber(latestBar.volume) : "--"],
-                      ["最高价", latestBar ? formatNumber(latestBar.high, 2) : "--"],
-                      ["最低价", latestBar ? formatNumber(latestBar.low, 2) : "--"],
-                      ["同步时间", detailQuery.data?.sync_state.synced_at ? formatLocalDateTime(detailQuery.data.sync_state.synced_at) : "--"],
-                    ]}
-                    valueTone
-                  />
-                </aside>
-              </div>
+                </div>
+              )}
             </>
           ) : (
             <EmptySurface text={instrumentsQuery.data?.warning_message || "请刷新基础标的或选择一只股票。"} />
@@ -535,6 +553,44 @@ function StockSummaryHeader(props: {
         </button>
       </div>
     </header>
+  );
+}
+
+/**
+ * 渲染股票详情一级页签，仅保留行情概览与财务数据两个真实内容区。
+ */
+function StockDetailTabs(props: {
+  activeTab: StockDetailTab;
+  onTabChange: (tab: StockDetailTab) => void;
+}) {
+  const tabs: Array<{ value: StockDetailTab; label: string }> = [
+    { value: "overview", label: "概览" },
+    { value: "financial", label: "财务数据" },
+  ];
+
+  return (
+    <div aria-label="股票详情" className="flex h-12 items-end gap-8 border-b border-slate-200 px-6" role="tablist">
+      {tabs.map((tab) => {
+        const isActive = props.activeTab === tab.value;
+        return (
+          <button
+            aria-controls={`stock-detail-panel-${tab.value}`}
+            aria-selected={isActive}
+            className={`relative h-12 px-1 text-sm font-semibold ${
+              isActive ? "text-blue-600" : "text-slate-500 hover:text-slate-800"
+            }`}
+            id={`stock-detail-tab-${tab.value}`}
+            key={tab.value}
+            onClick={() => props.onTabChange(tab.value)}
+            role="tab"
+            type="button"
+          >
+            {tab.label}
+            {isActive ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-blue-600" /> : null}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
