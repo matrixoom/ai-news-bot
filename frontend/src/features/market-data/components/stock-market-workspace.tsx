@@ -52,8 +52,8 @@ const LISTING_STATUS_OPTIONS = [
   { value: "listed", label: "上市" },
 ];
 
-const DETAIL_TABS = ["概览", "公司概况", "所属板块", "股票属性", "财务数据", "新闻公告"];
 const FINANCIAL_ORDER = ["revenue", "expense", "cash_flow", "asset", "liability"];
+const INSTRUMENT_PAGE_SIZE = 10;
 
 /**
  * 渲染股票市场页，布局对齐截图中的交易终端式信息密度。
@@ -66,22 +66,63 @@ export function StockMarketWorkspace() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [range, setRange] = useState<MarketDataRangeSelection>({ type: "3m" });
   const [financialReportType, setFinancialReportType] = useState<StockFinancialReportType>("quarterly");
+  const [instrumentPage, setInstrumentPage] = useState(1);
+  const [isInstrumentListCollapsed, setIsInstrumentListCollapsed] = useState(false);
 
   const instrumentsQuery = useStockMarketInstrumentsQuery({
     query: searchText,
     instrumentType,
     marketBoard,
     listingStatus,
+    page: instrumentPage,
+    pageSize: INSTRUMENT_PAGE_SIZE,
   });
   const universeMutation = useStockMarketUniverseSyncMutation();
   const detailQuery = useStockMarketDetailQuery(selectedSymbol, range, financialReportType);
   const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType);
   const instruments = instrumentsQuery.data?.items ?? [];
+  const instrumentTotal = instrumentsQuery.data?.total ?? 0;
+  const instrumentPageCount = Math.max(1, Math.ceil(instrumentTotal / INSTRUMENT_PAGE_SIZE));
 
   useEffect(() => {
-    if (selectedSymbol || instruments.length === 0) return;
-    setSelectedSymbol(instruments[0].symbol);
-  }, [instruments, selectedSymbol]);
+    if (instrumentsQuery.isPending) return;
+    if (instruments.length === 0) {
+      setSelectedSymbol(null);
+      return;
+    }
+    if (!selectedSymbol || !instruments.some((instrument) => instrument.symbol === selectedSymbol)) {
+      setSelectedSymbol(instruments[0].symbol);
+    }
+  }, [instruments, instrumentsQuery.isPending, selectedSymbol]);
+
+  useEffect(() => {
+    if (instrumentsQuery.isPending || instrumentPage <= instrumentPageCount) return;
+    setInstrumentPage(instrumentPageCount);
+  }, [instrumentPage, instrumentPageCount, instrumentsQuery.isPending]);
+
+  /** 更新搜索词并回到筛选结果第一页。 */
+  function handleSearchTextChange(value: string) {
+    setSearchText(value);
+    setInstrumentPage(1);
+  }
+
+  /** 更新证券类型并回到筛选结果第一页。 */
+  function handleInstrumentTypeChange(value: string) {
+    setInstrumentType(value);
+    setInstrumentPage(1);
+  }
+
+  /** 更新市场板块并回到筛选结果第一页。 */
+  function handleMarketBoardChange(value: string) {
+    setMarketBoard(value);
+    setInstrumentPage(1);
+  }
+
+  /** 更新上市状态并回到筛选结果第一页。 */
+  function handleListingStatusChange(value: string) {
+    setListingStatus(value);
+    setInstrumentPage(1);
+  }
 
   const selectedInstrument = useMemo(
     () => instruments.find((item) => item.symbol === selectedSymbol) ?? detailQuery.data?.instrument ?? null,
@@ -99,23 +140,34 @@ export function StockMarketWorkspace() {
         instrumentType={instrumentType}
         listingStatus={listingStatus}
         marketBoard={marketBoard}
-        onInstrumentTypeChange={setInstrumentType}
-        onListingStatusChange={setListingStatus}
-        onMarketBoardChange={setMarketBoard}
-        onSearchTextChange={setSearchText}
+        onInstrumentTypeChange={handleInstrumentTypeChange}
+        onListingStatusChange={handleListingStatusChange}
+        onMarketBoardChange={handleMarketBoardChange}
+        onSearchTextChange={handleSearchTextChange}
         onSyncUniverse={() => universeMutation.mutate()}
         searchText={searchText}
         syncPending={universeMutation.isPending}
       />
 
-      <div className="grid min-h-[calc(100vh-11.25rem)] grid-cols-1 gap-2 border-t border-slate-200 px-0 py-2 xl:grid-cols-[384px_minmax(0,1fr)]">
+      <div
+        className={`grid min-h-[calc(100vh-11.25rem)] grid-cols-1 items-start gap-2 border-t border-slate-200 px-0 py-2 ${
+          isInstrumentListCollapsed
+            ? "xl:grid-cols-[48px_minmax(0,1fr)]"
+            : "xl:grid-cols-[384px_minmax(0,1fr)]"
+        }`}
+      >
         <InstrumentListPanel
+          currentPage={instrumentPage}
           instruments={instruments}
+          isCollapsed={isInstrumentListCollapsed}
           isError={instrumentsQuery.isError}
           isPending={instrumentsQuery.isPending}
+          onCollapseChange={setIsInstrumentListCollapsed}
+          onPageChange={setInstrumentPage}
           onSelect={setSelectedSymbol}
+          pageSize={INSTRUMENT_PAGE_SIZE}
           selectedSymbol={selectedSymbol}
-          total={instrumentsQuery.data?.total ?? 0}
+          total={instrumentTotal}
           warning={instrumentsQuery.data?.warning_message ?? ""}
         />
 
@@ -129,7 +181,6 @@ export function StockMarketWorkspace() {
                 priceChange={priceChange}
                 priceChangeRate={priceChangeRate}
               />
-              <DetailTabs />
               <div className="grid gap-3 border-t border-slate-100 p-3 xl:grid-cols-[minmax(0,1fr)_304px]">
                 <main className="min-w-0">
                   <RangeToolbar
@@ -223,7 +274,7 @@ function FilterBand(props: {
         <input
           className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none placeholder:text-slate-400"
           onChange={(event) => props.onSearchTextChange(event.target.value)}
-          placeholder="搜索股票代码 / 名称（支持拼音）"
+          placeholder="搜索股票代码 / 名称"
           type="search"
           value={props.searchText}
         />
@@ -272,22 +323,60 @@ function TopSelect(props: {
 function InstrumentListPanel(props: {
   instruments: StockInstrument[];
   total: number;
+  currentPage: number;
+  pageSize: number;
   selectedSymbol: string | null;
+  isCollapsed: boolean;
   isPending: boolean;
   isError: boolean;
   warning: string;
   onSelect: (symbol: string) => void;
+  onPageChange: (page: number) => void;
+  onCollapseChange: (collapsed: boolean) => void;
 }) {
+  if (props.isCollapsed) {
+    return (
+      <aside
+        className="flex h-[calc(100vh-14.375rem)] items-start justify-center bg-white pt-5"
+        data-testid="instrument-list-panel"
+      >
+        <button
+          aria-expanded="false"
+          aria-label="展开股票列表"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          onClick={() => props.onCollapseChange(false)}
+          type="button"
+        >
+          <ChevronRightIcon aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </aside>
+    );
+  }
+
+  const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize));
+  const paginationItems = buildPaginationItems(props.currentPage, totalPages);
+
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden bg-white">
+    <aside
+      className="flex h-[calc(100vh-14.375rem)] min-h-[32rem] flex-col overflow-hidden bg-white"
+      data-testid="instrument-list-panel"
+    >
       <div className="flex h-14 items-center justify-between border-b border-slate-200 px-5">
         <div className="text-sm font-semibold text-slate-950">
           全部标的
           <span className="ml-4 text-slate-500">{formatNumber(props.total)} 只</span>
         </div>
-        <ChevronLeftIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />
+        <button
+          aria-expanded="true"
+          aria-label="折叠股票列表"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          onClick={() => props.onCollapseChange(true)}
+          type="button"
+        >
+          <ChevronLeftIcon aria-hidden="true" className="h-4 w-4" />
+        </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-hidden" data-testid="instrument-list-body">
         {props.isPending ? (
           <EmptySurface text="股票列表加载中..." />
         ) : props.isError ? (
@@ -296,7 +385,7 @@ function InstrumentListPanel(props: {
           <EmptySurface text={props.warning || "暂无匹配标的。"} />
         ) : (
           <table className="w-full table-fixed border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-white text-slate-500">
+            <thead className="bg-white text-slate-500">
               <tr className="border-b border-slate-200">
                 <th className="w-[96px] px-4 py-3 font-semibold">代码</th>
                 <th className="px-3 py-3 font-semibold">名称</th>
@@ -318,22 +407,50 @@ function InstrumentListPanel(props: {
           </table>
         )}
       </div>
-      <div className="flex h-14 items-center gap-3 border-t border-slate-200 px-4 text-xs text-slate-500">
-        <button className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-300" type="button">
+      <nav
+        aria-label="股票列表分页"
+        className="flex h-14 shrink-0 items-center gap-3 border-t border-slate-200 px-4 text-xs text-slate-500"
+      >
+        <button
+          aria-label="上一页"
+          className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          disabled={props.currentPage <= 1}
+          onClick={() => props.onPageChange(props.currentPage - 1)}
+          type="button"
+        >
           <ChevronLeftIcon aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-blue-600 font-semibold text-white">1</span>
-        <span>2</span>
-        <span>3</span>
-        <span>4</span>
-        <span>5</span>
-        <span>...</span>
-        <span>{Math.max(1, Math.ceil(props.total / 100))}</span>
-        <button className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-500" type="button">
+        {paginationItems.map((item) =>
+          typeof item === "number" ? (
+            <button
+              aria-current={item === props.currentPage ? "page" : undefined}
+              aria-label={`第 ${item} 页`}
+              className={`inline-flex h-7 min-w-7 items-center justify-center rounded px-1 font-semibold ${
+                item === props.currentPage
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-500 hover:bg-slate-50"
+              }`}
+              key={item}
+              onClick={() => props.onPageChange(item)}
+              type="button"
+            >
+              {item}
+            </button>
+          ) : (
+            <span aria-hidden="true" key={item}>...</span>
+          ),
+        )}
+        <button
+          aria-label="下一页"
+          className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          disabled={props.currentPage >= totalPages}
+          onClick={() => props.onPageChange(props.currentPage + 1)}
+          type="button"
+        >
           <ChevronRightIcon aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
         <span className="ml-auto">共 {formatNumber(props.total)} 条</span>
-      </div>
+      </nav>
     </aside>
   );
 }
@@ -352,11 +469,11 @@ function InstrumentRow(props: {
       }`}
       onClick={() => props.onSelect(props.instrument.symbol)}
     >
-      <td className="px-4 py-3 font-semibold">{props.instrument.symbol}</td>
-      <td className="truncate px-3 py-3 font-semibold text-slate-800">{props.instrument.name}</td>
-      <td className="px-3 py-3 text-slate-600">{props.instrument.market_board.replace("主板", "")}</td>
-      <td className="px-3 py-3 text-slate-600">{props.instrument.instrument_type === "etf" ? "ETF" : "股票"}</td>
-      <td className={`px-4 py-3 text-right font-semibold ${priceTone}`}>
+      <td className="px-4 py-2.5 font-semibold">{props.instrument.symbol}</td>
+      <td className="truncate px-3 py-2.5 font-semibold text-slate-800">{props.instrument.name}</td>
+      <td className="px-3 py-2.5 text-slate-600">{props.instrument.market_board.replace("主板", "")}</td>
+      <td className="px-3 py-2.5 text-slate-600">{props.instrument.instrument_type === "etf" ? "ETF" : "股票"}</td>
+      <td className={`px-4 py-2.5 text-right font-semibold ${priceTone}`}>
         {latestPrice === undefined || latestPrice === null ? "--" : formatNumber(latestPrice, 3)}
       </td>
     </tr>
@@ -421,23 +538,6 @@ function StockSummaryHeader(props: {
   );
 }
 
-function DetailTabs() {
-  return (
-    <nav className="flex h-12 items-end gap-8 border-b border-slate-200 px-6 text-sm font-semibold text-slate-500">
-      {DETAIL_TABS.map((tab, index) => (
-        <button
-          className={`relative h-12 px-1 ${index === 0 ? "text-blue-600" : "hover:text-slate-800"}`}
-          key={tab}
-          type="button"
-        >
-          {tab}
-          {index === 0 ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-blue-600" /> : null}
-        </button>
-      ))}
-    </nav>
-  );
-}
-
 function RangeToolbar(props: {
   range: MarketDataRangeSelection;
   startDate?: string;
@@ -457,44 +557,56 @@ function RangeToolbar(props: {
               props.range.type === option.value ? "bg-blue-50 text-slate-950" : "text-slate-500 hover:bg-slate-50"
             }`}
             key={option.value}
-            onClick={() => props.onRangeChange({ type: option.value })}
+            onClick={() =>
+              props.onRangeChange(
+                option.value === "custom"
+                  ? { type: "custom", startDate, endDate }
+                  : { type: option.value },
+              )
+            }
             type="button"
           >
             {option.label}
           </button>
         ))}
       </div>
-      <label className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-500">
-        <input
-          className="w-28 bg-transparent text-slate-700 outline-none"
-          onChange={(event) => {
-            setStartDate(event.target.value);
-            props.onRangeChange({ type: "custom", startDate: event.target.value, endDate });
-          }}
-          type="date"
-          value={startDate}
-        />
-        <span>至</span>
-        <input
-          className="w-28 bg-transparent text-slate-700 outline-none"
-          onChange={(event) => {
-            setEndDate(event.target.value);
-            props.onRangeChange({ type: "custom", startDate, endDate: event.target.value });
-          }}
-          type="date"
-          value={endDate}
-        />
-        <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />
-      </label>
-      <button
-        className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-300"
-        disabled={props.refreshPending}
-        onClick={props.onRefresh}
-        type="button"
-      >
-        <ArrowPathIcon aria-hidden="true" className={`h-4 w-4 ${props.refreshPending ? "animate-spin" : ""}`} />
-        刷新数据
-      </button>
+      {props.range.type === "custom" ? (
+        <>
+          <label className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-500">
+            <input
+              aria-label="起始日期"
+              className="w-28 bg-transparent text-slate-700 outline-none"
+              onChange={(event) => {
+                setStartDate(event.target.value);
+                props.onRangeChange({ type: "custom", startDate: event.target.value, endDate });
+              }}
+              type="date"
+              value={startDate}
+            />
+            <span>至</span>
+            <input
+              aria-label="结束日期"
+              className="w-28 bg-transparent text-slate-700 outline-none"
+              onChange={(event) => {
+                setEndDate(event.target.value);
+                props.onRangeChange({ type: "custom", startDate, endDate: event.target.value });
+              }}
+              type="date"
+              value={endDate}
+            />
+            <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />
+          </label>
+          <button
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-300"
+            disabled={props.refreshPending}
+            onClick={props.onRefresh}
+            type="button"
+          >
+            <ArrowPathIcon aria-hidden="true" className={`h-4 w-4 ${props.refreshPending ? "animate-spin" : ""}`} />
+            刷新数据
+          </button>
+        </>
+      ) : null}
       <button className="ml-auto h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-500" type="button">
         不复权
       </button>
@@ -736,6 +848,25 @@ function EmptySurface(props: { text: string; danger?: boolean }) {
       {props.text}
     </div>
   );
+}
+
+/**
+ * 生成紧凑分页项，首尾页始终可达，当前页附近保留连续页码。
+ * @param currentPage 当前页码。
+ * @param totalPages 总页数。
+ * @returns 页码与省略号标识列表。
+ */
+function buildPaginationItems(currentPage: number, totalPages: number): Array<number | string> {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "ellipsis-right", totalPages];
+  }
+  if (currentPage >= totalPages - 3) {
+    return [1, "ellipsis-left", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+  return [1, "ellipsis-left", currentPage - 1, currentPage, currentPage + 1, "ellipsis-right", totalPages];
 }
 
 function lineSeries(name: string, data: Array<number | null>, color: string) {
