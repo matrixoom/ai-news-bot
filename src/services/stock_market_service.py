@@ -54,7 +54,11 @@ class StockMarketService:
         """手动同步 A 股和 ETF 标的列表。"""
 
         counts = self._sync_service.sync_universe()
-        return {"ok": True, "counts": counts}
+        return {
+            "ok": True,
+            "counts": {key: value for key, value in counts.items() if key != "warnings"},
+            "warnings": counts.get("warnings", []),
+        }
 
     def build_instruments_payload(
         self,
@@ -87,9 +91,12 @@ class StockMarketService:
         universe_warning = ""
         if ensure_universe and self._repository.count_instruments() == 0:
             try:
-                self._sync_service.sync_universe()
+                sync_result = self._sync_service.sync_universe()
+                warnings = sync_result.get("warnings", [])
+                if warnings:
+                    universe_warning = "；".join(str(item) for item in warnings)
             except Exception as error:
-                logger.exception("stock universe sync failed")
+                logger.warning("stock universe sync failed: %s", error)
                 universe_warning = f"股票列表同步失败：{error}"
         items, total = self._repository.search_instruments(
             query=query,
@@ -349,6 +356,7 @@ class StockMarketService:
             "market_board": instrument.market_board,
             "listing_status": instrument.listing_status,
             "updated_at": instrument.updated_at,
+            "latest_price": instrument.latest_price,
         }
 
 

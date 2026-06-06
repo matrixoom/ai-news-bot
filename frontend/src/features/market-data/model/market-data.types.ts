@@ -93,6 +93,7 @@ export type StockInstrument = {
   market_board: string;
   listing_status: string;
   updated_at: string;
+  latest_price?: number | null;
 };
 
 export type StockInstrumentListPayload = {

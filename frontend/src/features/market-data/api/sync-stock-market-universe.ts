@@ -2,7 +2,7 @@
  * 手动刷新 A 股和 ETF 标的列表。
  * @returns 标的同步结果。
  */
-export async function syncStockMarketUniverse(): Promise<{ ok: boolean; counts: Record<string, number> }> {
+export async function syncStockMarketUniverse(): Promise<{ ok: boolean; counts: Record<string, number>; warnings?: string[] }> {
   const response = await fetch("/api/frontend/modules/market-data/stocks/sync-universe", {
     method: "POST",
     headers: { Accept: "application/json" },
@@ -10,5 +10,5 @@ export async function syncStockMarketUniverse(): Promise<{ ok: boolean; counts: 
   if (!response.ok) {
     throw new Error(`stock universe sync failed: ${response.status}`);
   }
-  return response.json() as Promise<{ ok: boolean; counts: Record<string, number> }>;
+  return response.json() as Promise<{ ok: boolean; counts: Record<string, number>; warnings?: string[] }>;
 }

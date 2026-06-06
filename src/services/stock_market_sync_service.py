@@ -51,17 +51,36 @@ class StockMarketSyncService:
         self._cash_loader = cash_loader or _ak_financial_cash
         self._debt_loader = debt_loader or _ak_financial_debt
 
-    def sync_universe(self) -> dict[str, int]:
+    def sync_universe(self) -> dict[str, Any]:
         """同步 A 股全市场股票和 ETF 标的列表。
 
         Returns:
-            分类型写入数量。
+            分类型写入数量和可展示的上游告警。
         """
 
-        stock_rows = _stock_universe_from_frame(self._stock_universe_loader())
-        etf_rows = _etf_universe_from_frame(self._etf_universe_loader())
-        self._repository.upsert_instruments([*stock_rows, *etf_rows])
-        return {"stock": len(stock_rows), "etf": len(etf_rows), "total": len(stock_rows) + len(etf_rows)}
+        warnings: list[str] = []
+        stock_rows: list[dict[str, str]] = []
+        etf_rows: list[dict[str, str]] = []
+        try:
+            stock_rows = _stock_universe_from_frame(self._stock_universe_loader())
+        except Exception as error:
+            logger.warning("stock universe source failed: %s", _compact_error_message(error))
+            warnings.append(f"A股标的同步失败：{_compact_error_message(error)}")
+        try:
+            etf_rows = _etf_universe_from_frame(self._etf_universe_loader())
+        except Exception as error:
+            logger.warning("ETF universe source failed: %s", _compact_error_message(error))
+            warnings.append(f"ETF标的同步失败：{_compact_error_message(error)}")
+
+        rows = [*stock_rows, *etf_rows]
+        if rows:
+            self._repository.upsert_instruments(rows)
+        return {
+            "stock": len(stock_rows),
+            "etf": len(etf_rows),
+            "total": len(rows),
+            "warnings": warnings,
+        }
 
     def sync_symbol_window(self, instrument: StockInstrument, *, start_date: date, end_date: date) -> dict[str, int]:
         """同步单只股票指定窗口的日线数据，并补足均线计算前置窗口。
@@ -122,19 +141,33 @@ class StockMarketSyncService:
 
 
 def _ak_stock_universe() -> Any:
-    """读取 AkShare A 股代码名称表。"""
+    """读取 AkShare A 股代码名称表，主端点失败时切换快照端点。"""
 
     import akshare as ak
 
-    return ak.stock_info_a_code_name()
+    return _first_successful_akshare_call(
+        [
+            ("stock_info_a_code_name", lambda: ak.stock_info_a_code_name()),
+            ("stock_zh_a_spot_em", lambda: ak.stock_zh_a_spot_em()),
+            ("stock_zh_a_spot", lambda: ak.stock_zh_a_spot()),
+        ]
+    )
 
 
 def _ak_etf_universe() -> Any:
-    """读取 AkShare ETF 实时列表作为 ETF 基础标的表。"""
+    """读取 AkShare ETF 列表，东方财富失败时切换同花顺/新浪端点。"""
 
     import akshare as ak
 
-    return ak.fund_etf_spot_em()
+    return _first_successful_akshare_call(
+        [
+            ("fund_etf_spot_em", lambda: ak.fund_etf_spot_em()),
+            ("fund_etf_fund_daily_em", lambda: ak.fund_etf_fund_daily_em()),
+            ("fund_etf_spot_ths", lambda: ak.fund_etf_spot_ths()),
+            ("fund_etf_category_ths", lambda: ak.fund_etf_category_ths(symbol="ETF")),
+            ("fund_etf_category_sina", lambda: ak.fund_etf_category_sina(symbol="ETF基金")),
+        ]
+    )
 
 
 def _ak_stock_daily(**kwargs: Any) -> Any:
@@ -185,13 +218,57 @@ def _ak_financial_debt(**kwargs: Any) -> Any:
     return ak.stock_financial_debt_ths(indicator="按报告期", **kwargs)
 
 
+def _first_successful_akshare_call(loaders: Sequence[tuple[str, Callable[[], Any]]]) -> Any:
+    """按顺序调用 AkShare 端点，返回首个非空 DataFrame。
+
+    Args:
+        loaders: 端点名称与加载函数列表。
+
+    Returns:
+        首个成功且非空的 DataFrame。
+    """
+
+    errors: list[str] = []
+    for name, loader in loaders:
+        try:
+            frame = loader()
+            if getattr(frame, "empty", False):
+                errors.append(f"{name}: empty")
+                continue
+            return frame
+        except Exception as error:
+            errors.append(f"{name}: {_compact_error_message(error)}")
+    raise RuntimeError("; ".join(errors))
+
+
+def _compact_error_message(error: Exception) -> str:
+    """压缩外部数据源异常，避免长 URL 和代理栈进入前端提示。
+
+    Args:
+        error: 上游调用异常。
+
+    Returns:
+        面向日志和 UI 的短错误说明。
+    """
+
+    message = str(error)
+    lowered = message.lower()
+    if "proxyerror" in lowered or "unable to connect to proxy" in lowered:
+        return "代理连接失败，无法访问上游端点"
+    if "max retries exceeded" in lowered:
+        return "上游端点多次重试失败"
+    if "invalid argument" in lowered:
+        return "上游端点参数或本地网络环境异常"
+    return message[:180]
+
+
 def _stock_universe_from_frame(frame: Any) -> list[dict[str, str]]:
     """将 AkShare A 股代码表转换为统一标的列表。"""
 
     rows: list[dict[str, str]] = []
     for _, row in frame.iterrows():
-        code = _cell(row, ["code", "证券代码", "股票代码", "代码"])
-        name = _cell(row, ["name", "证券简称", "股票简称", "名称"])
+        code = _normalize_code(_cell(row, ["code", "symbol", "证券代码", "股票代码", "代码", "代码代码"]))
+        name = _cell(row, ["name", "证券简称", "股票简称", "名称", "股票名称", "简称"])
         if not _is_stock_code(code) or not name:
             continue
         exchange = _exchange_for_code(code)
@@ -215,8 +292,8 @@ def _etf_universe_from_frame(frame: Any) -> list[dict[str, str]]:
 
     rows: list[dict[str, str]] = []
     for _, row in frame.iterrows():
-        code = _cell(row, ["代码", "基金代码", "symbol", "code"])
-        name = _cell(row, ["名称", "基金简称", "name"])
+        code = _normalize_code(_cell(row, ["代码", "基金代码", "symbol", "code", "基金代码", "代码代码"]))
+        name = _cell(row, ["名称", "基金简称", "name", "基金简称", "简称"])
         if not _is_etf_code(code) or not name:
             continue
         exchange = _exchange_for_code(code)
@@ -488,6 +565,20 @@ def _normalize_listing_date(raw_value: str) -> str:
     if len(digits) == 8:
         return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
     return raw_value
+
+
+def _normalize_code(raw_value: str) -> str:
+    """从带交易所前缀/后缀的代码文本中提取 6 位证券代码。
+
+    Args:
+        raw_value: 原始代码字段。
+
+    Returns:
+        标准 6 位代码；无法提取时返回原值。
+    """
+
+    match = re.search(r"(\d{6})", raw_value)
+    return match.group(1) if match else raw_value
 
 
 def _parse_number(raw_value: object) -> float | None:
