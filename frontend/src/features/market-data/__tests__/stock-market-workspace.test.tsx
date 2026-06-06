@@ -179,12 +179,10 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("button", { name: "展开股票列表" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("removes detail tabs and only shows custom controls for a custom range", async () => {
+  it("shows custom controls only for a custom range", async () => {
     const user = userEvent.setup();
     render(<StockMarketWorkspace />);
 
-    expect(screen.queryByText("公司概况")).not.toBeInTheDocument();
-    expect(screen.queryByText("新闻公告")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("起始日期")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "刷新数据" })).not.toBeInTheDocument();
 
@@ -193,6 +191,27 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByLabelText("起始日期")).toBeInTheDocument();
     expect(screen.getByLabelText("结束日期")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "刷新数据" })).toBeInTheDocument();
+  });
+
+  it("separates overview and financial content into real tabs", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    expect(screen.getByRole("tab", { name: "概览" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "财务数据" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("button", { name: "近3月" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "财务数据" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "财务数据" }));
+
+    expect(screen.getByRole("tab", { name: "财务数据" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "财务数据" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "近3月" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "概览" }));
+
+    expect(screen.getByRole("button", { name: "近3月" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "财务数据" })).not.toBeInTheDocument();
   });
 
   it("keeps the paginator at the bottom of the viewport-height list panel", () => {

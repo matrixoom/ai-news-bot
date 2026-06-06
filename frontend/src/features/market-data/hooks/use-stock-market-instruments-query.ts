@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getStockMarketInstruments } from "../api/get-stock-market-instruments";
 
 /**
@@ -32,5 +32,7 @@ export function useStockMarketInstrumentsQuery(filters: {
         pageSize: filters.pageSize,
         signal,
       }),
+    // 首次访问新页时保留上一页列表，避免总数和分页器在请求期间短暂清零。
+    placeholderData: keepPreviousData,
   });
 }
