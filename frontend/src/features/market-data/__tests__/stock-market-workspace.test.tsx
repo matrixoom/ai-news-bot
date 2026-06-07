@@ -236,8 +236,8 @@ describe("StockMarketWorkspace", () => {
     await user.click(screen.getByRole("tab", { name: "财务数据" }));
 
     expect(screen.getByRole("tab", { name: "财务数据" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("heading", { name: "财务数据" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "近3月" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "财务数据" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "近3月" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "概览" }));
 
@@ -253,17 +253,25 @@ describe("StockMarketWorkspace", () => {
     expect(screen.queryByText("总市值")).not.toBeInTheDocument();
   });
 
-  it("shows one financial metric per tab and keeps its range independent", async () => {
+  it("shows financial metrics as secondary tabs with an independent overview-compatible range", async () => {
     const user = userEvent.setup();
     render(<StockMarketWorkspace />);
 
     await user.click(screen.getByRole("tab", { name: "财务数据" }));
 
-    expect(screen.getByRole("tab", { name: "营业收入" })).toHaveAttribute("aria-selected", "true");
+    const revenueTab = screen.getByRole("tab", { name: "营业收入" });
+    expect(revenueTab).toHaveAttribute("aria-selected", "true");
+    expect(revenueTab).toHaveClass("border-blue-600");
+    expect(revenueTab).not.toHaveClass("bg-blue-600");
     expect(screen.getByRole("tab", { name: "经营活动现金流" })).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("img", { name: "营业收入 图表" })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "经营活动现金流 图表" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "近5年" })).toHaveClass("bg-blue-50");
+    expect(
+      within(screen.getByLabelText("财务时间范围"))
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["近1月", "近3月", "近6月", "近1年", "近3年", "近5年", "自定义"]);
     expect(screen.getByText("+100.00%")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "经营活动现金流" }));
@@ -274,8 +282,28 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("button", { name: "近3年" })).toHaveClass("bg-blue-50");
     expect(screen.queryByText("+100.00%")).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "近1月" }));
+    expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("bg-blue-50");
+    expect(screen.queryByText("+100.00%")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "自定义" }));
+    expect(screen.getByLabelText("财务起始日期")).toHaveValue("2021-12-31");
+    expect(screen.getByLabelText("财务结束日期")).toHaveValue("2025-12-31");
+
     await user.click(screen.getByRole("tab", { name: "概览" }));
     expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("bg-blue-50");
+  });
+
+  it("places the report period selector in the financial range toolbar", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("tab", { name: "财务数据" }));
+
+    const toolbar = screen.getByLabelText("财务筛选工具栏");
+    expect(within(toolbar).getByRole("button", { name: "季度" })).toHaveClass("bg-slate-900");
+    expect(within(toolbar).getByRole("button", { name: "年度" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "财务数据" })).not.toBeInTheDocument();
   });
 
   it("keeps the paginator at the bottom of the viewport-height list panel", () => {

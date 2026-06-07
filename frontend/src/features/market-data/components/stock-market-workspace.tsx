@@ -21,13 +21,13 @@ import type {
 import { formatLocalDateTime } from "../../../shared/utils/format-local-date-time";
 
 const STOCK_RANGE_OPTIONS = [
-  { value: "1m", label: "近1月" },
-  { value: "3m", label: "近3月" },
-  { value: "6m", label: "近6月" },
-  { value: "1y", label: "近1年" },
-  { value: "3y", label: "近3年" },
-  { value: "5y", label: "近5年" },
-  { value: "custom", label: "自定义" },
+  { value: "1m", label: "近1月", months: 1 },
+  { value: "3m", label: "近3月", months: 3 },
+  { value: "6m", label: "近6月", months: 6 },
+  { value: "1y", label: "近1年", months: 12 },
+  { value: "3y", label: "近3年", months: 36 },
+  { value: "5y", label: "近5年", months: 60 },
+  { value: "custom", label: "自定义", months: null },
 ] as const;
 
 const MARKET_BOARD_OPTIONS = [
@@ -52,16 +52,8 @@ const LISTING_STATUS_OPTIONS = [
 ];
 
 const FINANCIAL_ORDER = ["revenue", "expense", "cash_flow", "asset", "liability"];
-const FINANCIAL_RANGE_OPTIONS = [
-  { value: "1y", label: "近1年", years: 1 },
-  { value: "3y", label: "近3年", years: 3 },
-  { value: "5y", label: "近5年", years: 5 },
-  { value: "10y", label: "近10年", years: 10 },
-  { value: "all", label: "全部", years: null },
-] as const;
 const INSTRUMENT_PAGE_SIZE = 10;
 type StockDetailTab = "overview" | "financial";
-type FinancialRange = (typeof FINANCIAL_RANGE_OPTIONS)[number]["value"];
 
 /**
  * 渲染股票市场页，布局对齐截图中的交易终端式信息密度。
@@ -74,7 +66,7 @@ export function StockMarketWorkspace() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [range, setRange] = useState<MarketDataRangeSelection>({ type: "1m" });
   const [financialReportType, setFinancialReportType] = useState<StockFinancialReportType>("quarterly");
-  const [financialRange, setFinancialRange] = useState<FinancialRange>("5y");
+  const [financialRange, setFinancialRange] = useState<MarketDataRangeSelection>({ type: "5y" });
   const [activeFinancialMetric, setActiveFinancialMetric] = useState(FINANCIAL_ORDER[0]);
   const [instrumentPage, setInstrumentPage] = useState(1);
   const [isInstrumentListCollapsed, setIsInstrumentListCollapsed] = useState(false);
@@ -762,11 +754,11 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
 
 function FinancialCards(props: {
   activeMetric: string;
-  financialRange: FinancialRange;
+  financialRange: MarketDataRangeSelection;
   isPending: boolean;
   reportType: StockFinancialReportType;
   series: StockFinancialSeries[];
-  onFinancialRangeChange: (range: FinancialRange) => void;
+  onFinancialRangeChange: (range: MarketDataRangeSelection) => void;
   onMetricChange: (metric: string) => void;
   onReportTypeChange: (type: StockFinancialReportType) => void;
 }) {
@@ -779,38 +771,109 @@ function FinancialCards(props: {
     : null;
 
   return (
-    <section className="space-y-4 pt-2">
-      <div className="flex flex-wrap items-center gap-5">
-        <h3 className="text-lg font-bold text-slate-950">财务数据</h3>
-        <div aria-label="财报周期" className="flex gap-5 text-sm font-semibold">
+    <section className="space-y-4">
+      {!props.isPending && sortedSeries.some((item) => item.points.length > 0) ? (
+        <div aria-label="财务指标" className="flex h-12 items-end gap-8 border-b border-slate-200" role="tablist">
+          {sortedSeries.map((item) => {
+            const isActive = item.metric === selectedSeries?.metric;
+            return (
+              <button
+                aria-controls={`financial-metric-panel-${item.metric}`}
+                aria-selected={isActive}
+                className={`relative h-12 border-b-2 px-1 text-sm font-semibold ${
+                  isActive
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+                id={`financial-metric-tab-${item.metric}`}
+                key={item.metric}
+                onClick={() => props.onMetricChange(item.metric)}
+                role="tab"
+                type="button"
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      <div
+        aria-label="财务筛选工具栏"
+        className="flex flex-wrap items-center gap-3 border-b border-slate-200 pb-3"
+      >
+        <span className="text-sm font-semibold text-slate-500">时间范围</span>
+        <div aria-label="财务时间范围" className="inline-flex h-9 overflow-hidden rounded-md border border-slate-200 bg-white">
+          {STOCK_RANGE_OPTIONS.map((option) => (
+            <button
+              className={`border-r border-slate-100 px-4 text-sm font-semibold last:border-r-0 ${
+                props.financialRange.type === option.value
+                  ? "bg-blue-50 text-slate-950"
+                  : "text-slate-500 hover:bg-slate-50"
+              }`}
+              key={option.value}
+              onClick={() =>
+                props.onFinancialRangeChange(
+                  option.value === "custom"
+                    ? {
+                        type: "custom",
+                        startDate: props.financialRange.startDate ?? selectedSeries?.points[0]?.period ?? "",
+                        endDate: props.financialRange.endDate ?? selectedSeries?.points.at(-1)?.period ?? "",
+                      }
+                    : { type: option.value },
+                )
+              }
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        {props.financialRange.type === "custom" ? (
+          <label className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-500">
+            <input
+              aria-label="财务起始日期"
+              className="w-28 bg-transparent text-slate-700 outline-none"
+              onChange={(event) =>
+                props.onFinancialRangeChange({
+                  ...props.financialRange,
+                  startDate: event.target.value,
+                })
+              }
+              type="date"
+              value={props.financialRange.startDate ?? ""}
+            />
+            <span>至</span>
+            <input
+              aria-label="财务结束日期"
+              className="w-28 bg-transparent text-slate-700 outline-none"
+              onChange={(event) =>
+                props.onFinancialRangeChange({
+                  ...props.financialRange,
+                  endDate: event.target.value,
+                })
+              }
+              type="date"
+              value={props.financialRange.endDate ?? ""}
+            />
+            <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />
+          </label>
+        ) : null}
+        <div
+          aria-label="财报周期"
+          className="ml-auto inline-flex h-9 overflow-hidden rounded-full border border-slate-200 bg-white text-sm font-semibold"
+        >
           {(["quarterly", "yearly"] as const).map((type) => (
             <button
-              className={`relative pb-2 ${props.reportType === type ? "text-blue-600" : "text-slate-500"}`}
+              className={`px-4 ${
+                props.reportType === type
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+              }`}
               key={type}
               onClick={() => props.onReportTypeChange(type)}
               type="button"
             >
               {type === "quarterly" ? "季度" : "年度"}
-              {props.reportType === type ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-blue-600" /> : null}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 border-y border-slate-200 py-3">
-        <span className="text-sm font-semibold text-slate-500">时间范围</span>
-        <div aria-label="财务时间范围" className="inline-flex h-9 overflow-hidden rounded-md border border-slate-200 bg-white">
-          {FINANCIAL_RANGE_OPTIONS.map((option) => (
-            <button
-              className={`border-r border-slate-100 px-4 text-sm font-semibold last:border-r-0 ${
-                props.financialRange === option.value
-                  ? "bg-blue-50 text-slate-950"
-                  : "text-slate-500 hover:bg-slate-50"
-              }`}
-              key={option.value}
-              onClick={() => props.onFinancialRangeChange(option.value)}
-              type="button"
-            >
-              {option.label}
             </button>
           ))}
         </div>
@@ -821,26 +884,6 @@ function FinancialCards(props: {
         <EmptySurface text="当前标的暂无可展示财报数据。" />
       ) : (
         <>
-          <div aria-label="财务指标" className="flex flex-wrap gap-2" role="tablist">
-            {sortedSeries.map((item) => (
-              <button
-                aria-controls={`financial-metric-panel-${item.metric}`}
-                aria-selected={item.metric === selectedSeries?.metric}
-                className={`rounded-md border px-4 py-2 text-sm font-semibold ${
-                  item.metric === selectedSeries?.metric
-                    ? "border-blue-600 bg-blue-600 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50"
-                }`}
-                id={`financial-metric-tab-${item.metric}`}
-                key={item.metric}
-                onClick={() => props.onMetricChange(item.metric)}
-                role="tab"
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
           {visibleSeries && visibleSeries.points.length > 0 ? (
             <div
               aria-labelledby={`financial-metric-tab-${visibleSeries.metric}`}
@@ -859,26 +902,52 @@ function FinancialCards(props: {
 }
 
 /**
- * 按所选年限裁剪单项财务序列，使用该序列最新报告期作为范围终点。
+ * 按所选时间范围裁剪单项财务序列，预设范围使用该序列最新报告期作为终点。
  * @param series 原始财务指标序列。
- * @param range 财务页独立时间范围。
+ * @param range 财务页独立时间范围，预设范围按月计算，自定义范围按日期闭区间计算。
  * @returns 保留原指标信息并裁剪数据点后的新序列。
  */
 function filterFinancialSeriesByRange(
   series: StockFinancialSeries,
-  range: FinancialRange,
+  range: MarketDataRangeSelection,
 ): StockFinancialSeries {
-  const selectedOption = FINANCIAL_RANGE_OPTIONS.find((option) => option.value === range);
-  const latestPeriod = series.points.at(-1)?.period;
-  if (!selectedOption?.years || !latestPeriod) return series;
+  if (range.type === "custom") {
+    return {
+      ...series,
+      points: series.points.filter(
+        (point) =>
+          (!range.startDate || point.period >= range.startDate) &&
+          (!range.endDate || point.period <= range.endDate),
+      ),
+    };
+  }
 
-  const latestYear = Number(latestPeriod.slice(0, 4));
-  if (!Number.isFinite(latestYear)) return series;
-  const cutoffPeriod = `${latestYear - selectedOption.years}-${latestPeriod.slice(5)}`;
+  const selectedOption = STOCK_RANGE_OPTIONS.find((option) => option.value === range.type);
+  const latestPeriod = series.points.at(-1)?.period;
+  if (!selectedOption?.months || !latestPeriod) return series;
+
+  const latestMonth = periodMonthIndex(latestPeriod);
+  if (latestMonth === null) return series;
+  const cutoffMonth = latestMonth - selectedOption.months;
   return {
     ...series,
-    points: series.points.filter((point) => point.period >= cutoffPeriod),
+    points: series.points.filter((point) => {
+      const pointMonth = periodMonthIndex(point.period);
+      return pointMonth !== null && pointMonth >= cutoffMonth;
+    }),
   };
+}
+
+/**
+ * 将财报日期转换为连续月份序号，便于按月裁剪季度和年度序列。
+ * @param period ISO 日期格式的财报期间。
+ * @returns 连续月份序号；格式无效时返回 null。
+ */
+function periodMonthIndex(period: string): number | null {
+  const year = Number(period.slice(0, 4));
+  const month = Number(period.slice(5, 7));
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  return year * 12 + month - 1;
 }
 
 function FinancialMetricCard(props: { series: StockFinancialSeries }) {
