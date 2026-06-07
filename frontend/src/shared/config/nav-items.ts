@@ -120,9 +120,9 @@ export const moduleDirectories: ModuleDirectory[] = [
       },
       {
         to: "/market-data?tab=stock_market",
-        title: "股票市场",
-        ariaLabel: "Market Data > 股票市场",
-        description: "股指数据（待补充）",
+        title: "股市",
+        ariaLabel: "Market Data > 股市",
+        description: "股指数据",
       },
       {
         to: "/market-data?tab=real_estate",
