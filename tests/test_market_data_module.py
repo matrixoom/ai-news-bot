@@ -29,7 +29,10 @@ from src.services.market_data_sync_service import (
 from src.services.stock_market_repository import StockMarketRepository
 from src.services.stock_market_sharding import (
     initialize_all_market_stock_shards,
+    initialize_market_stock_shard,
+    migrate_legacy_market_stock_shards,
     resolve_market_stock_shard_name,
+    resolve_market_stock_shard_path,
 )
 from src.services.stock_market_service import StockMarketService
 from src.services.stock_market_sync_service import StockMarketSyncService, _ak_etf_daily
@@ -55,6 +58,18 @@ class StockMarketShardingTests(unittest.TestCase):
         self.assertEqual(resolve_market_stock_shard_name("600519.SH"), "market_stock_SH_51.db")
         self.assertEqual(resolve_market_stock_shard_name("000010.SZ"), "market_stock_SZ_01.db")
         self.assertEqual(resolve_market_stock_shard_name("920118.BJ"), "market_stock_BJ_8.db")
+        self.assertEqual(
+            resolve_market_stock_shard_path("600519.SH", self.shard_dir),
+            self.shard_dir / "SH" / "market_stock_SH_51.db",
+        )
+        self.assertEqual(
+            resolve_market_stock_shard_path("000010.SZ", self.shard_dir),
+            self.shard_dir / "SZ" / "market_stock_SZ_01.db",
+        )
+        self.assertEqual(
+            resolve_market_stock_shard_path("920118.BJ", self.shard_dir),
+            self.shard_dir / "BJ" / "market_stock_BJ_8.db",
+        )
 
     def test_stock_shard_router_rejects_invalid_symbols(self) -> None:
         """校验非法代码格式和未知交易所会快速失败。"""
@@ -71,13 +86,13 @@ class StockMarketShardingTests(unittest.TestCase):
         shard_paths = initialize_all_market_stock_shards(self.shard_dir)
 
         self.assertEqual(len(shard_paths), 210)
-        self.assertTrue((self.shard_dir / "market_stock_SH_00.db").exists())
-        self.assertTrue((self.shard_dir / "market_stock_SH_99.db").exists())
-        self.assertTrue((self.shard_dir / "market_stock_SZ_00.db").exists())
-        self.assertTrue((self.shard_dir / "market_stock_SZ_99.db").exists())
-        self.assertTrue((self.shard_dir / "market_stock_BJ_0.db").exists())
-        self.assertTrue((self.shard_dir / "market_stock_BJ_9.db").exists())
-        with closing(sqlite3.connect(self.shard_dir / "market_stock_SH_51.db")) as connection:
+        self.assertTrue((self.shard_dir / "SH" / "market_stock_SH_00.db").exists())
+        self.assertTrue((self.shard_dir / "SH" / "market_stock_SH_99.db").exists())
+        self.assertTrue((self.shard_dir / "SZ" / "market_stock_SZ_00.db").exists())
+        self.assertTrue((self.shard_dir / "SZ" / "market_stock_SZ_99.db").exists())
+        self.assertTrue((self.shard_dir / "BJ" / "market_stock_BJ_0.db").exists())
+        self.assertTrue((self.shard_dir / "BJ" / "market_stock_BJ_9.db").exists())
+        with closing(sqlite3.connect(self.shard_dir / "SH" / "market_stock_SH_51.db")) as connection:
             table = connection.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
             ).fetchone()
@@ -88,6 +103,49 @@ class StockMarketShardingTests(unittest.TestCase):
 
         self.assertIsNotNone(table)
         self.assertIsNotNone(index)
+
+    def test_legacy_flat_shards_move_into_exchange_directories(self) -> None:
+        """校验旧扁平分片会移动到交易所目录且数据保持不变。"""
+
+        legacy_path = initialize_market_stock_shard(self.shard_dir / "market_stock_SZ_00.db")
+        with closing(sqlite3.connect(legacy_path)) as connection:
+            connection.execute(
+                """
+                INSERT INTO market_stock_daily_bar (
+                    symbol, trade_date, open_price, close_price, high_price, low_price,
+                    volume, provider_key, source_url, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("000001.SZ", "2026-06-05", 10, 11, 12, 9, 100, "unit-test", "", "2026-06-06T00:00:00Z"),
+            )
+            connection.commit()
+
+        moved_paths = migrate_legacy_market_stock_shards(self.shard_dir, self.shard_dir)
+        target_path = self.shard_dir / "SZ" / "market_stock_SZ_00.db"
+
+        self.assertEqual(moved_paths, [target_path])
+        self.assertFalse(legacy_path.exists())
+        with closing(sqlite3.connect(target_path)) as connection:
+            close_price = connection.execute(
+                "SELECT close_price FROM market_stock_daily_bar WHERE symbol = ?",
+                ("000001.SZ",),
+            ).fetchone()[0]
+        self.assertEqual(close_price, 11)
+
+    def test_legacy_empty_placeholder_is_ignored_when_target_exists(self) -> None:
+        """校验工具创建的旧路径空文件不会阻断已完成的目录迁移。"""
+
+        legacy_path = self.shard_dir / "market_stock_SH_49.db"
+        legacy_path.touch()
+        target_path = initialize_market_stock_shard(
+            self.shard_dir / "SH" / "market_stock_SH_49.db"
+        )
+
+        moved_paths = migrate_legacy_market_stock_shards(self.shard_dir, self.shard_dir)
+
+        self.assertEqual(moved_paths, [])
+        self.assertEqual(legacy_path.stat().st_size, 0)
+        self.assertTrue(target_path.exists())
 
 
 class MarketDataHousingTests(unittest.TestCase):
@@ -348,7 +406,7 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(points[0].close_price, 12.5)
         self.assertEqual(points[0].volume, 200)
         self.assertEqual(repository.get_sync_state("000001.SZ").daily_point_count, 1)
-        self.assertTrue((self.db_path.parent / "market_stock_SZ_00.db").exists())
+        self.assertTrue((self.db_path.parent / "market" / "SZ" / "market_stock_SZ_00.db").exists())
         with closing(sqlite3.connect(self.db_path)) as connection:
             legacy_table = connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
@@ -412,9 +470,9 @@ class StockMarketModuleTests(unittest.TestCase):
             legacy_table = connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
             ).fetchone()
-        with closing(sqlite3.connect(self.db_path.parent / "market_stock_SH_51.db")) as connection:
+        with closing(sqlite3.connect(self.db_path.parent / "market" / "SH" / "market_stock_SH_51.db")) as connection:
             sh_count = connection.execute("SELECT COUNT(*) FROM market_stock_daily_bar").fetchone()[0]
-        with closing(sqlite3.connect(self.db_path.parent / "market_stock_BJ_8.db")) as connection:
+        with closing(sqlite3.connect(self.db_path.parent / "market" / "BJ" / "market_stock_BJ_8.db")) as connection:
             bj_count = connection.execute("SELECT COUNT(*) FROM market_stock_daily_bar").fetchone()[0]
 
         self.assertIsNone(legacy_table)
@@ -504,7 +562,8 @@ class StockMarketModuleTests(unittest.TestCase):
     def test_stock_search_repairs_existing_empty_shard_database(self) -> None:
         """校验读路径会修复已存在但缺少 schema 的分片文件。"""
 
-        empty_shard_path = self.db_path.parent / "market_stock_SH_51.db"
+        empty_shard_path = self.db_path.parent / "market" / "SH" / "market_stock_SH_51.db"
+        empty_shard_path.parent.mkdir(parents=True, exist_ok=True)
         empty_shard_path.touch()
         repository = self._repository()
         repository.upsert_instruments(

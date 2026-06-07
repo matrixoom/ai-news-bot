@@ -15,6 +15,7 @@ from src.services.stock_market_sharding import (
     initialize_all_market_stock_shards,
     initialize_market_stock_shard,
     iter_market_stock_shard_paths,
+    migrate_legacy_market_stock_shards,
     resolve_market_stock_shard_path,
 )
 
@@ -118,7 +119,7 @@ class StockMarketRepository:
 
         Args:
             db_path: SQLite 数据库路径。
-            shard_dir: 日线分片目录，默认与主库位于同一目录。
+            shard_dir: 日线分片根目录，默认是主库同级的 `market/`。
             precreate_shards: 是否在初始化时预建全部 210 个分片。
 
         Returns:
@@ -126,7 +127,7 @@ class StockMarketRepository:
         """
 
         self._db_path = Path(db_path)
-        self._shard_dir = Path(shard_dir) if shard_dir is not None else self._db_path.parent
+        self._shard_dir = Path(shard_dir) if shard_dir is not None else self._db_path.parent / "market"
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._shard_dir.mkdir(parents=True, exist_ok=True)
         self._precreate_shards = precreate_shards
@@ -638,6 +639,7 @@ class StockMarketRepository:
                 )
                 """
             )
+        migrate_legacy_market_stock_shards(self._db_path.parent, self._shard_dir)
         shard_paths = iter_market_stock_shard_paths(self._shard_dir)
         if self._precreate_shards and any(not path.exists() for path in shard_paths):
             initialize_all_market_stock_shards(self._shard_dir)

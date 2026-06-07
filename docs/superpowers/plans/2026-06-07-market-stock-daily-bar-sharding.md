@@ -94,9 +94,9 @@ Expected: PASS。
 - Modify: `docs/股票数据分库分表设计.md`
 - Modify: `docs/architecture.md`
 - Modify: `CHANGELOG.md`
-- Create: `.data/market_stock_SH_00.db` 至 `.data/market_stock_SH_99.db`
-- Create: `.data/market_stock_SZ_00.db` 至 `.data/market_stock_SZ_99.db`
-- Create: `.data/market_stock_BJ_0.db` 至 `.data/market_stock_BJ_9.db`
+- Create: `.data/market/SH/market_stock_SH_00.db` 至 `.data/market/SH/market_stock_SH_99.db`
+- Create: `.data/market/SZ/market_stock_SZ_00.db` 至 `.data/market/SZ/market_stock_SZ_99.db`
+- Create: `.data/market/BJ/market_stock_BJ_0.db` 至 `.data/market/BJ/market_stock_BJ_9.db`
 - Modify: `.data/market_data.db`
 
 - [ ] **Step 1: 补充迁移、兼容与运维说明**
