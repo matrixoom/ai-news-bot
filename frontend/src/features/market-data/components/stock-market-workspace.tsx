@@ -179,9 +179,6 @@ export function StockMarketWorkspace() {
             <>
               <StockSummaryHeader
                 instrument={selectedInstrument}
-                latestBar={latestBar}
-                priceChange={priceChange}
-                priceChangeRate={priceChangeRate}
               />
               <StockDetailTabs activeTab={activeDetailTab} onTabChange={setActiveDetailTab} />
               {activeDetailTab === "overview" ? (
@@ -200,7 +197,6 @@ export function StockMarketWorkspace() {
                       refreshPending={refreshMutation.isPending}
                       startDate={range.startDate}
                     />
-                    <DailyQuoteLine bars={detailQuery.data?.daily_bars ?? []} latestBar={latestBar} previousBar={previousBar} />
                     <KlinePanel
                       bars={detailQuery.data?.daily_bars ?? []}
                       isError={detailQuery.isError}
@@ -471,7 +467,7 @@ function InstrumentListPanel(props: {
         >
           <ChevronRightIcon aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
-        <span className="ml-auto">共 {formatNumber(props.total)} 条</span>
+        <span className="ml-auto"> {formatNumber(props.total)} 条</span>
       </nav>
     </aside>
   );
@@ -502,14 +498,7 @@ function InstrumentRow(props: {
   );
 }
 
-function StockSummaryHeader(props: {
-  instrument: StockInstrument;
-  latestBar: StockDailyBar | null;
-  priceChange: number;
-  priceChangeRate: number;
-}) {
-  const isUp = props.priceChange >= 0;
-  const tone = isUp ? "text-rose-500" : "text-emerald-600";
+function StockSummaryHeader(props: { instrument: StockInstrument }) {
   return (
     <header className="px-6 pb-3 pt-4">
       <div className="min-w-[320px]">
@@ -521,12 +510,6 @@ function StockSummaryHeader(props: {
           <span className="rounded-md bg-blue-50 px-3 py-1 text-sm font-semibold text-slate-600">{props.instrument.market_board}</span>
         </div>
         <div className="mt-1 text-xs font-medium text-slate-400">{props.instrument.name}股份有限公司</div>
-        <div className="mt-5 flex flex-wrap items-end gap-4">
-          <span className={`text-4xl font-bold leading-none ${tone}`}>{props.latestBar ? formatNumber(props.latestBar.close, 2) : "--"}</span>
-          <span className={`pb-1 text-base font-semibold ${tone}`}>{props.latestBar ? formatSigned(props.priceChange, 2) : "--"}</span>
-          <span className={`pb-1 text-base font-semibold ${tone}`}>{props.latestBar ? `${formatSigned(props.priceChangeRate, 2)}%` : "--"}</span>
-        </div>
-        <div className="mt-2 text-xs text-slate-500">交易中 {props.latestBar?.date ?? "--"} 10:30:00</div>
       </div>
     </header>
   );
@@ -646,24 +629,6 @@ function RangeToolbar(props: {
   );
 }
 
-function DailyQuoteLine(props: { bars: StockDailyBar[]; latestBar: StockDailyBar | null; previousBar: StockDailyBar | null }) {
-  const latest = props.latestBar;
-  const previous = props.previousBar;
-  const change = latest && previous ? latest.close - previous.close : 0;
-  const rate = latest && previous && previous.close !== 0 ? (change / previous.close) * 100 : 0;
-  return (
-    <div className="flex flex-wrap gap-4 py-3 text-xs font-semibold text-slate-500">
-      <span>{latest?.date ?? "--"}</span>
-      <span>开：{latest ? formatNumber(latest.open, 2) : "--"}</span>
-      <span>高：<b className="text-rose-500">{latest ? formatNumber(latest.high, 2) : "--"}</b></span>
-      <span>低：<b className="text-emerald-600">{latest ? formatNumber(latest.low, 2) : "--"}</b></span>
-      <span>收：<b className="text-rose-500">{latest ? formatNumber(latest.close, 2) : "--"}</b></span>
-      <span>涨跌：<b className={change >= 0 ? "text-rose-500" : "text-emerald-600"}>{latest ? `${formatSigned(change, 2)} (${formatSigned(rate, 2)}%)` : "--"}</b></span>
-      <span>成交量：{latest ? formatCompactNumber(latest.volume) : "--"}</span>
-    </div>
-  );
-}
-
 function KlinePanel(props: {
   bars: StockDailyBar[];
   symbol: string;
@@ -697,8 +662,8 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         data: ["K线", "MA5", "MA10", "MA20", "MA60", "MA120", "成交量"],
       },
       grid: [
-        { left: 54, right: 22, top: 42, height: 290 },
-        { left: 54, right: 22, top: 365, height: 78 },
+        { left: 54, right: 22, top: 38, height: 220 },
+        { left: 54, right: 22, top: 286, height: 64 },
       ],
       xAxis: [
         { type: "category", data: labels, boundaryGap: true, axisLine: { lineStyle: { color: "#dbe3ee" } } },
@@ -749,7 +714,7 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
     return () => instance.dispose();
   }, [option]);
 
-  return <div ref={chartRef} aria-label={`${props.symbol} 日级别行情K线`} className="h-[480px] w-full" role="img" />;
+  return <div ref={chartRef} aria-label={`${props.symbol} 日级别行情K线`} className="h-[400px] w-full" role="img" />;
 }
 
 function FinancialCards(props: {
