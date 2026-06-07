@@ -18,7 +18,7 @@ const instruments: StockInstrument[] = Array.from({ length: 25 }, (_, index) => 
     symbol: `${code}.SZ`,
     code,
     exchange: "SZ",
-    name: index === 0 ? "平安银行" : `测试股票${index + 1}`,
+    name: index === 0 ? "平安银行" : index === 1 ? "名称较长的测试股票股份有限公司" : `测试股票${index + 1}`,
     instrument_type: index === 20 ? "etf" : "stock",
     market_board: index === 20 ? "ETF" : "深市主板",
     listing_status: "listed",
@@ -342,9 +342,28 @@ describe("StockMarketWorkspace", () => {
     render(<StockMarketWorkspace />);
 
     const panel = screen.getByTestId("instrument-list-panel");
+    const detailPanel = screen.getByTestId("stock-detail-panel");
     const paginator = screen.getByLabelText("股票列表分页");
 
     expect(panel).toHaveClass("h-[calc(100vh-14.375rem)]");
+    expect(detailPanel).toHaveClass("h-[calc(100vh-14.375rem)]", "min-h-[32rem]");
     expect(within(panel).getByLabelText("股票列表分页")).toBe(paginator);
+  });
+
+  it("uses compact overview range controls", () => {
+    render(<StockMarketWorkspace />);
+
+    expect(screen.getByLabelText("行情时间范围")).toHaveClass("h-8");
+    expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("px-3", "text-xs");
+    expect(screen.getByRole("button", { name: "不复权" })).toHaveClass("h-8", "px-3", "text-xs");
+  });
+
+  it("shows complete instrument information when hovering a list row", () => {
+    render(<StockMarketWorkspace />);
+
+    expect(screen.getByText("名称较长的测试股票股份有限公司").closest("tr")).toHaveAttribute(
+      "title",
+      "代码：000002.SZ；名称：名称较长的测试股票股份有限公司；市场：深市；类型：股票；最新价：11.000",
+    );
   });
 });

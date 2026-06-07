@@ -174,7 +174,10 @@ export function StockMarketWorkspace() {
           warning={instrumentsQuery.data?.warning_message ?? ""}
         />
 
-        <section className="min-w-0 bg-white">
+        <section
+          className="h-[calc(100vh-14.375rem)] min-h-[32rem] min-w-0 bg-white"
+          data-testid="stock-detail-panel"
+        >
           {selectedInstrument ? (
             <>
               <StockSummaryHeader
@@ -473,6 +476,11 @@ function InstrumentListPanel(props: {
   );
 }
 
+/**
+ * 渲染单个标的行，并在鼠标悬停时展示完整列表信息。
+ * @param props 标的数据、选中状态与点击回调。
+ * @returns 可选择的标的表格行。
+ */
 function InstrumentRow(props: {
   instrument: StockInstrument;
   selected: boolean;
@@ -480,19 +488,24 @@ function InstrumentRow(props: {
 }) {
   const latestPrice = props.instrument.latest_price;
   const priceTone = latestPrice === undefined || latestPrice === null ? "text-slate-400" : "text-rose-500";
+  const marketLabel = props.instrument.market_board.replace("主板", "");
+  const typeLabel = props.instrument.instrument_type === "etf" ? "ETF" : "股票";
+  const latestPriceLabel = latestPrice === undefined || latestPrice === null ? "--" : formatNumber(latestPrice, 3);
+  const hoverDescription = `代码：${props.instrument.symbol}；名称：${props.instrument.name}；市场：${marketLabel}；类型：${typeLabel}；最新价：${latestPriceLabel}`;
   return (
     <tr
       className={`cursor-pointer border-b border-slate-100 text-slate-700 hover:bg-blue-50 ${
         props.selected ? "bg-blue-50" : ""
       }`}
       onClick={() => props.onSelect(props.instrument.symbol)}
+      title={hoverDescription}
     >
       <td className="px-4 py-2.5 font-semibold">{props.instrument.symbol}</td>
       <td className="truncate px-3 py-2.5 font-semibold text-slate-800">{props.instrument.name}</td>
-      <td className="px-3 py-2.5 text-slate-600">{props.instrument.market_board.replace("主板", "")}</td>
-      <td className="px-3 py-2.5 text-slate-600">{props.instrument.instrument_type === "etf" ? "ETF" : "股票"}</td>
+      <td className="px-3 py-2.5 text-slate-600">{marketLabel}</td>
+      <td className="px-3 py-2.5 text-slate-600">{typeLabel}</td>
       <td className={`px-4 py-2.5 text-right font-semibold ${priceTone}`}>
-        {latestPrice === undefined || latestPrice === null ? "--" : formatNumber(latestPrice, 3)}
+        {latestPriceLabel}
       </td>
     </tr>
   );
@@ -564,11 +577,14 @@ function RangeToolbar(props: {
   const [startDate, setStartDate] = useState(props.startDate ?? "2025-03-05");
   const [endDate, setEndDate] = useState(props.endDate ?? "2025-06-05");
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="inline-flex h-10 overflow-hidden rounded-md border border-slate-200 bg-white">
+    <div className="flex flex-wrap items-center gap-2">
+      <div
+        aria-label="行情时间范围"
+        className="inline-flex h-8 overflow-hidden rounded-md border border-slate-200 bg-white"
+      >
         {STOCK_RANGE_OPTIONS.map((option) => (
           <button
-            className={`border-r border-slate-100 px-4 text-sm font-semibold last:border-r-0 ${
+            className={`border-r border-slate-100 px-3 text-xs font-semibold last:border-r-0 ${
               props.range.type === option.value ? "bg-blue-50 text-slate-950" : "text-slate-500 hover:bg-slate-50"
             }`}
             key={option.value}
@@ -622,7 +638,7 @@ function RangeToolbar(props: {
           </button>
         </>
       ) : null}
-      <button className="ml-auto h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-500" type="button">
+      <button className="ml-auto h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-500" type="button">
         不复权
       </button>
     </div>
