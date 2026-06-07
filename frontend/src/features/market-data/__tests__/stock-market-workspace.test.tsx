@@ -58,6 +58,38 @@ const financialSeries = [
       { period: "2025-12-31", value: 40, unit: "亿元" },
     ],
   },
+  {
+    metric: "roe",
+    label: "ROE",
+    points: [
+      { period: "2021-12-31", value: 8.1, unit: "%" },
+      { period: "2025-12-31", value: 9.2, unit: "%" },
+    ],
+  },
+  {
+    metric: "revenue_yoy",
+    label: "营收同比",
+    points: [
+      { period: "2021-12-31", value: 5.1, unit: "%" },
+      { period: "2025-12-31", value: 6.2, unit: "%" },
+    ],
+  },
+  {
+    metric: "net_profit_yoy",
+    label: "净利润同比",
+    points: [
+      { period: "2021-12-31", value: 4.1, unit: "%" },
+      { period: "2025-12-31", value: 5.2, unit: "%" },
+    ],
+  },
+  {
+    metric: "debt_asset_ratio",
+    label: "资产负债率",
+    points: [
+      { period: "2021-12-31", value: 90.1, unit: "%" },
+      { period: "2025-12-31", value: 89.2, unit: "%" },
+    ],
+  },
 ];
 
 const dailyBars = [
@@ -73,6 +105,10 @@ const dailyBars = [
     ma20: null,
     ma60: null,
     ma120: null,
+    pe_ttm: 5.1,
+    pb_mrq: 0.48,
+    dividend_yield_ttm: 3.2,
+    total_market_cap: 2130.77,
   },
   {
     date: "2026-06-06",
@@ -86,6 +122,10 @@ const dailyBars = [
     ma20: null,
     ma60: null,
     ma120: null,
+    pe_ttm: null,
+    pb_mrq: 0.49,
+    dividend_yield_ttm: 3.1,
+    total_market_cap: 2140.88,
   },
 ];
 
@@ -440,30 +480,37 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("px-3", "text-xs");
     expect(screen.getByLabelText("价格复权方式")).toHaveClass("h-8");
     expect(screen.getByRole("button", { name: "不复权" })).toHaveClass("bg-slate-900", "text-white");
-    expect(screen.getByRole("button", { name: "前复权" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "后复权" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "前复权" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "后复权" })).not.toBeInTheDocument();
   });
 
-  it("switches the selected price adjustment button", async () => {
-    const user = userEvent.setup();
+  it("keeps the current unadjusted price mode", () => {
     render(<StockMarketWorkspace />);
 
-    await user.click(screen.getByRole("button", { name: "前复权" }));
-
-    expect(screen.getByRole("button", { name: "前复权" })).toHaveClass("bg-slate-900", "text-white");
-    expect(screen.getByRole("button", { name: "不复权" })).not.toHaveClass("bg-slate-900");
+    expect(screen.getByRole("button", { name: "不复权" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("uses compact chart labels and hides volume axis numbers", async () => {
+  it("uses compact chart labels and places valuation legends on the right", async () => {
     render(<StockMarketWorkspace />);
 
     await waitFor(() => expect(mocks.echartOptions.length).toBeGreaterThan(0));
     const klineOption = mocks.echartOptions[0] as {
+      legend?: { right?: number; orient?: string; data?: string[] };
       tooltip?: { padding?: number[]; textStyle?: { fontSize?: number } };
       grid?: Array<{ height?: string | number }>;
       yAxis?: Array<{ axisLabel?: { show?: boolean; fontSize?: number } }>;
+      series?: Array<{ name?: string; data?: Array<number | null> }>;
     };
+    const seriesByName = Object.fromEntries(
+      (klineOption.series ?? []).map((series) => [series.name, series]),
+    );
 
+    expect(klineOption.legend?.right).toBe(8);
+    expect(klineOption.legend?.orient).toBe("vertical");
+    expect(klineOption.legend?.data).toEqual(
+      expect.arrayContaining(["PE(TTM)", "PB(MRQ)", "股息率(TTM)", "总市值"]),
+    );
+    expect(seriesByName["PE(TTM)"]?.data).toEqual([5.1, null]);
     expect(klineOption.tooltip?.textStyle?.fontSize).toBe(10);
     expect(klineOption.tooltip?.padding).toEqual([6, 8]);
     expect(klineOption.grid?.[0]?.height).toBe("56%");
@@ -478,9 +525,21 @@ describe("StockMarketWorkspace", () => {
     await user.click(screen.getByRole("tab", { name: "财务数据" }));
 
     expect(screen.getByRole("tab", { name: "营业收入" })).toHaveClass("text-xs");
+    expect(screen.getByRole("tab", { name: "ROE" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "营收同比" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "净利润同比" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "资产负债率" })).toBeInTheDocument();
     expect(screen.getByLabelText("财务时间范围")).toHaveClass("h-8");
     expect(screen.getByLabelText("财报周期")).toHaveClass("h-8", "text-xs");
     expect(screen.getByRole("img", { name: "营业收入 图表" })).toHaveClass("min-h-0", "flex-1");
+
+    await user.click(screen.getByRole("tab", { name: "ROE" }));
+    await waitFor(() => {
+      const roeOption = mocks.echartOptions.find((option) =>
+        JSON.stringify(option).includes('"name":"ROE"'),
+      ) as { series?: Array<{ type?: string }> } | undefined;
+      expect(roeOption?.series?.[0]?.type).toBe("line");
+    });
   });
 
   it("shows complete instrument information when hovering a list row", () => {

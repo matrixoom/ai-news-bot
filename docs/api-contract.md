@@ -333,7 +333,11 @@ uv run python main.py macro-sync
       "ma10": 11.35,
       "ma20": 11.18,
       "ma60": 10.88,
-      "ma120": 10.42
+      "ma120": 10.42,
+      "pe_ttm": 5.12,
+      "pb_mrq": 0.48,
+      "dividend_yield_ttm": 3.26,
+      "total_market_cap": 2130.77
     }
   ],
   "profile": {
@@ -350,11 +354,23 @@ uv run python main.py macro-sync
       { "metric": "expense", "label": "营业支出", "points": [] },
       { "metric": "cash_flow", "label": "经营活动现金流", "points": [] },
       { "metric": "asset", "label": "资产合计", "points": [] },
-      { "metric": "liability", "label": "负债合计", "points": [] }
+      { "metric": "liability", "label": "负债合计", "points": [] },
+      { "metric": "roe", "label": "ROE", "points": [] },
+      { "metric": "revenue_yoy", "label": "营收同比", "points": [] },
+      { "metric": "net_profit_yoy", "label": "净利润同比", "points": [] },
+      { "metric": "debt_asset_ratio", "label": "资产负债率", "points": [] }
     ]
   }
 }
 ```
+
+估值字段均允许为 `null`。`pe_ttm` 与 `pb_mrq` 单位为倍，
+`dividend_yield_ttm` 单位为 `%`，`total_market_cap` 单位为亿元。季度财务新增指标的
+`points[].unit` 均为 `%`。本次契约只增加字段和指标序列，不删除或改名现有字段。
+
+股票日线刷新会从东方财富估值历史补充 PE(TTM)、PB(MRQ) 和总市值；股息率(TTM) 基于过去
+365 个自然日内已实施且已除息的每股现金分红与当日收盘价计算。附加数据源失败时保留
+OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短告警。
 
 失败：
 

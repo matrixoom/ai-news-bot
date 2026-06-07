@@ -17,6 +17,12 @@ from .stock_market_sync_service import StockMarketSyncService, _compact_error_me
 
 STOCK_MARKET_RANGES = {"1m", "3m", "6m", "1y", "3y", "5y", "custom"}
 STOCK_FINANCIAL_REPORT_TYPES = {"quarterly", "yearly"}
+STOCK_REQUIRED_FINANCIAL_METRICS = {
+    "roe",
+    "revenue_yoy",
+    "net_profit_yoy",
+    "debt_asset_ratio",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -229,6 +235,14 @@ class StockMarketService:
                     "ma20": bar.ma20,
                     "ma60": bar.ma60,
                     "ma120": bar.ma120,
+                    "pe_ttm": bar.pe_ttm,
+                    "pb_mrq": bar.pb_mrq,
+                    "dividend_yield_ttm": bar.dividend_yield_ttm,
+                    "total_market_cap": (
+                        round(bar.total_market_cap / 100_000_000, 4)
+                        if bar.total_market_cap is not None
+                        else None
+                    ),
                 }
                 for bar in daily_bars
             ],
@@ -264,7 +278,13 @@ class StockMarketService:
                 warning = f"公司概况同步失败：{_compact_error_message(error)}"
                 logger.warning("stock profile sync failed for %s: %s", instrument.symbol, warning)
                 self._repository.record_sync_warning(instrument.symbol, warning)
-        if instrument.instrument_type == "stock" and not self._repository.has_financial_metrics(instrument.symbol):
+        if (
+            instrument.instrument_type == "stock"
+            and not self._repository.has_financial_metrics(
+                instrument.symbol,
+                required_metrics=STOCK_REQUIRED_FINANCIAL_METRICS,
+            )
+        ):
             try:
                 self._sync_service.sync_financials(instrument)
             except Exception as error:
@@ -275,13 +295,27 @@ class StockMarketService:
     def _financial_payload(self, metrics: list[Any], report_type: str) -> dict[str, Any]:
         """将财务指标列表按指标分组成图表友好的结构。"""
 
-        metric_order = ["revenue", "expense", "cash_flow", "asset", "liability"]
+        metric_order = [
+            "revenue",
+            "expense",
+            "cash_flow",
+            "asset",
+            "liability",
+            "roe",
+            "revenue_yoy",
+            "net_profit_yoy",
+            "debt_asset_ratio",
+        ]
         label_by_metric = {
             "revenue": "营业收入",
             "expense": "营业支出",
             "cash_flow": "经营活动现金流",
             "asset": "资产合计",
             "liability": "负债合计",
+            "roe": "ROE",
+            "revenue_yoy": "营收同比",
+            "net_profit_yoy": "净利润同比",
+            "debt_asset_ratio": "资产负债率",
         }
         points_by_metric: dict[str, list[dict[str, Any]]] = {metric: [] for metric in metric_order}
         for item in metrics:
