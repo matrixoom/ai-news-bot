@@ -40,7 +40,27 @@ class StockMarketSyncService:
         benefit_loader: DataFrameLoader | None = None,
         cash_loader: DataFrameLoader | None = None,
         debt_loader: DataFrameLoader | None = None,
+        valuation_loader: DataFrameLoader | None = None,
+        dividend_loader: DataFrameLoader | None = None,
+        financial_analysis_loader: DataFrameLoader | None = None,
     ) -> None:
+        """初始化股票同步服务及其可替换的数据加载器。
+
+        Args:
+            repository: 股票市场仓储。
+            stock_universe_loader: A 股标的加载器。
+            etf_universe_loader: ETF 标的加载器。
+            stock_daily_loader: A 股日线加载器。
+            etf_daily_loader: ETF 日线加载器。
+            profile_loader: 公司概况加载器。
+            benefit_loader: 利润表加载器。
+            cash_loader: 现金流量表加载器。
+            debt_loader: 资产负债表加载器。
+            valuation_loader: 个股日频估值加载器。
+            dividend_loader: 个股分红事件加载器。
+            financial_analysis_loader: 个股主要财务指标加载器。
+        """
+
         self._repository = repository or StockMarketRepository()
         self._stock_universe_loader = stock_universe_loader or _ak_stock_universe
         self._etf_universe_loader = etf_universe_loader or _ak_etf_universe
@@ -50,6 +70,9 @@ class StockMarketSyncService:
         self._benefit_loader = benefit_loader or _ak_financial_benefit
         self._cash_loader = cash_loader or _ak_financial_cash
         self._debt_loader = debt_loader or _ak_financial_debt
+        self._valuation_loader = valuation_loader or _ak_stock_valuation
+        self._dividend_loader = dividend_loader or _ak_stock_dividend
+        self._financial_analysis_loader = financial_analysis_loader or _ak_financial_analysis
 
     def sync_universe(self) -> dict[str, Any]:
         """同步 A 股全市场股票和 ETF 标的列表。
@@ -108,7 +131,26 @@ class StockMarketSyncService:
         if not bars:
             raise ValueError(f"stock daily history returned no data: {instrument.symbol}")
         rows = _with_moving_averages(bars)
+        warnings: list[str] = []
+        if instrument.instrument_type == "stock":
+            valuation_frame: Any = None
+            dividend_frame: Any = None
+            try:
+                valuation_frame = self._valuation_loader(symbol=instrument.code)
+            except Exception as error:
+                message = f"估值数据同步失败：{_compact_error_message(error)}"
+                logger.warning("stock valuation sync failed for %s: %s", instrument.symbol, message)
+                warnings.append(message)
+            try:
+                dividend_frame = self._dividend_loader(symbol=instrument.code)
+            except Exception as error:
+                message = f"分红数据同步失败：{_compact_error_message(error)}"
+                logger.warning("stock dividend sync failed for %s: %s", instrument.symbol, message)
+                warnings.append(message)
+            rows = _valuation_rows_from_frames(rows, valuation_frame, dividend_frame)
         count = self._repository.upsert_daily_bars(instrument.symbol, rows)
+        if warnings:
+            self._repository.record_sync_warning(instrument.symbol, "；".join(warnings))
         return {"daily_bars": count}
 
     def sync_profile(self, instrument: StockInstrument) -> dict[str, int]:
@@ -135,8 +177,22 @@ class StockMarketSyncService:
         benefit_frame = self._benefit_loader(symbol=code)
         cash_frame = self._cash_loader(symbol=code)
         debt_frame = self._debt_loader(symbol=code)
-        metrics = _financial_metrics_from_frames(benefit_frame, cash_frame, debt_frame)
+        warning = ""
+        analysis_frame: Any = None
+        try:
+            analysis_frame = self._financial_analysis_loader(symbol=instrument.symbol)
+        except Exception as error:
+            warning = f"财务分析指标同步失败：{_compact_error_message(error)}"
+            logger.warning("stock financial analysis sync failed for %s: %s", instrument.symbol, warning)
+        metrics = _financial_metrics_from_frames(
+            benefit_frame,
+            cash_frame,
+            debt_frame,
+            analysis_frame,
+        )
         count = self._repository.upsert_financial_metrics(instrument.symbol, metrics)
+        if warning:
+            self._repository.record_sync_warning(instrument.symbol, warning)
         return {"financial_metrics": count}
 
 
@@ -299,6 +355,30 @@ def _ak_financial_debt(**kwargs: Any) -> Any:
     import akshare as ak
 
     return ak.stock_financial_debt_ths(indicator="按报告期", **kwargs)
+
+
+def _ak_stock_valuation(**kwargs: Any) -> Any:
+    """读取东方财富个股日频估值历史。"""
+
+    import akshare as ak
+
+    return ak.stock_value_em(**kwargs)
+
+
+def _ak_stock_dividend(**kwargs: Any) -> Any:
+    """读取东方财富个股分红送配详情。"""
+
+    import akshare as ak
+
+    return ak.stock_fhps_detail_em(**kwargs)
+
+
+def _ak_financial_analysis(**kwargs: Any) -> Any:
+    """读取东方财富个股主要财务指标。"""
+
+    import akshare as ak
+
+    return ak.stock_financial_analysis_indicator_em(indicator="按报告期", **kwargs)
 
 
 def _first_successful_akshare_call(loaders: Sequence[tuple[str, Callable[[], Any]]]) -> Any:
@@ -548,8 +628,13 @@ def _etf_profile(instrument: StockInstrument) -> dict[str, Any]:
     }
 
 
-def _financial_metrics_from_frames(benefit_frame: Any, cash_frame: Any, debt_frame: Any) -> list[dict[str, Any]]:
-    """从利润表、现金流量表、资产负债表抽取前端需要的财报指标。"""
+def _financial_metrics_from_frames(
+    benefit_frame: Any,
+    cash_frame: Any,
+    debt_frame: Any,
+    analysis_frame: Any = None,
+) -> list[dict[str, Any]]:
+    """从三张财务报表和主要指标表抽取前端需要的财报指标。"""
 
     metrics_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
     specs = [
@@ -563,6 +648,16 @@ def _financial_metrics_from_frames(benefit_frame: Any, cash_frame: Any, debt_fra
         for item in _extract_metric_rows(frame, metric, label, columns):
             key = (str(item["report_period"]), str(item["report_type"]), str(item["metric"]))
             metrics_by_key[key] = item
+    percentage_specs = [
+        ("roe", "ROE", ["ROEJQ", "净资产收益率"]),
+        ("revenue_yoy", "营收同比", ["TOTALOPERATEREVETZ", "营业总收入同比增长"]),
+        ("net_profit_yoy", "净利润同比", ["PARENTNETPROFITTZ", "归属净利润同比增长"]),
+        ("debt_asset_ratio", "资产负债率", ["ZCFZL", "资产负债率"]),
+    ]
+    for metric, label, columns in percentage_specs:
+        for item in _extract_percentage_metric_rows(analysis_frame, metric, label, columns):
+            key = (str(item["report_period"]), str(item["report_type"]), str(item["metric"]))
+            metrics_by_key[key] = item
     return sorted(metrics_by_key.values(), key=lambda item: (str(item["report_period"]), str(item["metric"])))
 
 
@@ -570,7 +665,7 @@ def _extract_metric_rows(frame: Any, metric: str, label: str, columns: Sequence[
     """从单张财报表抽取指定列。"""
 
     rows: list[dict[str, Any]] = []
-    for _, row in frame.iterrows():
+    for _, row in _iter_frame_rows(frame):
         report_period = _cell(row, ["报告期", "日期", "report_period"])
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", report_period):
             continue
@@ -588,6 +683,127 @@ def _extract_metric_rows(frame: Any, metric: str, label: str, columns: Sequence[
             "provider_key": "akshare_financial",
         })
     return rows
+
+
+def _extract_percentage_metric_rows(
+    frame: Any,
+    metric: str,
+    label: str,
+    columns: Sequence[str],
+) -> list[dict[str, Any]]:
+    """从主要财务指标表抽取单项百分比序列。
+
+    Args:
+        frame: 东方财富主要财务指标 DataFrame。
+        metric: 稳定的指标标识。
+        label: 前端展示名称。
+        columns: 上游字段候选列表。
+
+    Returns:
+        按报告期标准化的百分比指标列表。
+    """
+
+    rows: list[dict[str, Any]] = []
+    for _, row in _iter_frame_rows(frame):
+        report_period = _cell(row, ["REPORT_DATE", "报告期", "日期", "report_period"])[:10]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", report_period):
+            continue
+        value = _parse_number(_first_row_value(row, columns))
+        if value is None:
+            continue
+        rows.append({
+            "report_period": report_period,
+            "report_type": "yearly" if report_period.endswith("12-31") else "quarterly",
+            "metric": metric,
+            "label": label,
+            "value": round(value, 4),
+            "unit": "%",
+            "provider_key": "akshare_financial_analysis",
+        })
+    return rows
+
+
+def _valuation_rows_from_frames(
+    bars: Sequence[Mapping[str, Any]],
+    valuation_frame: Any,
+    dividend_frame: Any,
+) -> list[dict[str, Any]]:
+    """将日频估值和已实施分红事件合并到 OHLCV 行。
+
+    Args:
+        bars: 已计算均线的日线记录。
+        valuation_frame: 东方财富估值历史 DataFrame。
+        dividend_frame: 东方财富分红送配详情 DataFrame。
+
+    Returns:
+        增加 PE、PB、股息率和总市值字段的日线记录。
+    """
+
+    valuation_by_date: dict[str, dict[str, float | None]] = {}
+    for _, row in _iter_frame_rows(valuation_frame):
+        trade_date = _cell(row, ["数据日期", "日期", "date", "trade_date"])[:10]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", trade_date):
+            continue
+        valuation_by_date[trade_date] = {
+            "pe_ttm": _parse_number(_first_row_value(row, ["PE(TTM)", "PE_TTM", "市盈率(TTM)"])),
+            "pb_mrq": _parse_number(_first_row_value(row, ["市净率", "PB_MRQ", "PB(MRQ)"])),
+            "total_market_cap": _parse_number(
+                _first_row_value(row, ["总市值", "TOTAL_MARKET_CAP", "total_market_cap"])
+            ),
+        }
+
+    dividends: list[tuple[date, float]] = []
+    for _, row in _iter_frame_rows(dividend_frame):
+        progress = _cell(row, ["方案进度", "进度", "status"])
+        ex_date_text = _cell(row, ["除权除息日", "除息日", "ex_date"])[:10]
+        cash_per_ten = _parse_number(
+            _first_row_value(row, ["现金分红-现金分红比例", "派息", "cash_dividend_per_10"])
+        )
+        if "实施" not in progress or cash_per_ten is None:
+            continue
+        try:
+            ex_date = date.fromisoformat(ex_date_text)
+        except ValueError:
+            continue
+        dividends.append((ex_date, cash_per_ten / 10))
+
+    rows: list[dict[str, Any]] = []
+    for item in bars:
+        row = dict(item)
+        trade_date_text = str(item["trade_date"])[:10]
+        valuation = valuation_by_date.get(trade_date_text, {})
+        row["pe_ttm"] = valuation.get("pe_ttm")
+        row["pb_mrq"] = valuation.get("pb_mrq")
+        row["total_market_cap"] = valuation.get("total_market_cap")
+        close_price = _parse_number(item.get("close_price"))
+        try:
+            trade_date = date.fromisoformat(trade_date_text)
+        except ValueError:
+            trade_date = None
+        if trade_date is None or close_price is None or close_price == 0:
+            row["dividend_yield_ttm"] = None
+        else:
+            window_start = trade_date - timedelta(days=365)
+            cash_per_share = sum(
+                amount
+                for ex_date, amount in dividends
+                if window_start < ex_date <= trade_date
+            )
+            row["dividend_yield_ttm"] = (
+                round(cash_per_share / close_price * 100, 4)
+                if cash_per_share > 0
+                else None
+            )
+        rows.append(row)
+    return rows
+
+
+def _iter_frame_rows(frame: Any) -> Any:
+    """安全返回 DataFrame 行迭代器，空值按空表处理。"""
+
+    if frame is None or not hasattr(frame, "iterrows"):
+        return ()
+    return frame.iterrows()
 
 
 def _infer_stock_attributes(instrument: StockInstrument, industry: str) -> list[str]:

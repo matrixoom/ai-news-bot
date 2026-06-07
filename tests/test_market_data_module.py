@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 import pandas as pd
 
+import src.services.stock_market_sync_service as stock_market_sync_service
 from src.domain.external_data import MarketIndexHistoryPoint, MarketIndexSnapshot
 from src.domain.market_monitoring import TrackedIndexDefinition
 from src.providers.contracts import ProviderAvailability, ProviderStatus
@@ -35,7 +36,11 @@ from src.services.stock_market_sharding import (
     resolve_market_stock_shard_path,
 )
 from src.services.stock_market_service import StockMarketService
-from src.services.stock_market_sync_service import StockMarketSyncService, _ak_etf_daily, _ak_stock_daily
+from src.services.stock_market_sync_service import (
+    StockMarketSyncService,
+    _ak_etf_daily,
+    _ak_stock_daily,
+)
 
 
 class StockMarketShardingTests(unittest.TestCase):
@@ -103,6 +108,48 @@ class StockMarketShardingTests(unittest.TestCase):
 
         self.assertIsNotNone(table)
         self.assertIsNotNone(index)
+
+    def test_stock_shard_initializer_adds_valuation_columns_to_existing_table(self) -> None:
+        """校验旧分片初始化时会幂等补齐四个可空估值字段。"""
+
+        shard_path = self.shard_dir / "SH" / "market_stock_SH_51.db"
+        shard_path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(shard_path)) as connection:
+            connection.execute(
+                """
+                CREATE TABLE market_stock_daily_bar (
+                    symbol TEXT NOT NULL,
+                    trade_date TEXT NOT NULL,
+                    open_price REAL NOT NULL,
+                    close_price REAL NOT NULL,
+                    high_price REAL NOT NULL,
+                    low_price REAL NOT NULL,
+                    volume REAL NOT NULL,
+                    ma5 REAL,
+                    ma10 REAL,
+                    ma20 REAL,
+                    ma60 REAL,
+                    ma120 REAL,
+                    provider_key TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    PRIMARY KEY(symbol, trade_date)
+                )
+                """
+            )
+            connection.commit()
+
+        initialize_market_stock_shard(shard_path)
+        initialize_market_stock_shard(shard_path)
+
+        with closing(sqlite3.connect(shard_path)) as connection:
+            columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(market_stock_daily_bar)").fetchall()
+            }
+        self.assertTrue(
+            {"pe_ttm", "pb_mrq", "dividend_yield_ttm", "total_market_cap"} <= columns
+        )
 
     def test_legacy_flat_shards_move_into_exchange_directories(self) -> None:
         """校验旧扁平分片会移动到交易所目录且数据保持不变。"""
@@ -378,6 +425,10 @@ class StockMarketModuleTests(unittest.TestCase):
                     "ma20": None,
                     "ma60": None,
                     "ma120": None,
+                    "pe_ttm": 5.1,
+                    "pb_mrq": 0.45,
+                    "dividend_yield_ttm": 3.2,
+                    "total_market_cap": 210_000_000_000,
                 }
             ],
         )
@@ -396,6 +447,10 @@ class StockMarketModuleTests(unittest.TestCase):
                     "ma20": None,
                     "ma60": None,
                     "ma120": None,
+                    "pe_ttm": 5.3,
+                    "pb_mrq": 0.48,
+                    "dividend_yield_ttm": 3.4,
+                    "total_market_cap": 213_077_000_000,
                 }
             ],
         )
@@ -405,6 +460,10 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(len(points), 1)
         self.assertEqual(points[0].close_price, 12.5)
         self.assertEqual(points[0].volume, 200)
+        self.assertEqual(points[0].pe_ttm, 5.3)
+        self.assertEqual(points[0].pb_mrq, 0.48)
+        self.assertEqual(points[0].dividend_yield_ttm, 3.4)
+        self.assertEqual(points[0].total_market_cap, 213_077_000_000)
         self.assertEqual(repository.get_sync_state("000001.SZ").daily_point_count, 1)
         self.assertTrue((self.db_path.parent / "market" / "SZ" / "market_stock_SZ_00.db").exists())
         with closing(sqlite3.connect(self.db_path)) as connection:
@@ -412,6 +471,54 @@ class StockMarketModuleTests(unittest.TestCase):
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
             ).fetchone()
         self.assertIsNone(legacy_table)
+
+    def test_daily_bar_upsert_preserves_valuation_when_refresh_has_no_optional_values(self) -> None:
+        """校验附加行情源缺值时不会清空已保存的估值指标。"""
+
+        repository = self._repository()
+        initial_bar = {
+            "trade_date": "2026-06-05",
+            "open_price": 10,
+            "close_price": 11,
+            "high_price": 12,
+            "low_price": 9,
+            "volume": 100,
+            "ma5": None,
+            "ma10": None,
+            "ma20": None,
+            "ma60": None,
+            "ma120": None,
+            "pe_ttm": 5.1,
+            "pb_mrq": 0.45,
+            "dividend_yield_ttm": 3.2,
+            "total_market_cap": 210_000_000_000,
+        }
+        repository.upsert_daily_bars("000001.SZ", [initial_bar])
+
+        repository.upsert_daily_bars(
+            "000001.SZ",
+            [
+                {
+                    **initial_bar,
+                    "close_price": 11.5,
+                    "pe_ttm": None,
+                    "pb_mrq": None,
+                    "dividend_yield_ttm": None,
+                    "total_market_cap": None,
+                }
+            ],
+        )
+
+        point = repository.load_daily_bars(
+            symbol="000001.SZ",
+            start_date="2026-06-05",
+            end_date="2026-06-05",
+        )[0]
+        self.assertEqual(point.close_price, 11.5)
+        self.assertEqual(point.pe_ttm, 5.1)
+        self.assertEqual(point.pb_mrq, 0.45)
+        self.assertEqual(point.dividend_yield_ttm, 3.2)
+        self.assertEqual(point.total_market_cap, 210_000_000_000)
 
     def test_legacy_stock_daily_bars_migrate_to_shards_and_remove_main_table(self) -> None:
         """校验旧表数据按规则迁移，校验成功后才从主库移除。"""
@@ -590,6 +697,240 @@ class StockMarketModuleTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNotNone(table)
 
+    def test_repository_precreate_reinitializes_existing_shards_for_schema_upgrades(self) -> None:
+        """校验预建模式会幂等初始化现有分片，确保新增列可统一迁移。"""
+
+        shard_path = self.db_path.parent / "market" / "SH" / "market_stock_SH_51.db"
+        shard_path.parent.mkdir(parents=True, exist_ok=True)
+        shard_path.touch()
+
+        with patch(
+            "src.services.stock_market_repository.initialize_all_market_stock_shards"
+        ) as initialize_all:
+            StockMarketRepository(self.db_path, precreate_shards=True)
+
+        initialize_all.assert_called_once_with(self.db_path.parent / "market")
+
+    def test_valuation_rows_merge_by_trade_date_and_compute_ttm_dividend_yield(self) -> None:
+        """校验估值按交易日合并，并按过去 365 天已实施派息计算股息率。"""
+
+        bars = [
+            {
+                "trade_date": "2026-06-05",
+                "open_price": 10,
+                "close_price": 10,
+                "high_price": 11,
+                "low_price": 9,
+                "volume": 100,
+            },
+            {
+                "trade_date": "2026-06-06",
+                "open_price": 19,
+                "close_price": 20,
+                "high_price": 21,
+                "low_price": 18,
+                "volume": 200,
+            },
+        ]
+        valuation_frame = pd.DataFrame(
+            [
+                {
+                    "数据日期": date(2026, 6, 5),
+                    "PE(TTM)": 5.1,
+                    "市净率": 0.45,
+                    "总市值": 210_000_000_000,
+                },
+                {
+                    "数据日期": date(2026, 6, 6),
+                    "PE(TTM)": None,
+                    "市净率": 0.48,
+                    "总市值": 213_077_000_000,
+                },
+            ]
+        )
+        dividend_frame = pd.DataFrame(
+            [
+                {
+                    "除权除息日": date(2025, 10, 15),
+                    "现金分红-现金分红比例": 2.4,
+                    "方案进度": "实施分配",
+                },
+                {
+                    "除权除息日": date(2026, 6, 5),
+                    "现金分红-现金分红比例": 3.6,
+                    "方案进度": "实施分配",
+                },
+                {
+                    "除权除息日": date(2026, 6, 6),
+                    "现金分红-现金分红比例": 9.9,
+                    "方案进度": "董事会预案",
+                },
+            ]
+        )
+
+        rows = stock_market_sync_service._valuation_rows_from_frames(
+            bars,
+            valuation_frame,
+            dividend_frame,
+        )
+
+        self.assertEqual(rows[0]["pe_ttm"], 5.1)
+        self.assertEqual(rows[0]["pb_mrq"], 0.45)
+        self.assertEqual(rows[0]["total_market_cap"], 210_000_000_000)
+        self.assertEqual(rows[0]["dividend_yield_ttm"], 6.0)
+        self.assertIsNone(rows[1]["pe_ttm"])
+        self.assertEqual(rows[1]["dividend_yield_ttm"], 3.0)
+
+    def test_valuation_source_failure_keeps_daily_bars_available(self) -> None:
+        """校验附加估值源失败时仍写入基础 OHLCV，并记录可展示告警。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        instrument = repository.get_instrument("000001.SZ")
+        syncer = StockMarketSyncService(
+            repository=repository,
+            stock_daily_loader=lambda **_: pd.DataFrame(
+                [
+                    {
+                        "日期": "2026-06-05",
+                        "开盘": 10,
+                        "收盘": 11,
+                        "最高": 12,
+                        "最低": 9,
+                        "成交量": 100,
+                    }
+                ]
+            ),
+            valuation_loader=Mock(side_effect=RuntimeError("valuation unavailable")),
+            dividend_loader=lambda **_: pd.DataFrame(),
+        )
+
+        result = syncer.sync_symbol_window(
+            instrument,
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 7),
+        )
+        points = repository.load_daily_bars(
+            symbol="000001.SZ",
+            start_date="2026-06-01",
+            end_date="2026-06-07",
+        )
+
+        self.assertEqual(result["daily_bars"], 1)
+        self.assertEqual(points[0].close_price, 11)
+        self.assertIsNone(points[0].pe_ttm)
+        self.assertIn("估值", repository.get_sync_state("000001.SZ").warning_message)
+
+    def test_financial_analysis_extracts_quarterly_quality_metrics(self) -> None:
+        """校验东方财富主要财务指标会转换为统一季度百分比序列。"""
+
+        analysis_frame = pd.DataFrame(
+            [
+                {
+                    "REPORT_DATE": "2026-03-31 00:00:00",
+                    "ROEJQ": 2.83,
+                    "TOTALOPERATEREVETZ": 4.65,
+                    "PARENTNETPROFITTZ": 3.03,
+                    "ZCFZL": 90.98,
+                },
+                {
+                    "REPORT_DATE": "2025-12-31 00:00:00",
+                    "ROEJQ": 9.15,
+                    "TOTALOPERATEREVETZ": -10.4,
+                    "PARENTNETPROFITTZ": -4.21,
+                    "ZCFZL": 90.7,
+                },
+            ]
+        )
+
+        metrics = stock_market_sync_service._financial_metrics_from_frames(
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            analysis_frame,
+        )
+        values = {
+            (item["report_period"], item["report_type"], item["metric"]): item["value"]
+            for item in metrics
+        }
+
+        self.assertEqual(values[("2026-03-31", "quarterly", "roe")], 2.83)
+        self.assertEqual(values[("2026-03-31", "quarterly", "revenue_yoy")], 4.65)
+        self.assertEqual(values[("2026-03-31", "quarterly", "net_profit_yoy")], 3.03)
+        self.assertEqual(values[("2026-03-31", "quarterly", "debt_asset_ratio")], 90.98)
+        self.assertEqual(values[("2025-12-31", "yearly", "roe")], 9.15)
+
+    def test_financial_metric_presence_can_require_new_metric_set(self) -> None:
+        """校验旧财务数据不完整时会触发新增指标补采。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_financial_metrics(
+            "000001.SZ",
+            [
+                {
+                    "report_period": "2026-03-31",
+                    "report_type": "quarterly",
+                    "metric": "revenue",
+                    "label": "营业收入",
+                    "value": 352.77,
+                    "unit": "亿元",
+                }
+            ],
+        )
+
+        self.assertTrue(repository.has_financial_metrics("000001.SZ"))
+        self.assertFalse(
+            repository.has_financial_metrics(
+                "000001.SZ",
+                required_metrics={"revenue", "roe"},
+            )
+        )
+
+        repository.upsert_financial_metrics(
+            "000001.SZ",
+            [
+                {
+                    "report_period": "2026-03-31",
+                    "report_type": "quarterly",
+                    "metric": "roe",
+                    "label": "ROE",
+                    "value": 2.83,
+                    "unit": "%",
+                }
+            ],
+        )
+        self.assertTrue(
+            repository.has_financial_metrics(
+                "000001.SZ",
+                required_metrics={"revenue", "roe"},
+            )
+        )
+
     def test_stock_detail_lazy_loads_requested_window_when_history_absent(self) -> None:
         """校验首次查看股票详情时，会懒加载日线并返回概况和财报数据。"""
         repository = self._repository()
@@ -638,6 +979,27 @@ class StockMarketModuleTests(unittest.TestCase):
                 {"报告期": "2025-12-31", "*负债合计": "5.37万亿", "*资产合计": "5.93万亿"},
             ]
         )
+        valuation_frame = pd.DataFrame(
+            [
+                {
+                    "数据日期": date(2026, 3, 1),
+                    "PE(TTM)": 5.1,
+                    "市净率": 0.48,
+                    "总市值": 213_077_000_000,
+                }
+            ]
+        )
+        financial_analysis_frame = pd.DataFrame(
+            [
+                {
+                    "REPORT_DATE": "2026-03-31 00:00:00",
+                    "ROEJQ": 2.83,
+                    "TOTALOPERATEREVETZ": 4.65,
+                    "PARENTNETPROFITTZ": 3.03,
+                    "ZCFZL": 90.98,
+                }
+            ]
+        )
         syncer = StockMarketSyncService(
             repository=repository,
             stock_daily_loader=lambda **_: daily_frame,
@@ -645,6 +1007,9 @@ class StockMarketModuleTests(unittest.TestCase):
             benefit_loader=lambda **_: benefit_frame,
             cash_loader=lambda **_: cash_frame,
             debt_loader=lambda **_: debt_frame,
+            valuation_loader=lambda **_: valuation_frame,
+            dividend_loader=lambda **_: pd.DataFrame(),
+            financial_analysis_loader=lambda **_: financial_analysis_frame,
         )
         service = StockMarketService(repository=repository, sync_service=syncer)
 
@@ -659,9 +1024,29 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(payload["instrument"]["name"], "平安银行")
         self.assertEqual(len(payload["daily_bars"]), 7)
         self.assertEqual(payload["daily_bars"][4]["ma5"], 14.0)
+        self.assertEqual(payload["daily_bars"][0]["pe_ttm"], 5.1)
+        self.assertEqual(payload["daily_bars"][0]["pb_mrq"], 0.48)
+        self.assertIsNone(payload["daily_bars"][0]["dividend_yield_ttm"])
+        self.assertEqual(payload["daily_bars"][0]["total_market_cap"], 2130.77)
         self.assertEqual(payload["profile"]["industry"], "银行")
         revenue_series = next(series for series in payload["financials"]["series"] if series["metric"] == "revenue")
         self.assertEqual(revenue_series["points"][0]["value"], 352.77)
+        self.assertEqual(
+            [series["metric"] for series in payload["financials"]["series"]],
+            [
+                "revenue",
+                "expense",
+                "cash_flow",
+                "asset",
+                "liability",
+                "roe",
+                "revenue_yoy",
+                "net_profit_yoy",
+                "debt_asset_ratio",
+            ],
+        )
+        roe_series = next(series for series in payload["financials"]["series"] if series["metric"] == "roe")
+        self.assertEqual(roe_series["points"][0], {"period": "2026-03-31", "value": 2.83, "unit": "%"})
 
     def test_stock_detail_defaults_to_one_month_when_history_absent(self) -> None:
         """校验未指定范围时，详情查询和首次懒同步都使用最近一个月。"""

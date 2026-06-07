@@ -118,6 +118,10 @@ export type StockDailyBar = {
   ma20: number | null;
   ma60: number | null;
   ma120: number | null;
+  pe_ttm: number | null;
+  pb_mrq: number | null;
+  dividend_yield_ttm: number | null;
+  total_market_cap: number | null;
 };
 
 export type StockProfile = {

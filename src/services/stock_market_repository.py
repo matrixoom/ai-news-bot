@@ -9,12 +9,11 @@ from datetime import UTC, datetime
 import json
 from pathlib import Path
 import sqlite3
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any, Collection, Iterator, Mapping, Sequence
 
 from src.services.stock_market_sharding import (
     initialize_all_market_stock_shards,
     initialize_market_stock_shard,
-    iter_market_stock_shard_paths,
     migrate_legacy_market_stock_shards,
     resolve_market_stock_shard_path,
 )
@@ -55,6 +54,10 @@ class StockDailyBar:
     ma20: float | None
     ma60: float | None
     ma120: float | None
+    pe_ttm: float | None
+    pb_mrq: float | None
+    dividend_yield_ttm: float | None
+    total_market_cap: float | None
 
 
 @dataclass(frozen=True)
@@ -298,6 +301,10 @@ class StockMarketRepository:
                 _optional_float(item.get("ma20")),
                 _optional_float(item.get("ma60")),
                 _optional_float(item.get("ma120")),
+                _optional_float(item.get("pe_ttm")),
+                _optional_float(item.get("pb_mrq")),
+                _optional_float(item.get("dividend_yield_ttm")),
+                _optional_float(item.get("total_market_cap")),
                 str(item.get("provider_key", "akshare")),
                 str(item.get("source_url", "https://akshare.akfamily.xyz/")),
                 timestamp,
@@ -309,8 +316,9 @@ class StockMarketRepository:
                 """
                 INSERT INTO market_stock_daily_bar (
                     symbol, trade_date, open_price, close_price, high_price, low_price,
-                    volume, ma5, ma10, ma20, ma60, ma120, provider_key, source_url, last_seen_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    volume, ma5, ma10, ma20, ma60, ma120, pe_ttm, pb_mrq,
+                    dividend_yield_ttm, total_market_cap, provider_key, source_url, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(symbol, trade_date) DO UPDATE SET
                     open_price=excluded.open_price,
                     close_price=excluded.close_price,
@@ -322,6 +330,16 @@ class StockMarketRepository:
                     ma20=excluded.ma20,
                     ma60=excluded.ma60,
                     ma120=excluded.ma120,
+                    pe_ttm=COALESCE(excluded.pe_ttm, market_stock_daily_bar.pe_ttm),
+                    pb_mrq=COALESCE(excluded.pb_mrq, market_stock_daily_bar.pb_mrq),
+                    dividend_yield_ttm=COALESCE(
+                        excluded.dividend_yield_ttm,
+                        market_stock_daily_bar.dividend_yield_ttm
+                    ),
+                    total_market_cap=COALESCE(
+                        excluded.total_market_cap,
+                        market_stock_daily_bar.total_market_cap
+                    ),
                     provider_key=excluded.provider_key,
                     source_url=excluded.source_url,
                     last_seen_at=excluded.last_seen_at
@@ -349,7 +367,8 @@ class StockMarketRepository:
             rows = connection.execute(
                 """
                 SELECT symbol, trade_date, open_price, close_price, high_price, low_price,
-                       volume, ma5, ma10, ma20, ma60, ma120
+                       volume, ma5, ma10, ma20, ma60, ma120, pe_ttm, pb_mrq,
+                       dividend_yield_ttm, total_market_cap
                 FROM market_stock_daily_bar
                 WHERE symbol = ? AND trade_date >= ? AND trade_date <= ?
                 ORDER BY trade_date ASC
@@ -481,15 +500,31 @@ class StockMarketRepository:
             )
         return len(rows)
 
-    def has_financial_metrics(self, symbol: str) -> bool:
-        """判断某只股票是否已有财报指标。"""
+    def has_financial_metrics(
+        self,
+        symbol: str,
+        *,
+        required_metrics: Collection[str] | None = None,
+    ) -> bool:
+        """判断某只股票是否已有财报指标或指定的完整指标集合。
+
+        Args:
+            symbol: 带交易所后缀的股票代码。
+            required_metrics: 必须全部存在的指标标识；不传时只判断是否有任意指标。
+
+        Returns:
+            已满足所需指标条件时返回 `True`。
+        """
 
         with self._session() as connection:
-            row = connection.execute(
-                "SELECT 1 FROM market_stock_financial_metric WHERE symbol = ? LIMIT 1",
+            rows = connection.execute(
+                "SELECT DISTINCT metric FROM market_stock_financial_metric WHERE symbol = ?",
                 (symbol,),
-            ).fetchone()
-        return row is not None
+            ).fetchall()
+        existing_metrics = {str(row["metric"]) for row in rows}
+        if required_metrics is None:
+            return bool(existing_metrics)
+        return set(required_metrics) <= existing_metrics
 
     def load_financial_metrics(self, *, symbol: str, report_type: str) -> list[StockFinancialMetric]:
         """读取季度或年度财报指标。"""
@@ -640,8 +675,7 @@ class StockMarketRepository:
                 """
             )
         migrate_legacy_market_stock_shards(self._db_path.parent, self._shard_dir)
-        shard_paths = iter_market_stock_shard_paths(self._shard_dir)
-        if self._precreate_shards and any(not path.exists() for path in shard_paths):
+        if self._precreate_shards:
             initialize_all_market_stock_shards(self._shard_dir)
         self._migrate_legacy_daily_bars()
 
@@ -660,6 +694,15 @@ class StockMarketRepository:
                     "SELECT DISTINCT symbol FROM market_stock_daily_bar ORDER BY symbol"
                 ).fetchall()
             ]
+            source_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(market_stock_daily_bar)").fetchall()
+            }
+
+        valuation_projection = ", ".join(
+            column if column in source_columns else f"NULL AS {column}"
+            for column in ("pe_ttm", "pb_mrq", "dividend_yield_ttm", "total_market_cap")
+        )
 
         symbols_by_shard: dict[Path, list[str]] = defaultdict(list)
         for symbol in symbols:
@@ -677,7 +720,8 @@ class StockMarketRepository:
                     source_cursor = source_connection.execute(
                         f"""
                         SELECT symbol, trade_date, open_price, close_price, high_price, low_price,
-                               volume, ma5, ma10, ma20, ma60, ma120, provider_key, source_url, last_seen_at
+                               volume, ma5, ma10, ma20, ma60, ma120, {valuation_projection},
+                               provider_key, source_url, last_seen_at
                         FROM market_stock_daily_bar
                         WHERE symbol IN ({placeholders})
                         ORDER BY symbol, trade_date
@@ -689,8 +733,9 @@ class StockMarketRepository:
                             """
                             INSERT INTO market_stock_daily_bar (
                                 symbol, trade_date, open_price, close_price, high_price, low_price,
-                                volume, ma5, ma10, ma20, ma60, ma120, provider_key, source_url, last_seen_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                volume, ma5, ma10, ma20, ma60, ma120, pe_ttm, pb_mrq,
+                                dividend_yield_ttm, total_market_cap, provider_key, source_url, last_seen_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT(symbol, trade_date) DO UPDATE SET
                                 open_price=excluded.open_price,
                                 close_price=excluded.close_price,
@@ -702,6 +747,16 @@ class StockMarketRepository:
                                 ma20=excluded.ma20,
                                 ma60=excluded.ma60,
                                 ma120=excluded.ma120,
+                                pe_ttm=COALESCE(excluded.pe_ttm, market_stock_daily_bar.pe_ttm),
+                                pb_mrq=COALESCE(excluded.pb_mrq, market_stock_daily_bar.pb_mrq),
+                                dividend_yield_ttm=COALESCE(
+                                    excluded.dividend_yield_ttm,
+                                    market_stock_daily_bar.dividend_yield_ttm
+                                ),
+                                total_market_cap=COALESCE(
+                                    excluded.total_market_cap,
+                                    market_stock_daily_bar.total_market_cap
+                                ),
                                 provider_key=excluded.provider_key,
                                 source_url=excluded.source_url,
                                 last_seen_at=excluded.last_seen_at
@@ -881,6 +936,10 @@ class StockMarketRepository:
             ma20=_optional_float(row["ma20"]),
             ma60=_optional_float(row["ma60"]),
             ma120=_optional_float(row["ma120"]),
+            pe_ttm=_optional_float(row["pe_ttm"]),
+            pb_mrq=_optional_float(row["pb_mrq"]),
+            dividend_yield_ttm=_optional_float(row["dividend_yield_ttm"]),
+            total_market_cap=_optional_float(row["total_market_cap"]),
         )
 
     @contextmanager

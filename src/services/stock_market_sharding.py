@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS market_stock_daily_bar (
     ma20 REAL,
     ma60 REAL,
     ma120 REAL,
+    pe_ttm REAL,
+    pb_mrq REAL,
+    dividend_yield_ttm REAL,
+    total_market_cap REAL,
     provider_key TEXT NOT NULL,
     source_url TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
@@ -35,6 +39,13 @@ MARKET_STOCK_DAILY_BAR_INDEX_SQL: Final[str] = """
 CREATE INDEX IF NOT EXISTS idx_market_stock_daily_bar_symbol_date
 ON market_stock_daily_bar(symbol, trade_date)
 """
+
+MARKET_STOCK_DAILY_BAR_OPTIONAL_COLUMNS: Final[dict[str, str]] = {
+    "pe_ttm": "REAL",
+    "pb_mrq": "REAL",
+    "dividend_yield_ttm": "REAL",
+    "total_market_cap": "REAL",
+}
 
 
 def resolve_market_stock_shard_name(symbol: str) -> str:
@@ -146,6 +157,15 @@ def initialize_market_stock_shard(db_path: str | Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(path)) as connection:
         connection.execute(MARKET_STOCK_DAILY_BAR_TABLE_SQL)
+        existing_columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(market_stock_daily_bar)").fetchall()
+        }
+        for column_name, column_type in MARKET_STOCK_DAILY_BAR_OPTIONAL_COLUMNS.items():
+            if column_name not in existing_columns:
+                connection.execute(
+                    f"ALTER TABLE market_stock_daily_bar ADD COLUMN {column_name} {column_type}"
+                )
         connection.execute(MARKET_STOCK_DAILY_BAR_INDEX_SQL)
         connection.commit()
     return path

@@ -50,7 +50,17 @@ const LISTING_STATUS_OPTIONS = [
   { value: "listed", label: "上市" },
 ];
 
-const FINANCIAL_ORDER = ["revenue", "expense", "cash_flow", "asset", "liability"];
+const FINANCIAL_ORDER = [
+  "revenue",
+  "expense",
+  "cash_flow",
+  "asset",
+  "liability",
+  "roe",
+  "revenue_yoy",
+  "net_profit_yoy",
+  "debt_asset_ratio",
+];
 const DEFAULT_INSTRUMENT_PAGE_SIZE = 10;
 const INSTRUMENT_TABLE_HEADER_HEIGHT = 41;
 const INSTRUMENT_ROW_HEIGHT = 43;
@@ -670,8 +680,8 @@ function RangeToolbar(props: {
           {(
             [
               { value: "none", label: "不复权" },
-              { value: "forward", label: "前复权" },
-              { value: "backward", label: "后复权" },
+              // { value: "forward", label: "前复权" },
+              // { value: "backward", label: "后复权" },
             ] as const
           ).map((option) => {
             const isSelected = props.priceAdjustment === option.value;
@@ -728,17 +738,30 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         axisPointer: { type: "cross" },
       },
       legend: {
-        top: 5,
-        left: "center",
+        top: 8,
+        right: 8,
+        bottom: 32,
+        orient: "vertical",
         type: "scroll",
         itemWidth: 16,
         itemHeight: 8,
         textStyle: { color: "#64748b", fontSize: 11 },
-        data: ["K线", "MA5", "MA10", "MA20", "MA60", "MA120"],
+        data: [
+          "K线",
+          "MA5",
+          "MA10",
+          "MA20",
+          "MA60",
+          "MA120",
+          "PE(TTM)",
+          "PB(MRQ)",
+          "股息率(TTM)",
+          "总市值",
+        ],
       },
       grid: [
-        { left: 54, right: 22, top: 38, height: "56%" },
-        { left: 54, right: 22, top: "70%", height: "14%" },
+        { left: 54, right: 112, top: 38, height: "56%" },
+        { left: 54, right: 112, top: "70%", height: "14%" },
       ],
       xAxis: [
         {
@@ -771,6 +794,10 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
           axisLine: { show: false },
           splitLine: { lineStyle: { color: "#edf2f7" } },
         },
+        hiddenValuationAxis(0),
+        hiddenValuationAxis(0),
+        hiddenValuationAxis(0),
+        hiddenValuationAxis(0),
       ],
       dataZoom: [
         { type: "inside", xAxisIndex: [0, 1] },
@@ -788,6 +815,34 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         lineSeries("MA20", props.bars.map((bar) => bar.ma20), "#a78bfa"),
         lineSeries("MA60", props.bars.map((bar) => bar.ma60), "#34d399"),
         lineSeries("MA120", props.bars.map((bar) => bar.ma120), "#93c5fd"),
+        valuationLineSeries(
+          "PE(TTM)",
+          props.bars.map((bar) => bar.pe_ttm),
+          "#f97316",
+          2,
+          "倍",
+        ),
+        valuationLineSeries(
+          "PB(MRQ)",
+          props.bars.map((bar) => bar.pb_mrq),
+          "#ec4899",
+          3,
+          "倍",
+        ),
+        valuationLineSeries(
+          "股息率(TTM)",
+          props.bars.map((bar) => bar.dividend_yield_ttm),
+          "#14b8a6",
+          4,
+          "%",
+        ),
+        valuationLineSeries(
+          "总市值",
+          props.bars.map((bar) => bar.total_market_cap),
+          "#6366f1",
+          5,
+          "亿元",
+        ),
         {
           name: "成交量",
           type: "bar",
@@ -1044,6 +1099,7 @@ function FinancialMetricCard(props: { series: StockFinancialSeries }) {
     latestPoint && previousPoint && previousPoint.value !== 0
       ? ((latestPoint.value - previousPoint.value) / Math.abs(previousPoint.value)) * 100
       : 0;
+  const usesLineChart = unit === "%" || props.series.metric === "liability";
   const option = useMemo((): echarts.EChartsOption => {
     return {
       animation: false,
@@ -1072,9 +1128,9 @@ function FinancialMetricCard(props: { series: StockFinancialSeries }) {
       series: [
         {
           name: props.series.label,
-          type: props.series.metric === "liability" ? "line" : "bar",
+          type: usesLineChart ? "line" : "bar",
           smooth: true,
-          symbol: props.series.metric === "liability" ? "circle" : "none",
+          symbol: usesLineChart ? "circle" : "none",
           barWidth: 12,
           itemStyle: { color: "#3b82f6" },
           lineStyle: { color: "#3b82f6", width: 2 },
@@ -1088,7 +1144,7 @@ function FinancialMetricCard(props: { series: StockFinancialSeries }) {
         textStyle: { fontSize: 10, lineHeight: 15 },
       },
     };
-  }, [props.series, unit]);
+  }, [props.series, unit, usesLineChart]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -1199,6 +1255,53 @@ function lineSeries(name: string, data: Array<number | null>, color: string) {
     data,
     lineStyle: { color, width: 1.4 },
     itemStyle: { color },
+  };
+}
+
+/**
+ * 创建不显示刻度的估值轴，确保不同量纲不会改变价格轴范围。
+ * @param gridIndex 估值序列所在的主图网格。
+ * @returns ECharts 隐藏数值轴配置。
+ */
+function hiddenValuationAxis(gridIndex: number) {
+  return {
+    type: "value" as const,
+    gridIndex,
+    scale: true,
+    show: false,
+  };
+}
+
+/**
+ * 创建日频估值折线，并为 tooltip 补充指标单位。
+ * @param name 图例名称。
+ * @param data 与交易日对齐的可空指标值。
+ * @param color 折线颜色。
+ * @param yAxisIndex 独立估值轴索引。
+ * @param unit tooltip 展示单位。
+ * @returns ECharts 折线序列配置。
+ */
+function valuationLineSeries(
+  name: string,
+  data: Array<number | null>,
+  color: string,
+  yAxisIndex: number,
+  unit: string,
+) {
+  return {
+    name,
+    type: "line" as const,
+    yAxisIndex,
+    smooth: true,
+    symbol: "none",
+    connectNulls: false,
+    data,
+    lineStyle: { color, width: 1.4 },
+    itemStyle: { color },
+    tooltip: {
+      valueFormatter: (value: unknown) =>
+        typeof value === "number" ? `${formatNumber(value, 2)}${unit}` : "--",
+    },
   };
 }
 
