@@ -299,18 +299,18 @@ uv run python main.py macro-sync
 
 ### 4.4.4 `GET /api/frontend/modules/market-data/stocks/{symbol}`
 
-用途：返回选中股票/ETF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 3 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
+用途：返回选中股票/ETF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 1 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
 
 查询参数：
 
-- `range`：`1m | 3m | 6m | 1y | 3y | 5y | custom`，默认 `3m`。
+- `range`：`1m | 3m | 6m | 1y | 3y | 5y | custom`，默认 `1m`。
 - `start_date` / `end_date`：自定义日期，`YYYY-MM-DD`。
 - `financial_report_type`：`quarterly | yearly`，默认 `quarterly`。
 
 日线同步策略：
 
 - A 股使用 AkShare `stock_zh_a_hist`，ETF 使用 `fund_etf_hist_em`。
-- A 股日线在东方财富端点失败时回退 `stock_zh_a_hist_tx` / `stock_zh_a_daily`；ETF 日线在东方财富端点失败时回退 `fund_etf_hist_sina`。
+- A 股日线在东方财富端点失败时回退 `stock_zh_a_hist_tx` / `stock_zh_a_daily`；腾讯接口的 `amount` 手数会转换为统一的 `volume` 股数。ETF 日线在东方财富端点失败时回退 `fund_etf_hist_sina`。
 - 本地事实表以 `(symbol, trade_date)` 作为幂等键，刷新同一天只更新，不重复插入。
 - 服务会为 MA120 额外拉取起始日前约 220 天缓冲数据，返回 payload 仍只包含用户所选时间跨度。
 - 外部接口失败时保留本地已有历史，并在 `sync_state.warning_message` 返回可展示的短提示；服务不会把代理失败的完整 traceback 写入前端响应。
@@ -320,7 +320,7 @@ uv run python main.py macro-sync
 ```json
 {
   "instrument": { "symbol": "000001.SZ", "name": "平安银行" },
-  "range": { "type": "3m", "start_date": "2026-03-05", "end_date": "2026-06-05" },
+  "range": { "type": "1m", "start_date": "2026-05-05", "end_date": "2026-06-05" },
   "daily_bars": [
     {
       "date": "2026-06-05",
@@ -369,7 +369,7 @@ uv run python main.py macro-sync
 
 ```json
 {
-  "range": "3m",
+  "range": "1m",
   "start_date": null,
   "end_date": null,
   "financial_report_type": "quarterly"

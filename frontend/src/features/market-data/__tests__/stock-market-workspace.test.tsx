@@ -6,6 +6,7 @@ import { StockMarketWorkspace } from "../components/stock-market-workspace";
 import type { StockInstrument } from "../model/market-data.types";
 
 const mocks = vi.hoisted(() => ({
+  detailRanges: [] as Array<Record<string, unknown>>,
   instrumentFilters: [] as Array<Record<string, unknown>>,
   refresh: vi.fn(),
   syncUniverse: vi.fn(),
@@ -86,27 +87,30 @@ vi.mock("../hooks/use-stock-market-instruments-query", () => ({
 }));
 
 vi.mock("../hooks/use-stock-market-detail-query", () => ({
-  useStockMarketDetailQuery: (symbol: string | null) => ({
-    isPending: false,
-    isError: false,
-    data: symbol
-      ? {
-          instrument: instruments.find((instrument) => instrument.symbol === symbol) ?? instruments[0],
-          daily_bars: [],
-          profile: {
-            listing_date: "",
-            sector: "",
-            industry: "",
-            region: "",
-          },
-          financials: { series: [] },
-          sync_state: {
-            warning_message: "",
-            synced_at: "",
-          },
-        }
-      : undefined,
-  }),
+  useStockMarketDetailQuery: (symbol: string | null, range: Record<string, unknown>) => {
+    mocks.detailRanges.push(range);
+    return {
+      isPending: false,
+      isError: false,
+      data: symbol
+        ? {
+            instrument: instruments.find((instrument) => instrument.symbol === symbol) ?? instruments[0],
+            daily_bars: [],
+            profile: {
+              listing_date: "",
+              sector: "",
+              industry: "",
+              region: "",
+            },
+            financials: { series: [] },
+            sync_state: {
+              warning_message: "",
+              synced_at: "",
+            },
+          }
+        : undefined,
+    };
+  },
 }));
 
 vi.mock("../hooks/use-stock-market-refresh-mutation", () => ({
@@ -125,6 +129,7 @@ vi.mock("../hooks/use-stock-market-universe-sync-mutation", () => ({
 
 describe("StockMarketWorkspace", () => {
   beforeEach(() => {
+    mocks.detailRanges.length = 0;
     mocks.instrumentFilters.length = 0;
     mocks.refresh.mockClear();
     mocks.syncUniverse.mockClear();
@@ -191,6 +196,13 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByLabelText("起始日期")).toBeInTheDocument();
     expect(screen.getByLabelText("结束日期")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "刷新数据" })).toBeInTheDocument();
+  });
+
+  it("uses the latest month as the default stock range", () => {
+    render(<StockMarketWorkspace />);
+
+    expect(mocks.detailRanges.at(-1)).toMatchObject({ type: "1m" });
+    expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("bg-blue-50");
   });
 
   it("separates overview and financial content into real tabs", async () => {

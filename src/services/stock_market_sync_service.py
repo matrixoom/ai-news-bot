@@ -194,11 +194,13 @@ def _ak_stock_daily(**kwargs: Any) -> Any:
             ),
             (
                 "stock_zh_a_hist_tx",
-                lambda: ak.stock_zh_a_hist_tx(
-                    symbol=prefixed_symbol,
-                    start_date=start_date,
-                    end_date=end_date,
-                    adjust="",
+                lambda: _normalize_tencent_stock_history_frame(
+                    ak.stock_zh_a_hist_tx(
+                        symbol=prefixed_symbol,
+                        start_date=start_date,
+                        end_date=end_date,
+                        adjust="",
+                    )
                 ),
             ),
             (
@@ -211,6 +213,26 @@ def _ak_stock_daily(**kwargs: Any) -> Any:
             ),
         ]
     )
+
+
+def _normalize_tencent_stock_history_frame(frame: Any) -> Any:
+    """规范腾讯 A 股日线字段，并将成交量从手转换为股。
+
+    Args:
+        frame: AkShare `stock_zh_a_hist_tx` 返回的 DataFrame。
+
+    Returns:
+        使用统一 `volume` 字段且成交量单位为股的 DataFrame。
+    """
+
+    columns = getattr(frame, "columns", [])
+    if "amount" not in columns or "volume" in columns:
+        return frame
+    copied = frame.copy()
+    copied["volume"] = copied["amount"].map(
+        lambda value: parsed * 100 if (parsed := _parse_number(value)) is not None else None
+    )
+    return copied.drop(columns=["amount"])
 
 
 def _ak_etf_daily(**kwargs: Any) -> Any:
