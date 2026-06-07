@@ -5,7 +5,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon,
-  StarIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-query";
@@ -53,8 +52,16 @@ const LISTING_STATUS_OPTIONS = [
 ];
 
 const FINANCIAL_ORDER = ["revenue", "expense", "cash_flow", "asset", "liability"];
+const FINANCIAL_RANGE_OPTIONS = [
+  { value: "1y", label: "近1年", years: 1 },
+  { value: "3y", label: "近3年", years: 3 },
+  { value: "5y", label: "近5年", years: 5 },
+  { value: "10y", label: "近10年", years: 10 },
+  { value: "all", label: "全部", years: null },
+] as const;
 const INSTRUMENT_PAGE_SIZE = 10;
 type StockDetailTab = "overview" | "financial";
+type FinancialRange = (typeof FINANCIAL_RANGE_OPTIONS)[number]["value"];
 
 /**
  * 渲染股票市场页，布局对齐截图中的交易终端式信息密度。
@@ -67,6 +74,8 @@ export function StockMarketWorkspace() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [range, setRange] = useState<MarketDataRangeSelection>({ type: "1m" });
   const [financialReportType, setFinancialReportType] = useState<StockFinancialReportType>("quarterly");
+  const [financialRange, setFinancialRange] = useState<FinancialRange>("5y");
+  const [activeFinancialMetric, setActiveFinancialMetric] = useState(FINANCIAL_ORDER[0]);
   const [instrumentPage, setInstrumentPage] = useState(1);
   const [isInstrumentListCollapsed, setIsInstrumentListCollapsed] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<StockDetailTab>("overview");
@@ -179,7 +188,6 @@ export function StockMarketWorkspace() {
               <StockSummaryHeader
                 instrument={selectedInstrument}
                 latestBar={latestBar}
-                previousBar={previousBar}
                 priceChange={priceChange}
                 priceChangeRate={priceChangeRate}
               />
@@ -245,7 +253,11 @@ export function StockMarketWorkspace() {
                   role="tabpanel"
                 >
                   <FinancialCards
+                    activeMetric={activeFinancialMetric}
+                    financialRange={financialRange}
                     isPending={detailQuery.isPending}
+                    onFinancialRangeChange={setFinancialRange}
+                    onMetricChange={setActiveFinancialMetric}
                     onReportTypeChange={setFinancialReportType}
                     reportType={financialReportType}
                     series={detailQuery.data?.financials.series ?? []}
@@ -501,56 +513,28 @@ function InstrumentRow(props: {
 function StockSummaryHeader(props: {
   instrument: StockInstrument;
   latestBar: StockDailyBar | null;
-  previousBar: StockDailyBar | null;
   priceChange: number;
   priceChangeRate: number;
 }) {
   const isUp = props.priceChange >= 0;
   const tone = isUp ? "text-rose-500" : "text-emerald-600";
-  const labels = [
-    ["今日", props.latestBar ? formatNumber(props.latestBar.open, 2) : "--", ""],
-    ["最高", props.latestBar ? formatNumber(props.latestBar.high, 2) : "--", "text-rose-500"],
-    ["最低", props.latestBar ? formatNumber(props.latestBar.low, 2) : "--", "text-emerald-600"],
-    ["昨收", props.previousBar ? formatNumber(props.previousBar.close, 2) : "--", ""],
-    ["成交量", props.latestBar ? formatCompactNumber(props.latestBar.volume) : "--", ""],
-    ["成交额", props.latestBar ? `${formatNumber((props.latestBar.volume * props.latestBar.close) / 100000000, 2)}亿` : "--", ""],
-    ["市盈率(TTM)", "--", ""],
-    ["总市值", "--", ""],
-  ];
   return (
     <header className="px-6 pb-3 pt-4">
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="min-w-[320px]">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-bold text-slate-950">
-              {props.instrument.symbol}
-              <span className="ml-4">{props.instrument.name}</span>
-            </h2>
-            <span className="rounded-md bg-blue-50 px-3 py-1 text-sm font-semibold text-slate-600">{props.instrument.market_board}</span>
-          </div>
-          <div className="mt-1 text-xs font-medium text-slate-400">{props.instrument.name}股份有限公司</div>
-          <div className="mt-5 flex flex-wrap items-end gap-4">
-            <span className={`text-4xl font-bold leading-none ${tone}`}>{props.latestBar ? formatNumber(props.latestBar.close, 2) : "--"}</span>
-            <span className={`pb-1 text-base font-semibold ${tone}`}>{props.latestBar ? formatSigned(props.priceChange, 2) : "--"}</span>
-            <span className={`pb-1 text-base font-semibold ${tone}`}>{props.latestBar ? `${formatSigned(props.priceChangeRate, 2)}%` : "--"}</span>
-          </div>
-          <div className="mt-2 text-xs text-slate-500">交易中 {props.latestBar?.date ?? "--"} 10:30:00</div>
+      <div className="min-w-[320px]">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-2xl font-bold text-slate-950">
+            {props.instrument.symbol}
+            <span className="ml-4">{props.instrument.name}</span>
+          </h2>
+          <span className="rounded-md bg-blue-50 px-3 py-1 text-sm font-semibold text-slate-600">{props.instrument.market_board}</span>
         </div>
-        <div className="grid flex-1 grid-cols-2 gap-x-8 gap-y-4 pt-12 text-sm md:grid-cols-4 xl:grid-cols-8">
-          {labels.map(([label, value, className]) => (
-            <div key={label}>
-              <div className="text-xs font-semibold text-slate-400">{label}</div>
-              <div className={`mt-2 whitespace-nowrap font-semibold text-slate-700 ${className}`}>{value}</div>
-            </div>
-          ))}
+        <div className="mt-1 text-xs font-medium text-slate-400">{props.instrument.name}股份有限公司</div>
+        <div className="mt-5 flex flex-wrap items-end gap-4">
+          <span className={`text-4xl font-bold leading-none ${tone}`}>{props.latestBar ? formatNumber(props.latestBar.close, 2) : "--"}</span>
+          <span className={`pb-1 text-base font-semibold ${tone}`}>{props.latestBar ? formatSigned(props.priceChange, 2) : "--"}</span>
+          <span className={`pb-1 text-base font-semibold ${tone}`}>{props.latestBar ? `${formatSigned(props.priceChangeRate, 2)}%` : "--"}</span>
         </div>
-        <button
-          className="ml-auto inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-          type="button"
-        >
-          <StarIcon aria-hidden="true" className="h-4 w-4" />
-          加入自选
-        </button>
+        <div className="mt-2 text-xs text-slate-500">交易中 {props.latestBar?.date ?? "--"} 10:30:00</div>
       </div>
     </header>
   );
@@ -777,19 +761,28 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
 }
 
 function FinancialCards(props: {
+  activeMetric: string;
+  financialRange: FinancialRange;
   isPending: boolean;
   reportType: StockFinancialReportType;
   series: StockFinancialSeries[];
+  onFinancialRangeChange: (range: FinancialRange) => void;
+  onMetricChange: (metric: string) => void;
   onReportTypeChange: (type: StockFinancialReportType) => void;
 }) {
   const sortedSeries = FINANCIAL_ORDER.map((metric) => props.series.find((item) => item.metric === metric)).filter(
     (item): item is StockFinancialSeries => Boolean(item),
   );
+  const selectedSeries = sortedSeries.find((item) => item.metric === props.activeMetric) ?? sortedSeries[0];
+  const visibleSeries = selectedSeries
+    ? filterFinancialSeriesByRange(selectedSeries, props.financialRange)
+    : null;
+
   return (
-    <section className="pt-4">
-      <div className="mb-3 flex items-center gap-5">
+    <section className="space-y-4 pt-2">
+      <div className="flex flex-wrap items-center gap-5">
         <h3 className="text-lg font-bold text-slate-950">财务数据</h3>
-        <div className="flex gap-5 text-sm font-semibold">
+        <div aria-label="财报周期" className="flex gap-5 text-sm font-semibold">
           {(["quarterly", "yearly"] as const).map((type) => (
             <button
               className={`relative pb-2 ${props.reportType === type ? "text-blue-600" : "text-slate-500"}`}
@@ -803,25 +796,96 @@ function FinancialCards(props: {
           ))}
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-3 border-y border-slate-200 py-3">
+        <span className="text-sm font-semibold text-slate-500">时间范围</span>
+        <div aria-label="财务时间范围" className="inline-flex h-9 overflow-hidden rounded-md border border-slate-200 bg-white">
+          {FINANCIAL_RANGE_OPTIONS.map((option) => (
+            <button
+              className={`border-r border-slate-100 px-4 text-sm font-semibold last:border-r-0 ${
+                props.financialRange === option.value
+                  ? "bg-blue-50 text-slate-950"
+                  : "text-slate-500 hover:bg-slate-50"
+              }`}
+              key={option.value}
+              onClick={() => props.onFinancialRangeChange(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
       {props.isPending ? (
         <EmptySurface text="财报数据加载中..." />
       ) : sortedSeries.every((item) => item.points.length === 0) ? (
         <EmptySurface text="当前标的暂无可展示财报数据。" />
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-5">
-          {sortedSeries.map((item) => (
-            <FinancialMetricCard key={item.metric} series={item} />
-          ))}
-        </div>
+        <>
+          <div aria-label="财务指标" className="flex flex-wrap gap-2" role="tablist">
+            {sortedSeries.map((item) => (
+              <button
+                aria-controls={`financial-metric-panel-${item.metric}`}
+                aria-selected={item.metric === selectedSeries?.metric}
+                className={`rounded-md border px-4 py-2 text-sm font-semibold ${
+                  item.metric === selectedSeries?.metric
+                    ? "border-blue-600 bg-blue-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50"
+                }`}
+                id={`financial-metric-tab-${item.metric}`}
+                key={item.metric}
+                onClick={() => props.onMetricChange(item.metric)}
+                role="tab"
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {visibleSeries && visibleSeries.points.length > 0 ? (
+            <div
+              aria-labelledby={`financial-metric-tab-${visibleSeries.metric}`}
+              id={`financial-metric-panel-${visibleSeries.metric}`}
+              role="tabpanel"
+            >
+              <FinancialMetricCard series={visibleSeries} />
+            </div>
+          ) : (
+            <EmptySurface text="当前时间范围暂无可展示财报数据。" />
+          )}
+        </>
       )}
     </section>
   );
+}
+
+/**
+ * 按所选年限裁剪单项财务序列，使用该序列最新报告期作为范围终点。
+ * @param series 原始财务指标序列。
+ * @param range 财务页独立时间范围。
+ * @returns 保留原指标信息并裁剪数据点后的新序列。
+ */
+function filterFinancialSeriesByRange(
+  series: StockFinancialSeries,
+  range: FinancialRange,
+): StockFinancialSeries {
+  const selectedOption = FINANCIAL_RANGE_OPTIONS.find((option) => option.value === range);
+  const latestPeriod = series.points.at(-1)?.period;
+  if (!selectedOption?.years || !latestPeriod) return series;
+
+  const latestYear = Number(latestPeriod.slice(0, 4));
+  if (!Number.isFinite(latestYear)) return series;
+  const cutoffPeriod = `${latestYear - selectedOption.years}-${latestPeriod.slice(5)}`;
+  return {
+    ...series,
+    points: series.points.filter((point) => point.period >= cutoffPeriod),
+  };
 }
 
 function FinancialMetricCard(props: { series: StockFinancialSeries }) {
   const chartRef = useRef<HTMLDivElement | null>(null);
   const latestPoint = props.series.points.at(-1);
   const previousPoint = props.series.points.at(-2);
+  const unit = latestPoint?.unit || "亿元";
   const changeRate =
     latestPoint && previousPoint && previousPoint.value !== 0
       ? ((latestPoint.value - previousPoint.value) / Math.abs(previousPoint.value)) * 100
@@ -829,16 +893,29 @@ function FinancialMetricCard(props: { series: StockFinancialSeries }) {
   const option = useMemo((): echarts.EChartsOption => {
     return {
       animation: false,
-      grid: { left: 28, right: 8, top: 8, bottom: 22 },
+      legend: {
+        top: 8,
+        right: 16,
+        data: [props.series.label],
+        textStyle: { color: "#64748b", fontSize: 12 },
+      },
+      grid: { left: 72, right: 28, top: 52, bottom: 48 },
       xAxis: {
         type: "category",
         data: props.series.points.map((point) => compactPeriod(point.period)),
-        axisLabel: { color: "#94a3b8", fontSize: 10 },
+        axisLabel: { color: "#64748b", fontSize: 11 },
         axisTick: { show: false },
       },
-      yAxis: { type: "value", axisLabel: { color: "#94a3b8", fontSize: 10 }, splitLine: { lineStyle: { color: "#eef2f7" } } },
+      yAxis: {
+        type: "value",
+        name: unit,
+        nameTextStyle: { color: "#64748b", fontSize: 11 },
+        axisLabel: { color: "#64748b", fontSize: 11 },
+        splitLine: { lineStyle: { color: "#eef2f7" } },
+      },
       series: [
         {
+          name: props.series.label,
           type: props.series.metric === "liability" ? "line" : "bar",
           smooth: true,
           symbol: props.series.metric === "liability" ? "circle" : "none",
@@ -850,7 +927,7 @@ function FinancialMetricCard(props: { series: StockFinancialSeries }) {
       ],
       tooltip: { trigger: "axis" },
     };
-  }, [props.series]);
+  }, [props.series, unit]);
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) return;
@@ -861,20 +938,20 @@ function FinancialMetricCard(props: { series: StockFinancialSeries }) {
   }, [option]);
 
   return (
-    <article className="rounded-md border border-slate-200 bg-white p-4">
+    <article className="rounded-md border border-slate-200 bg-white p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className="text-sm font-bold text-slate-800">{props.series.label}</h4>
-          <div className="mt-1 text-xs font-semibold text-slate-500">单位：亿元</div>
+          <h4 className="text-base font-bold text-slate-900">{props.series.label}</h4>
+          <div className="mt-1 text-xs font-semibold text-slate-500">单位：{unit}</div>
         </div>
         <div className="text-right">
-          <div className="text-base font-bold text-slate-950">{latestPoint ? formatNumber(latestPoint.value, 2) : "--"}</div>
+          <div className="text-xl font-bold text-slate-950">{latestPoint ? formatNumber(latestPoint.value, 2) : "--"}</div>
           <div className={`text-xs font-bold ${changeRate >= 0 ? "text-rose-500" : "text-emerald-600"}`}>
             {latestPoint && previousPoint ? `${formatSigned(changeRate, 2)}%` : "--"}
           </div>
         </div>
       </div>
-      <div ref={chartRef} aria-label={`${props.series.label} 图表`} className="mt-3 h-28 w-full" role="img" />
+      <div ref={chartRef} aria-label={`${props.series.label} 图表`} className="mt-3 h-[360px] w-full" role="img" />
     </article>
   );
 }
