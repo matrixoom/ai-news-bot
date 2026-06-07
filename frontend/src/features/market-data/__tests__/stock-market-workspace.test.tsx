@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,10 +7,25 @@ import type { StockInstrument } from "../model/market-data.types";
 
 const mocks = vi.hoisted(() => ({
   detailRanges: [] as Array<Record<string, unknown>>,
+  echartOptions: [] as Array<Record<string, unknown>>,
   instrumentFilters: [] as Array<Record<string, unknown>>,
   refresh: vi.fn(),
   syncUniverse: vi.fn(),
 }));
+
+const resizeObserverCallbacks: ResizeObserverCallback[] = [];
+
+class ResizeObserverMock implements ResizeObserver {
+  constructor(callback: ResizeObserverCallback) {
+    resizeObserverCallbacks.push(callback);
+  }
+
+  disconnect() {}
+
+  observe() {}
+
+  unobserve() {}
+}
 
 const instruments: StockInstrument[] = Array.from({ length: 25 }, (_, index) => {
   const code = String(index + 1).padStart(6, "0");
@@ -77,7 +92,8 @@ const dailyBars = [
 
 vi.mock("echarts", () => ({
   init: vi.fn(() => ({
-    setOption: vi.fn(),
+    setOption: vi.fn((option: Record<string, unknown>) => mocks.echartOptions.push(option)),
+    resize: vi.fn(),
     dispose: vi.fn(),
   })),
 }));
@@ -178,9 +194,12 @@ vi.mock("../hooks/use-stock-market-universe-sync-mutation", () => ({
 describe("StockMarketWorkspace", () => {
   beforeEach(() => {
     mocks.detailRanges.length = 0;
+    mocks.echartOptions.length = 0;
     mocks.instrumentFilters.length = 0;
     mocks.refresh.mockClear();
     mocks.syncUniverse.mockClear();
+    resizeObserverCallbacks.length = 0;
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
   });
 
   it("uses real pagination and supports previous and next page navigation", async () => {
@@ -282,7 +301,10 @@ describe("StockMarketWorkspace", () => {
     expect(screen.queryByText("总市值")).not.toBeInTheDocument();
     expect(screen.queryByText(/交易中/)).not.toBeInTheDocument();
     expect(screen.queryByText(/开：/)).not.toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "000001.SZ 日级别行情K线" })).toHaveClass("h-[400px]");
+    expect(screen.getByRole("img", { name: "000001.SZ 日级别行情K线" })).toHaveClass(
+      "h-full",
+      "min-h-[22rem]",
+    );
   });
 
   it("shows financial metrics as secondary tabs with an independent overview-compatible range", async () => {
@@ -345,9 +367,47 @@ describe("StockMarketWorkspace", () => {
     const detailPanel = screen.getByTestId("stock-detail-panel");
     const paginator = screen.getByLabelText("股票列表分页");
 
-    expect(panel).toHaveClass("h-[calc(100vh-14.375rem)]");
-    expect(detailPanel).toHaveClass("h-[calc(100vh-14.375rem)]", "min-h-[32rem]");
+    expect(panel).toHaveClass("h-full", "min-h-0");
+    expect(detailPanel).toHaveClass("h-full", "min-h-0");
     expect(within(panel).getByLabelText("股票列表分页")).toBe(paginator);
+  });
+
+  it("adapts the instrument page size to the available list height", async () => {
+    render(<StockMarketWorkspace />);
+
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 10 });
+    const listBody = screen.getByTestId("instrument-list-body");
+    const resizeEntry = {
+      target: listBody,
+      contentRect: { height: 720 },
+    } as unknown as ResizeObserverEntry;
+
+    act(() => {
+      resizeObserverCallbacks[0]?.([resizeEntry], {} as ResizeObserver);
+    });
+
+    await waitFor(() => {
+      expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 15 });
+    });
+  });
+
+  it("keeps the current page when a resize does not change page capacity", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("button", { name: "第 2 页" }));
+    const listBody = screen.getByTestId("instrument-list-body");
+    const resizeEntry = {
+      target: listBody,
+      contentRect: { height: 500 },
+    } as unknown as ResizeObserverEntry;
+
+    act(() => {
+      resizeObserverCallbacks[0]?.([resizeEntry], {} as ResizeObserver);
+    });
+
+    expect(within(screen.getByRole("table")).getByText("000011.SZ")).toBeInTheDocument();
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 10 });
   });
 
   it("uses compact overview range controls", () => {
@@ -355,7 +415,49 @@ describe("StockMarketWorkspace", () => {
 
     expect(screen.getByLabelText("行情时间范围")).toHaveClass("h-8");
     expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("px-3", "text-xs");
-    expect(screen.getByRole("button", { name: "不复权" })).toHaveClass("h-8", "px-3", "text-xs");
+    expect(screen.getByLabelText("价格复权方式")).toHaveClass("h-8");
+    expect(screen.getByRole("button", { name: "不复权" })).toHaveClass("bg-slate-900", "text-white");
+    expect(screen.getByRole("button", { name: "前复权" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "后复权" })).toBeInTheDocument();
+  });
+
+  it("switches the selected price adjustment button", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("button", { name: "前复权" }));
+
+    expect(screen.getByRole("button", { name: "前复权" })).toHaveClass("bg-slate-900", "text-white");
+    expect(screen.getByRole("button", { name: "不复权" })).not.toHaveClass("bg-slate-900");
+  });
+
+  it("uses compact chart labels and hides volume axis numbers", async () => {
+    render(<StockMarketWorkspace />);
+
+    await waitFor(() => expect(mocks.echartOptions.length).toBeGreaterThan(0));
+    const klineOption = mocks.echartOptions[0] as {
+      tooltip?: { padding?: number[]; textStyle?: { fontSize?: number } };
+      grid?: Array<{ height?: string | number }>;
+      yAxis?: Array<{ axisLabel?: { show?: boolean; fontSize?: number } }>;
+    };
+
+    expect(klineOption.tooltip?.textStyle?.fontSize).toBe(10);
+    expect(klineOption.tooltip?.padding).toEqual([6, 8]);
+    expect(klineOption.grid?.[0]?.height).toBe("56%");
+    expect(klineOption.yAxis?.[0]?.axisLabel?.fontSize).toBe(10);
+    expect(klineOption.yAxis?.[1]?.axisLabel?.show).toBe(false);
+  });
+
+  it("uses smaller financial controls and keeps the chart in a flexible panel", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("tab", { name: "财务数据" }));
+
+    expect(screen.getByRole("tab", { name: "营业收入" })).toHaveClass("text-xs");
+    expect(screen.getByLabelText("财务时间范围")).toHaveClass("h-8");
+    expect(screen.getByLabelText("财报周期")).toHaveClass("h-8", "text-xs");
+    expect(screen.getByRole("img", { name: "营业收入 图表" })).toHaveClass("min-h-0", "flex-1");
   });
 
   it("shows complete instrument information when hovering a list row", () => {
