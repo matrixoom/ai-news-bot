@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,6 +10,13 @@ import json
 from pathlib import Path
 import sqlite3
 from typing import Any, Iterator, Mapping, Sequence
+
+from src.services.stock_market_sharding import (
+    initialize_all_market_stock_shards,
+    initialize_market_stock_shard,
+    iter_market_stock_shard_paths,
+    resolve_market_stock_shard_path,
+)
 
 
 class StockMarketValidationError(ValueError):
@@ -99,18 +107,29 @@ def _utc_now() -> str:
 class StockMarketRepository:
     """管理股票市场相关表的读写。"""
 
-    def __init__(self, db_path: str | Path = ".data/market_data.db") -> None:
+    def __init__(
+        self,
+        db_path: str | Path = ".data/market_data.db",
+        *,
+        shard_dir: str | Path | None = None,
+        precreate_shards: bool = True,
+    ) -> None:
         """初始化仓储并确保表结构存在。
 
         Args:
             db_path: SQLite 数据库路径。
+            shard_dir: 日线分片目录，默认与主库位于同一目录。
+            precreate_shards: 是否在初始化时预建全部 210 个分片。
 
         Returns:
             已完成建表的仓储实例。
         """
 
         self._db_path = Path(db_path)
+        self._shard_dir = Path(shard_dir) if shard_dir is not None else self._db_path.parent
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._shard_dir.mkdir(parents=True, exist_ok=True)
+        self._precreate_shards = precreate_shards
         self._initialize()
 
     @property
@@ -221,14 +240,8 @@ class StockMarketRepository:
             ).fetchone()
             rows = connection.execute(
                 f"""
-                SELECT i.symbol, i.code, i.exchange, i.name, i.instrument_type, i.market_board, i.listing_status, i.updated_at,
-                       (
-                           SELECT b.close_price
-                           FROM market_stock_daily_bar AS b
-                           WHERE b.symbol = i.symbol
-                           ORDER BY b.trade_date DESC
-                           LIMIT 1
-                       ) AS latest_price
+                SELECT i.symbol, i.code, i.exchange, i.name, i.instrument_type,
+                       i.market_board, i.listing_status, i.updated_at
                 FROM market_stock_instrument AS i
                 {where_clause}
                 ORDER BY
@@ -238,7 +251,11 @@ class StockMarketRepository:
                 """,
                 [*params, limit, offset],
             ).fetchall()
-        return [self._build_instrument(row) for row in rows], int(total_row["count"]) if total_row else 0
+        latest_prices = self._load_latest_prices([str(row["symbol"]) for row in rows])
+        return (
+            [self._build_instrument(row, latest_price=latest_prices.get(str(row["symbol"]))) for row in rows],
+            int(total_row["count"]) if total_row else 0,
+        )
 
     def get_instrument(self, symbol: str) -> StockInstrument | None:
         """按带交易所后缀的 symbol 读取标的。"""
@@ -286,7 +303,7 @@ class StockMarketRepository:
             )
             for item in bars
         ]
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             connection.executemany(
                 """
                 INSERT INTO market_stock_daily_bar (
@@ -310,13 +327,14 @@ class StockMarketRepository:
                 """,
                 rows,
             )
+        with self._session() as connection:
             self._refresh_stock_sync_state(connection, symbol, timestamp, warning_message="")
         return len(rows)
 
     def has_daily_bars(self, symbol: str) -> bool:
         """判断某只股票是否已有任意日线数据。"""
 
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             row = connection.execute(
                 "SELECT 1 FROM market_stock_daily_bar WHERE symbol = ? LIMIT 1",
                 (symbol,),
@@ -326,7 +344,7 @@ class StockMarketRepository:
     def load_daily_bars(self, *, symbol: str, start_date: str, end_date: str) -> list[StockDailyBar]:
         """读取指定日期窗口内的日线行情。"""
 
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             rows = connection.execute(
                 """
                 SELECT symbol, trade_date, open_price, close_price, high_price, low_price,
@@ -566,35 +584,6 @@ class StockMarketRepository:
             )
             connection.execute(
                 """
-                CREATE TABLE IF NOT EXISTS market_stock_daily_bar (
-                    symbol TEXT NOT NULL,
-                    trade_date TEXT NOT NULL,
-                    open_price REAL NOT NULL,
-                    close_price REAL NOT NULL,
-                    high_price REAL NOT NULL,
-                    low_price REAL NOT NULL,
-                    volume REAL NOT NULL,
-                    ma5 REAL,
-                    ma10 REAL,
-                    ma20 REAL,
-                    ma60 REAL,
-                    ma120 REAL,
-                    provider_key TEXT NOT NULL,
-                    source_url TEXT NOT NULL,
-                    last_seen_at TEXT NOT NULL,
-                    PRIMARY KEY(symbol, trade_date),
-                    FOREIGN KEY(symbol) REFERENCES market_stock_instrument(symbol)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_market_stock_daily_bar_symbol_date
-                ON market_stock_daily_bar(symbol, trade_date)
-                """
-            )
-            connection.execute(
-                """
                 CREATE TABLE IF NOT EXISTS market_stock_profile (
                     symbol TEXT PRIMARY KEY,
                     company_name TEXT NOT NULL,
@@ -649,20 +638,145 @@ class StockMarketRepository:
                 )
                 """
             )
+        shard_paths = iter_market_stock_shard_paths(self._shard_dir)
+        if self._precreate_shards and any(not path.exists() for path in shard_paths):
+            initialize_all_market_stock_shards(self._shard_dir)
+        self._migrate_legacy_daily_bars()
+
+    def _migrate_legacy_daily_bars(self) -> None:
+        """将主库旧日线表幂等迁移到分片，校验完成后移除旧表。"""
+
+        with self._session() as connection:
+            legacy_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
+            ).fetchone()
+            if legacy_table is None:
+                return
+            symbols = [
+                str(row["symbol"])
+                for row in connection.execute(
+                    "SELECT DISTINCT symbol FROM market_stock_daily_bar ORDER BY symbol"
+                ).fetchall()
+            ]
+
+        symbols_by_shard: dict[Path, list[str]] = defaultdict(list)
+        for symbol in symbols:
+            symbols_by_shard[resolve_market_stock_shard_path(symbol, self._shard_dir)].append(symbol)
+
+        migrated_source_count = 0
+        for shard_path, shard_symbols in symbols_by_shard.items():
+            initialize_market_stock_shard(shard_path)
+            shard_source_count = 0
+            with self._session() as source_connection, self._shard_session(shard_path) as shard_connection:
+                for start in range(0, len(shard_symbols), 500):
+                    symbol_batch = shard_symbols[start : start + 500]
+                    placeholders = ", ".join("?" for _ in symbol_batch)
+                    batch_source_count = 0
+                    source_cursor = source_connection.execute(
+                        f"""
+                        SELECT symbol, trade_date, open_price, close_price, high_price, low_price,
+                               volume, ma5, ma10, ma20, ma60, ma120, provider_key, source_url, last_seen_at
+                        FROM market_stock_daily_bar
+                        WHERE symbol IN ({placeholders})
+                        ORDER BY symbol, trade_date
+                        """,
+                        symbol_batch,
+                    )
+                    while source_rows := source_cursor.fetchmany(1_000):
+                        shard_connection.executemany(
+                            """
+                            INSERT INTO market_stock_daily_bar (
+                                symbol, trade_date, open_price, close_price, high_price, low_price,
+                                volume, ma5, ma10, ma20, ma60, ma120, provider_key, source_url, last_seen_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(symbol, trade_date) DO UPDATE SET
+                                open_price=excluded.open_price,
+                                close_price=excluded.close_price,
+                                high_price=excluded.high_price,
+                                low_price=excluded.low_price,
+                                volume=excluded.volume,
+                                ma5=excluded.ma5,
+                                ma10=excluded.ma10,
+                                ma20=excluded.ma20,
+                                ma60=excluded.ma60,
+                                ma120=excluded.ma120,
+                                provider_key=excluded.provider_key,
+                                source_url=excluded.source_url,
+                                last_seen_at=excluded.last_seen_at
+                            """,
+                            source_rows,
+                        )
+                        batch_source_count += len(source_rows)
+                    target_count = int(
+                        shard_connection.execute(
+                            f"SELECT COUNT(*) FROM market_stock_daily_bar WHERE symbol IN ({placeholders})",
+                            symbol_batch,
+                        ).fetchone()[0]
+                    )
+                    if target_count < batch_source_count:
+                        raise RuntimeError(
+                            f"股票日线分片迁移校验失败: shard={shard_path.name}, "
+                            f"source={batch_source_count}, target={target_count}"
+                        )
+                    shard_source_count += batch_source_count
+            migrated_source_count += shard_source_count
+
+        with self._session() as connection:
+            source_total = int(connection.execute("SELECT COUNT(*) FROM market_stock_daily_bar").fetchone()[0])
+            if migrated_source_count != source_total:
+                raise RuntimeError(
+                    f"股票日线分片迁移总数校验失败: source={source_total}, migrated={migrated_source_count}"
+                )
+            connection.execute("DROP TABLE market_stock_daily_bar")
+        with self._session() as connection:
+            connection.execute("VACUUM")
+
+    def _load_latest_prices(self, symbols: Sequence[str]) -> dict[str, float]:
+        """按分片批量读取当前页标的的最新收盘价。"""
+
+        symbols_by_shard: dict[Path, list[str]] = defaultdict(list)
+        for symbol in symbols:
+            symbols_by_shard[resolve_market_stock_shard_path(symbol, self._shard_dir)].append(symbol)
+
+        latest_prices: dict[str, float] = {}
+        for shard_path, shard_symbols in symbols_by_shard.items():
+            if not shard_path.exists():
+                continue
+            initialize_market_stock_shard(shard_path)
+            placeholders = ", ".join("?" for _ in shard_symbols)
+            with self._shard_session(shard_path) as connection:
+                rows = connection.execute(
+                    f"""
+                    SELECT bars.symbol, bars.close_price
+                    FROM market_stock_daily_bar AS bars
+                    INNER JOIN (
+                        SELECT symbol, MAX(trade_date) AS latest_trade_date
+                        FROM market_stock_daily_bar
+                        WHERE symbol IN ({placeholders})
+                        GROUP BY symbol
+                    ) AS latest
+                    ON latest.symbol = bars.symbol
+                    AND latest.latest_trade_date = bars.trade_date
+                    """,
+                    shard_symbols,
+                ).fetchall()
+            latest_prices.update({str(row["symbol"]): float(row["close_price"]) for row in rows})
+        return latest_prices
 
     def _refresh_stock_sync_state(self, connection: sqlite3.Connection, symbol: str, timestamp: str, warning_message: str) -> None:
         """基于日线事实表刷新同步状态。"""
 
-        aggregate = connection.execute(
-            """
-            SELECT MIN(trade_date) AS earliest_trade_date,
-                   MAX(trade_date) AS latest_trade_date,
-                   COUNT(*) AS daily_point_count
-            FROM market_stock_daily_bar
-            WHERE symbol = ?
-            """,
-            (symbol,),
-        ).fetchone()
+        with self._daily_bar_session(symbol) as daily_connection:
+            aggregate = daily_connection.execute(
+                """
+                SELECT MIN(trade_date) AS earliest_trade_date,
+                       MAX(trade_date) AS latest_trade_date,
+                       COUNT(*) AS daily_point_count
+                FROM market_stock_daily_bar
+                WHERE symbol = ?
+                """,
+                (symbol,),
+            ).fetchone()
         self._upsert_stock_sync_state(
             connection,
             symbol,
@@ -734,7 +848,7 @@ class StockMarketRepository:
             ),
         )
 
-    def _build_instrument(self, row: sqlite3.Row) -> StockInstrument:
+    def _build_instrument(self, row: sqlite3.Row, *, latest_price: float | None = None) -> StockInstrument:
         """将 SQLite 行转换为标的数据类。"""
 
         return StockInstrument(
@@ -746,7 +860,7 @@ class StockMarketRepository:
             market_board=str(row["market_board"]),
             listing_status=str(row["listing_status"]),
             updated_at=str(row["updated_at"]),
-            latest_price=_optional_float(row["latest_price"]) if "latest_price" in row.keys() else None,
+            latest_price=latest_price,
         )
 
     def _build_daily_bar(self, row: sqlite3.Row) -> StockDailyBar:
@@ -769,7 +883,44 @@ class StockMarketRepository:
 
     @contextmanager
     def _session(self) -> Iterator[sqlite3.Connection]:
+        """打开主库事务连接，并在成功时提交。"""
+
         connection = sqlite3.connect(self._db_path)
+        connection.row_factory = sqlite3.Row
+        try:
+            yield connection
+            connection.commit()
+        finally:
+            connection.close()
+
+    @contextmanager
+    def _daily_bar_session(self, symbol: str) -> Iterator[sqlite3.Connection]:
+        """按 symbol 打开目标日线分片连接。
+
+        Args:
+            symbol: `股票代码.交易所缩写` 格式的标识。
+
+        Yields:
+            已启用行对象访问的分片事务连接。
+        """
+
+        shard_path = resolve_market_stock_shard_path(symbol, self._shard_dir)
+        initialize_market_stock_shard(shard_path)
+        with self._shard_session(shard_path) as connection:
+            yield connection
+
+    @contextmanager
+    def _shard_session(self, shard_path: Path) -> Iterator[sqlite3.Connection]:
+        """打开指定分片事务连接，并在成功时提交。
+
+        Args:
+            shard_path: 已初始化的分片数据库路径。
+
+        Yields:
+            已启用行对象访问的 SQLite 连接。
+        """
+
+        connection = sqlite3.connect(shard_path)
         connection.row_factory = sqlite3.Row
         try:
             yield connection

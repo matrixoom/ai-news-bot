@@ -1,6 +1,9 @@
 import unittest
+from contextlib import closing
 from datetime import UTC, date, datetime
 from pathlib import Path
+import sqlite3
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -24,8 +27,67 @@ from src.services.market_data_sync_service import (
     _load_silver_rows,
 )
 from src.services.stock_market_repository import StockMarketRepository
+from src.services.stock_market_sharding import (
+    initialize_all_market_stock_shards,
+    resolve_market_stock_shard_name,
+)
 from src.services.stock_market_service import StockMarketService
 from src.services.stock_market_sync_service import StockMarketSyncService, _ak_etf_daily
+
+
+class StockMarketShardingTests(unittest.TestCase):
+    """校验股票日线分片路由与预建库结构。"""
+
+    def setUp(self) -> None:
+        """创建独立临时目录，避免固定分片文件名互相污染。"""
+
+        self.temp_dir = TemporaryDirectory()
+        self.shard_dir = Path(self.temp_dir.name)
+
+    def tearDown(self) -> None:
+        """清理本用例创建的临时分片库。"""
+
+        self.temp_dir.cleanup()
+
+    def test_stock_shard_router_uses_exchange_specific_code_positions(self) -> None:
+        """校验沪深取第 4、5 位，北交所取最后一位。"""
+
+        self.assertEqual(resolve_market_stock_shard_name("600519.SH"), "market_stock_SH_51.db")
+        self.assertEqual(resolve_market_stock_shard_name("000010.SZ"), "market_stock_SZ_01.db")
+        self.assertEqual(resolve_market_stock_shard_name("920118.BJ"), "market_stock_BJ_8.db")
+
+    def test_stock_shard_router_rejects_invalid_symbols(self) -> None:
+        """校验非法代码格式和未知交易所会快速失败。"""
+
+        invalid_symbols = ("", "600519", "60051.SH", "ABC519.SH", "600519.HK", "600519.sh")
+
+        for symbol in invalid_symbols:
+            with self.subTest(symbol=symbol), self.assertRaises(ValueError):
+                resolve_market_stock_shard_name(symbol)
+
+    def test_stock_shard_initializer_precreates_all_210_databases(self) -> None:
+        """校验全部预分库均已创建统一日线表和查询索引。"""
+
+        shard_paths = initialize_all_market_stock_shards(self.shard_dir)
+
+        self.assertEqual(len(shard_paths), 210)
+        self.assertTrue((self.shard_dir / "market_stock_SH_00.db").exists())
+        self.assertTrue((self.shard_dir / "market_stock_SH_99.db").exists())
+        self.assertTrue((self.shard_dir / "market_stock_SZ_00.db").exists())
+        self.assertTrue((self.shard_dir / "market_stock_SZ_99.db").exists())
+        self.assertTrue((self.shard_dir / "market_stock_BJ_0.db").exists())
+        self.assertTrue((self.shard_dir / "market_stock_BJ_9.db").exists())
+        with closing(sqlite3.connect(self.shard_dir / "market_stock_SH_51.db")) as connection:
+            table = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
+            ).fetchone()
+            index = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' "
+                "AND name = 'idx_market_stock_daily_bar_symbol_date'"
+            ).fetchone()
+
+        self.assertIsNotNone(table)
+        self.assertIsNotNone(index)
 
 
 class MarketDataHousingTests(unittest.TestCase):
@@ -133,13 +195,61 @@ class StockMarketModuleTests(unittest.TestCase):
     """校验股票市场标的、日线与懒加载链路。"""
 
     def setUp(self) -> None:
-        self.db_path = Path(".tmp-events-tests") / "stock-market" / f"{self.id().split('.')[-1]}.db"
-        if self.db_path.exists():
-            self.db_path.unlink()
+        """创建主库和分片库共用的独立临时目录。"""
+
+        self.temp_dir = TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "market_data.db"
+
+    def tearDown(self) -> None:
+        """清理本用例创建的主库和分片库。"""
+
+        self.temp_dir.cleanup()
+
+    def _repository(self) -> StockMarketRepository:
+        """创建不批量预建分片的测试仓储，仅按访问目标自愈建表。"""
+
+        return StockMarketRepository(self.db_path, precreate_shards=False)
+
+    def _create_legacy_daily_bar_table(self, rows: list[tuple[object, ...]]) -> None:
+        """创建旧版主库日线表并写入待迁移记录。"""
+
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute(
+                """
+                CREATE TABLE market_stock_daily_bar (
+                    symbol TEXT NOT NULL,
+                    trade_date TEXT NOT NULL,
+                    open_price REAL NOT NULL,
+                    close_price REAL NOT NULL,
+                    high_price REAL NOT NULL,
+                    low_price REAL NOT NULL,
+                    volume REAL NOT NULL,
+                    ma5 REAL,
+                    ma10 REAL,
+                    ma20 REAL,
+                    ma60 REAL,
+                    ma120 REAL,
+                    provider_key TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    PRIMARY KEY(symbol, trade_date)
+                )
+                """
+            )
+            connection.executemany(
+                """
+                INSERT INTO market_stock_daily_bar (
+                    symbol, trade_date, open_price, close_price, high_price, low_price,
+                    volume, ma5, ma10, ma20, ma60, ma120, provider_key, source_url, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            connection.commit()
 
     def test_stock_universe_sync_persists_a_share_and_etf_symbols(self) -> None:
         """校验 A 股与 ETF 标的统一持久化，并可按名称或代码搜索。"""
-        repository = StockMarketRepository(self.db_path)
+        repository = self._repository()
         syncer = StockMarketSyncService(
             repository=repository,
             stock_universe_loader=lambda: pd.DataFrame(
@@ -162,7 +272,7 @@ class StockMarketModuleTests(unittest.TestCase):
 
     def test_stock_universe_sync_keeps_stock_rows_when_etf_source_fails(self) -> None:
         """校验 ETF 上游失败不会拖垮 A 股标的入库。"""
-        repository = StockMarketRepository(self.db_path)
+        repository = self._repository()
         syncer = StockMarketSyncService(
             repository=repository,
             stock_universe_loader=lambda: pd.DataFrame([{"code": "000001", "name": "平安银行"}]),
@@ -180,7 +290,7 @@ class StockMarketModuleTests(unittest.TestCase):
 
     def test_daily_bar_upsert_is_idempotent_and_keeps_latest_values(self) -> None:
         """校验同一交易日重复写入只更新一行，不产生重复行情。"""
-        repository = StockMarketRepository(self.db_path)
+        repository = self._repository()
         repository.upsert_instruments(
             [
                 {
@@ -237,10 +347,193 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(len(points), 1)
         self.assertEqual(points[0].close_price, 12.5)
         self.assertEqual(points[0].volume, 200)
+        self.assertEqual(repository.get_sync_state("000001.SZ").daily_point_count, 1)
+        self.assertTrue((self.db_path.parent / "market_stock_SZ_00.db").exists())
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            legacy_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
+            ).fetchone()
+        self.assertIsNone(legacy_table)
+
+    def test_legacy_stock_daily_bars_migrate_to_shards_and_remove_main_table(self) -> None:
+        """校验旧表数据按规则迁移，校验成功后才从主库移除。"""
+
+        self._create_legacy_daily_bar_table(
+            [
+                (
+                    "600519.SH",
+                    "2026-06-05",
+                    1500,
+                    1510,
+                    1520,
+                    1490,
+                    100,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    "unit-test",
+                    "https://example.com/sh",
+                    "2026-06-06T00:00:00Z",
+                ),
+                (
+                    "920118.BJ",
+                    "2026-06-05",
+                    20,
+                    21,
+                    22,
+                    19,
+                    200,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    "unit-test",
+                    "https://example.com/bj",
+                    "2026-06-06T00:00:00Z",
+                ),
+            ]
+        )
+
+        repository = self._repository()
+        repository_again = self._repository()
+
+        self.assertEqual(
+            repository.load_daily_bars(symbol="600519.SH", start_date="2026-06-01", end_date="2026-06-30")[0].close_price,
+            1510,
+        )
+        self.assertEqual(
+            repository_again.load_daily_bars(symbol="920118.BJ", start_date="2026-06-01", end_date="2026-06-30")[0].volume,
+            200,
+        )
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            legacy_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
+            ).fetchone()
+        with closing(sqlite3.connect(self.db_path.parent / "market_stock_SH_51.db")) as connection:
+            sh_count = connection.execute("SELECT COUNT(*) FROM market_stock_daily_bar").fetchone()[0]
+        with closing(sqlite3.connect(self.db_path.parent / "market_stock_BJ_8.db")) as connection:
+            bj_count = connection.execute("SELECT COUNT(*) FROM market_stock_daily_bar").fetchone()[0]
+
+        self.assertIsNone(legacy_table)
+        self.assertEqual(sh_count, 1)
+        self.assertEqual(bj_count, 1)
+
+    def test_legacy_stock_daily_bar_migration_keeps_source_on_invalid_symbol(self) -> None:
+        """校验旧表存在非法 symbol 时迁移失败且源表完整保留。"""
+
+        self._create_legacy_daily_bar_table(
+            [
+                (
+                    "600519.HK",
+                    "2026-06-05",
+                    1500,
+                    1510,
+                    1520,
+                    1490,
+                    100,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    "unit-test",
+                    "https://example.com/hk",
+                    "2026-06-06T00:00:00Z",
+                )
+            ]
+        )
+
+        with self.assertRaisesRegex(ValueError, "HK"):
+            self._repository()
+
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            source_count = connection.execute("SELECT COUNT(*) FROM market_stock_daily_bar").fetchone()[0]
+        self.assertEqual(source_count, 1)
+
+    def test_stock_search_loads_latest_prices_from_multiple_shards(self) -> None:
+        """校验股票列表按分片批量补充最新收盘价。"""
+
+        repository = self._repository()
+        instruments = [
+            ("600519.SH", "600519", "SH", "贵州茅台"),
+            ("000010.SZ", "000010", "SZ", "美丽生态"),
+            ("920118.BJ", "920118", "BJ", "太湖远大"),
+            ("000011.SZ", "000011", "SZ", "深物业A"),
+        ]
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": symbol,
+                    "code": code,
+                    "exchange": exchange,
+                    "name": name,
+                    "instrument_type": "stock",
+                    "market_board": "测试板块",
+                    "listing_status": "listed",
+                }
+                for symbol, code, exchange, name in instruments
+            ]
+        )
+        for symbol, close_price in (("600519.SH", 1510), ("000010.SZ", 4.8), ("920118.BJ", 21)):
+            repository.upsert_daily_bars(
+                symbol,
+                [
+                    {
+                        "trade_date": "2026-06-05",
+                        "open_price": close_price - 1,
+                        "close_price": close_price,
+                        "high_price": close_price + 1,
+                        "low_price": close_price - 2,
+                        "volume": 100,
+                    }
+                ],
+            )
+
+        items, total = repository.search_instruments(limit=10, offset=0)
+        prices = {item.symbol: item.latest_price for item in items}
+
+        self.assertEqual(total, 4)
+        self.assertEqual(prices["600519.SH"], 1510)
+        self.assertEqual(prices["000010.SZ"], 4.8)
+        self.assertEqual(prices["920118.BJ"], 21)
+        self.assertIsNone(prices["000011.SZ"])
+
+    def test_stock_search_repairs_existing_empty_shard_database(self) -> None:
+        """校验读路径会修复已存在但缺少 schema 的分片文件。"""
+
+        empty_shard_path = self.db_path.parent / "market_stock_SH_51.db"
+        empty_shard_path.touch()
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "600519.SH",
+                    "code": "600519",
+                    "exchange": "SH",
+                    "name": "贵州茅台",
+                    "instrument_type": "stock",
+                    "market_board": "沪市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+
+        items, total = repository.search_instruments(limit=10, offset=0)
+
+        self.assertEqual(total, 1)
+        self.assertIsNone(items[0].latest_price)
+        with closing(sqlite3.connect(empty_shard_path)) as connection:
+            table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_daily_bar'"
+            ).fetchone()
+        self.assertIsNotNone(table)
 
     def test_stock_detail_lazy_loads_three_month_window_when_history_absent(self) -> None:
         """校验首次查看股票详情时，会懒加载日线并返回概况和财报数据。"""
-        repository = StockMarketRepository(self.db_path)
+        repository = self._repository()
         repository.upsert_instruments(
             [
                 {
@@ -313,7 +606,7 @@ class StockMarketModuleTests(unittest.TestCase):
 
     def test_stock_detail_logs_compact_warning_when_lazy_daily_sync_fails(self) -> None:
         """校验日线懒加载失败时只记录短 warning，不输出完整异常栈。"""
-        repository = StockMarketRepository(self.db_path)
+        repository = self._repository()
         repository.upsert_instruments(
             [
                 {

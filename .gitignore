@@ -68,3 +68,8 @@ frontend/dist/
 to_delete
 .merge-backups
 .superpowers
+
+# db
+*.db-wal
+*.db-shm
+*.db-journal

@@ -113,6 +113,16 @@ Event Insight 约束：
 - 原始材料和事件 FTS 索引由 SQLite trigger 同步
 - Neo4j 仅作为后续可重建投影，不是事实来源
 
+股票日线分库约束：
+
+- `.data/market_data.db` 保存股票标的、概况、财报和同步状态，不再保存日线事实表
+- `.data/market_stock_SH_00.db` 至 `.data/market_stock_SH_99.db` 保存沪市日线
+- `.data/market_stock_SZ_00.db` 至 `.data/market_stock_SZ_99.db` 保存深市日线
+- `.data/market_stock_BJ_0.db` 至 `.data/market_stock_BJ_9.db` 保存北交所日线
+- `src/services/stock_market_sharding.py` 是唯一分片路由和 schema 初始化入口
+- `StockMarketRepository` 负责旧主库日线迁移、分片读写和按分片批量补充最新价
+- 分片表使用 `(symbol, trade_date)` 主键；SQLite 跨文件不支持外键，标的一致性由仓储校验维持
+
 ### 2.6 前端展示层（Frontend SPA）
 
 路径：`frontend/src/`
