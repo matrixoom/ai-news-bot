@@ -670,8 +670,8 @@ function RangeToolbar(props: {
           {(
             [
               { value: "none", label: "不复权" },
-              { value: "forward", label: "前复权" },
-              { value: "backward", label: "后复权" },
+              // { value: "forward", label: "前复权" },
+              // { value: "backward", label: "后复权" },
             ] as const
           ).map((option) => {
             const isSelected = props.priceAdjustment === option.value;
@@ -728,12 +728,13 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         axisPointer: { type: "cross" },
       },
       legend: {
-        top: 0,
-        right: 16,
+        top: 5,
+        left: "center",
+        type: "scroll",
         itemWidth: 16,
         itemHeight: 8,
         textStyle: { color: "#64748b", fontSize: 11 },
-        data: ["K线", "MA5", "MA10", "MA20", "MA60", "MA120", "成交量"],
+        data: ["K线", "MA5", "MA10", "MA20", "MA60", "MA120"],
       },
       grid: [
         { left: 54, right: 22, top: 38, height: "56%" },
