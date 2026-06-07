@@ -65,7 +65,7 @@ export function StockMarketWorkspace() {
   const [marketBoard, setMarketBoard] = useState("all");
   const [listingStatus, setListingStatus] = useState("all");
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
-  const [range, setRange] = useState<MarketDataRangeSelection>({ type: "3m" });
+  const [range, setRange] = useState<MarketDataRangeSelection>({ type: "1m" });
   const [financialReportType, setFinancialReportType] = useState<StockFinancialReportType>("quarterly");
   const [instrumentPage, setInstrumentPage] = useState(1);
   const [isInstrumentListCollapsed, setIsInstrumentListCollapsed] = useState(false);

@@ -35,7 +35,7 @@ from src.services.stock_market_sharding import (
     resolve_market_stock_shard_path,
 )
 from src.services.stock_market_service import StockMarketService
-from src.services.stock_market_sync_service import StockMarketSyncService, _ak_etf_daily
+from src.services.stock_market_sync_service import StockMarketSyncService, _ak_etf_daily, _ak_stock_daily
 
 
 class StockMarketShardingTests(unittest.TestCase):
@@ -590,7 +590,7 @@ class StockMarketModuleTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNotNone(table)
 
-    def test_stock_detail_lazy_loads_three_month_window_when_history_absent(self) -> None:
+    def test_stock_detail_lazy_loads_requested_window_when_history_absent(self) -> None:
         """校验首次查看股票详情时，会懒加载日线并返回概况和财报数据。"""
         repository = self._repository()
         repository.upsert_instruments(
@@ -663,6 +663,45 @@ class StockMarketModuleTests(unittest.TestCase):
         revenue_series = next(series for series in payload["financials"]["series"] if series["metric"] == "revenue")
         self.assertEqual(revenue_series["points"][0]["value"], 352.77)
 
+    def test_stock_detail_defaults_to_one_month_when_history_absent(self) -> None:
+        """校验未指定范围时，详情查询和首次懒同步都使用最近一个月。"""
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 0}
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        class FixedDate(date):
+            """固定测试日期，避免默认月份范围随执行日期变化。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的固定当前日期。"""
+
+                return cls(2026, 6, 7)
+
+        with patch("src.services.stock_market_service.date", FixedDate):
+            payload = service.build_stock_detail_payload("000001.SZ")
+
+        self.assertEqual(payload["range"]["type"], "1m")
+        self.assertEqual(payload["range"]["start_date"], "2026-05-07")
+        self.assertEqual(payload["range"]["end_date"], "2026-06-07")
+        sync_call = syncer.sync_symbol_window.call_args
+        self.assertEqual(sync_call.kwargs["start_date"], date(2026, 5, 7))
+        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 7))
+
     def test_stock_detail_logs_compact_warning_when_lazy_daily_sync_fails(self) -> None:
         """校验日线懒加载失败时只记录短 warning，不输出完整异常栈。"""
         repository = self._repository()
@@ -710,6 +749,34 @@ class StockMarketModuleTests(unittest.TestCase):
 
         self.assertEqual(frame.to_dict("records"), [{"date": "2026-06-01", "open": 2.0, "close": 2.1, "high": 2.2, "low": 1.9, "volume": 2000}])
         fake_akshare.fund_etf_hist_sina.assert_called_once_with(symbol="sz159007")
+
+    def test_stock_daily_loader_normalizes_tencent_lot_volume(self) -> None:
+        """校验腾讯 AkShare 回退数据会把手数转换为系统使用的股数。"""
+        fake_akshare = SimpleNamespace(
+            stock_zh_a_hist=Mock(side_effect=RuntimeError("eastmoney unavailable")),
+            stock_zh_a_hist_tx=Mock(
+                return_value=pd.DataFrame(
+                    [
+                        {
+                            "date": date(2026, 6, 5),
+                            "open": 23.3,
+                            "close": 23.09,
+                            "high": 23.58,
+                            "low": 22.91,
+                            "amount": 50542.0,
+                        }
+                    ]
+                )
+            ),
+            stock_zh_a_daily=Mock(),
+        )
+
+        with patch.dict("sys.modules", {"akshare": fake_akshare}):
+            frame = _ak_stock_daily(symbol="000029", start_date="20260501", end_date="20260607")
+
+        self.assertEqual(frame.iloc[0]["volume"], 5_054_200.0)
+        self.assertNotIn("amount", frame.columns)
+        fake_akshare.stock_zh_a_daily.assert_not_called()
 
 
 class MarketIndexVolumeTests(unittest.TestCase):

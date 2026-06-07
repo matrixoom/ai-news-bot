@@ -352,7 +352,7 @@ def create_fastapi_app(
     @app.get("/api/frontend/modules/market-data/stocks/{symbol}")
     def frontend_stock_market_detail(
         symbol: str,
-        range: str = "3m",
+        range: str = "1m",
         start_date: str | None = None,
         end_date: str | None = None,
         financial_report_type: str = "quarterly",
@@ -382,7 +382,7 @@ def create_fastapi_app(
             return JSONResponse(
                 stock_service.refresh_stock_detail(
                     symbol,
-                    range_type=str(body.get("range", "3m")),
+                    range_type=str(body.get("range", "1m")),
                     start_date=str(body["start_date"]) if body.get("start_date") else None,
                     end_date=str(body["end_date"]) if body.get("end_date") else None,
                     financial_report_type=str(body.get("financial_report_type", "quarterly")),

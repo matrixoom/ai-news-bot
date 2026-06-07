@@ -120,18 +120,18 @@ class StockMarketService:
         self,
         symbol: str,
         *,
-        range_type: str = "3m",
+        range_type: str = "1m",
         start_date: str | None = None,
         end_date: str | None = None,
         financial_report_type: str = "quarterly",
     ) -> dict[str, Any]:
-        """返回选中股票详情，并在首次无日线数据时懒加载近 3 个月。"""
+        """返回选中股票详情，并在首次无日线数据时懒加载近 1 个月。"""
 
         instrument = self._require_instrument(symbol)
         resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
         warning = ""
         if not self._repository.has_daily_bars(instrument.symbol):
-            default_range = self._resolve_range(range_type="3m", start_date=None, end_date=None)
+            default_range = self._resolve_range(range_type="1m", start_date=None, end_date=None)
             try:
                 self._sync_service.sync_symbol_window(
                     instrument,
@@ -154,7 +154,7 @@ class StockMarketService:
         self,
         symbol: str,
         *,
-        range_type: str = "3m",
+        range_type: str = "1m",
         start_date: str | None = None,
         end_date: str | None = None,
         financial_report_type: str = "quarterly",
