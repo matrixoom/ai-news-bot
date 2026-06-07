@@ -73,7 +73,8 @@ def resolve_market_stock_shard_path(symbol: str, shard_dir: str | Path) -> Path:
         目标分片数据库路径。
     """
 
-    return Path(shard_dir) / resolve_market_stock_shard_name(symbol)
+    _, exchange = symbol.split(".", 1)
+    return Path(shard_dir) / exchange / resolve_market_stock_shard_name(symbol)
 
 
 def iter_market_stock_shard_paths(shard_dir: str | Path) -> list[Path]:
@@ -88,12 +89,47 @@ def iter_market_stock_shard_paths(shard_dir: str | Path) -> list[Path]:
 
     directory = Path(shard_dir)
     paths = [
-        directory / f"market_stock_{exchange}_{shard_key:02d}.db"
+        directory / exchange / f"market_stock_{exchange}_{shard_key:02d}.db"
         for exchange in ("SH", "SZ")
         for shard_key in range(100)
     ]
-    paths.extend(directory / f"market_stock_BJ_{shard_key}.db" for shard_key in range(10))
+    paths.extend(directory / "BJ" / f"market_stock_BJ_{shard_key}.db" for shard_key in range(10))
     return paths
+
+
+def migrate_legacy_market_stock_shards(
+    legacy_dir: str | Path,
+    shard_dir: str | Path,
+) -> list[Path]:
+    """将旧扁平分片移动到按交易所划分的新目录。
+
+    Args:
+        legacy_dir: 旧分片文件所在目录。
+        shard_dir: 新分片根目录，其下包含 SH、SZ、BJ 子目录。
+
+    Returns:
+        本次成功移动到新目录的分片路径。
+
+    Raises:
+        FileExistsError: 新旧位置同时存在同名非空分片，拒绝覆盖已有数据。
+    """
+
+    source_directory = Path(legacy_dir)
+    moved_paths: list[Path] = []
+    for target_path in iter_market_stock_shard_paths(shard_dir):
+        source_path = source_directory / target_path.name
+        if not source_path.exists():
+            continue
+        if target_path.exists():
+            if source_path.stat().st_size == 0:
+                continue
+            raise FileExistsError(
+                f"股票日线新旧分片同时存在，拒绝覆盖: source={source_path}, target={target_path}"
+            )
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.replace(target_path)
+        moved_paths.append(target_path)
+    return moved_paths
 
 
 def initialize_market_stock_shard(db_path: str | Path) -> Path:
