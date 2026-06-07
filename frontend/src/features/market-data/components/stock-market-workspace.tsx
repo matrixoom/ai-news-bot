@@ -10,7 +10,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-query";
 import { useStockMarketInstrumentsQuery } from "../hooks/use-stock-market-instruments-query";
 import { useStockMarketRefreshMutation } from "../hooks/use-stock-market-refresh-mutation";
-import { useStockMarketUniverseSyncMutation } from "../hooks/use-stock-market-universe-sync-mutation";
 import type {
   MarketDataRangeSelection,
   StockDailyBar,
@@ -86,7 +85,6 @@ export function StockMarketWorkspace() {
     page: instrumentPage,
     pageSize: instrumentPageSize,
   });
-  const universeMutation = useStockMarketUniverseSyncMutation();
   const detailQuery = useStockMarketDetailQuery(selectedSymbol, range, financialReportType);
   const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType);
   const instruments = instrumentsQuery.data?.items ?? [];
@@ -161,9 +159,7 @@ export function StockMarketWorkspace() {
         onListingStatusChange={handleListingStatusChange}
         onMarketBoardChange={handleMarketBoardChange}
         onSearchTextChange={handleSearchTextChange}
-        onSyncUniverse={() => universeMutation.mutate()}
         searchText={searchText}
-        syncPending={universeMutation.isPending}
       />
 
       <div
@@ -299,12 +295,10 @@ function FilterBand(props: {
   instrumentType: string;
   marketBoard: string;
   listingStatus: string;
-  syncPending: boolean;
   onSearchTextChange: (value: string) => void;
   onInstrumentTypeChange: (value: string) => void;
   onMarketBoardChange: (value: string) => void;
   onListingStatusChange: (value: string) => void;
-  onSyncUniverse: () => void;
 }) {
   return (
     <div className="flex min-h-20 flex-wrap items-center gap-6 border-b border-slate-200 bg-white px-6 py-4">
@@ -321,15 +315,6 @@ function FilterBand(props: {
       <TopSelect label="证券类型" onChange={props.onInstrumentTypeChange} options={INSTRUMENT_TYPE_OPTIONS} value={props.instrumentType} />
       <TopSelect label="市场类型" onChange={props.onMarketBoardChange} options={MARKET_BOARD_OPTIONS} value={props.marketBoard} />
       <TopSelect label="上市状态" onChange={props.onListingStatusChange} options={LISTING_STATUS_OPTIONS} value={props.listingStatus} />
-      <button
-        className="ml-auto inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-        disabled={props.syncPending}
-        onClick={props.onSyncUniverse}
-        type="button"
-      >
-        <ArrowPathIcon aria-hidden="true" className={`h-4 w-4 ${props.syncPending ? "animate-spin" : ""}`} />
-        {props.syncPending ? "刷新中" : "刷新基础标的"}
-      </button>
     </div>
   );
 }
@@ -571,7 +556,7 @@ function StockDetailTabs(props: {
   onTabChange: (tab: StockDetailTab) => void;
 }) {
   const tabs: Array<{ value: StockDetailTab; label: string }> = [
-    { value: "overview", label: "概览" },
+    { value: "overview", label: "市场行情" },
     { value: "financial", label: "财务数据" },
   ];
 
@@ -639,70 +624,74 @@ function RangeToolbar(props: {
         ))}
       </div>
       {props.range.type === "custom" ? (
-        <>
-          <label className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-500">
-            <input
-              aria-label="起始日期"
-              className="w-28 bg-transparent text-slate-700 outline-none"
-              onChange={(event) => {
-                setStartDate(event.target.value);
-                props.onRangeChange({ type: "custom", startDate: event.target.value, endDate });
-              }}
-              type="date"
-              value={startDate}
-            />
-            <span>至</span>
-            <input
-              aria-label="结束日期"
-              className="w-28 bg-transparent text-slate-700 outline-none"
-              onChange={(event) => {
-                setEndDate(event.target.value);
-                props.onRangeChange({ type: "custom", startDate, endDate: event.target.value });
-              }}
-              type="date"
-              value={endDate}
-            />
-            <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />
-          </label>
-          <button
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-300"
-            disabled={props.refreshPending}
-            onClick={props.onRefresh}
-            type="button"
-          >
-            <ArrowPathIcon aria-hidden="true" className={`h-4 w-4 ${props.refreshPending ? "animate-spin" : ""}`} />
-            刷新数据
-          </button>
-        </>
+        <label className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-500">
+          <input
+            aria-label="起始日期"
+            className="w-28 bg-transparent text-slate-700 outline-none"
+            onChange={(event) => {
+              setStartDate(event.target.value);
+              props.onRangeChange({ type: "custom", startDate: event.target.value, endDate });
+            }}
+            type="date"
+            value={startDate}
+          />
+          <span>至</span>
+          <input
+            aria-label="结束日期"
+            className="w-28 bg-transparent text-slate-700 outline-none"
+            onChange={(event) => {
+              setEndDate(event.target.value);
+              props.onRangeChange({ type: "custom", startDate, endDate: event.target.value });
+            }}
+            type="date"
+            value={endDate}
+          />
+          <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />
+        </label>
       ) : null}
-      <div
-        aria-label="价格复权方式"
-        className="ml-auto inline-flex h-8 overflow-hidden rounded-full border border-slate-200 bg-white text-xs font-semibold"
-      >
-        {(
-          [
-            { value: "none", label: "不复权" },
-            { value: "forward", label: "前复权" },
-            { value: "backward", label: "后复权" },
-          ] as const
-        ).map((option) => {
-          const isSelected = props.priceAdjustment === option.value;
-          return (
-            <button
-              aria-pressed={isSelected}
-              className={`border-r border-slate-200 px-3 last:border-r-0 ${
-                isSelected
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-              }`}
-              key={option.value}
-              onClick={() => props.onPriceAdjustmentChange(option.value)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          );
-        })}
+      <div className="ml-auto flex items-center gap-2">
+        <button
+          aria-label="刷新行情数据"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-600 shadow-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          disabled={props.refreshPending}
+          onClick={props.onRefresh}
+          title="刷新选中时间范围内的行情数据"
+          type="button"
+        >
+          <ArrowPathIcon
+            aria-hidden="true"
+            className={`h-4 w-4 ${props.refreshPending ? "animate-spin" : ""}`}
+          />
+        </button>
+        <div
+          aria-label="价格复权方式"
+          className="inline-flex h-8 overflow-hidden rounded-full border border-slate-200 bg-white text-xs font-semibold"
+        >
+          {(
+            [
+              { value: "none", label: "不复权" },
+              { value: "forward", label: "前复权" },
+              { value: "backward", label: "后复权" },
+            ] as const
+          ).map((option) => {
+            const isSelected = props.priceAdjustment === option.value;
+            return (
+              <button
+                aria-pressed={isSelected}
+                className={`border-r border-slate-200 px-3 last:border-r-0 ${
+                  isSelected
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                }`}
+                key={option.value}
+                onClick={() => props.onPriceAdjustmentChange(option.value)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -895,7 +884,7 @@ function FinancialCards(props: {
         aria-label="财务筛选工具栏"
         className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 pb-3"
       >
-        <span className="text-xs font-semibold text-slate-500">时间范围</span>
+        {/*<span className="text-xs font-semibold text-slate-500">时间范围</span>*/}
         <div aria-label="财务时间范围" className="inline-flex h-8 overflow-hidden rounded-md border border-slate-200 bg-white">
           {STOCK_RANGE_OPTIONS.map((option) => (
             <button
