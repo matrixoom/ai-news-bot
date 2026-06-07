@@ -46,6 +46,35 @@ const financialSeries = [
   },
 ];
 
+const dailyBars = [
+  {
+    date: "2026-06-05",
+    open: 10,
+    high: 11,
+    low: 9,
+    close: 10.5,
+    volume: 1000,
+    ma5: 10.2,
+    ma10: 10.1,
+    ma20: null,
+    ma60: null,
+    ma120: null,
+  },
+  {
+    date: "2026-06-06",
+    open: 10.5,
+    high: 11.5,
+    low: 10,
+    close: 11,
+    volume: 1200,
+    ma5: 10.4,
+    ma10: 10.2,
+    ma20: null,
+    ma60: null,
+    ma120: null,
+  },
+];
+
 vi.mock("echarts", () => ({
   init: vi.fn(() => ({
     setOption: vi.fn(),
@@ -114,7 +143,7 @@ vi.mock("../hooks/use-stock-market-detail-query", () => ({
       data: symbol
         ? {
             instrument: instruments.find((instrument) => instrument.symbol === symbol) ?? instruments[0],
-            daily_bars: [],
+            daily_bars: dailyBars,
             profile: {
               listing_date: "",
               sector: "",
@@ -251,6 +280,9 @@ describe("StockMarketWorkspace", () => {
     expect(screen.queryByRole("button", { name: "加入自选" })).not.toBeInTheDocument();
     expect(screen.queryByText("市盈率(TTM)")).not.toBeInTheDocument();
     expect(screen.queryByText("总市值")).not.toBeInTheDocument();
+    expect(screen.queryByText(/交易中/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/开：/)).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "000001.SZ 日级别行情K线" })).toHaveClass("h-[400px]");
   });
 
   it("shows financial metrics as secondary tabs with an independent overview-compatible range", async () => {
