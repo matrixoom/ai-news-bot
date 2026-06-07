@@ -73,4 +73,4 @@ to_delete
 *.db-wal
 *.db-shm
 *.db-journal
-/.data/market_stock_*.db
+
