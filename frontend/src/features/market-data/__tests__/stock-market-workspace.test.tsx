@@ -27,6 +27,25 @@ const instruments: StockInstrument[] = Array.from({ length: 25 }, (_, index) => 
   };
 });
 
+const financialSeries = [
+  {
+    metric: "revenue",
+    label: "营业收入",
+    points: [
+      { period: "2021-12-31", value: 100, unit: "亿元" },
+      { period: "2025-12-31", value: 200, unit: "亿元" },
+    ],
+  },
+  {
+    metric: "cash_flow",
+    label: "经营活动现金流",
+    points: [
+      { period: "2021-12-31", value: 20, unit: "亿元" },
+      { period: "2025-12-31", value: 40, unit: "亿元" },
+    ],
+  },
+];
+
 vi.mock("echarts", () => ({
   init: vi.fn(() => ({
     setOption: vi.fn(),
@@ -102,7 +121,7 @@ vi.mock("../hooks/use-stock-market-detail-query", () => ({
               industry: "",
               region: "",
             },
-            financials: { series: [] },
+            financials: { series: financialSeries },
             sync_state: {
               warning_message: "",
               synced_at: "",
@@ -224,6 +243,39 @@ describe("StockMarketWorkspace", () => {
 
     expect(screen.getByRole("button", { name: "近3月" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "财务数据" })).not.toBeInTheDocument();
+  });
+
+  it("removes the redundant summary metrics and watchlist action", () => {
+    render(<StockMarketWorkspace />);
+
+    expect(screen.queryByRole("button", { name: "加入自选" })).not.toBeInTheDocument();
+    expect(screen.queryByText("市盈率(TTM)")).not.toBeInTheDocument();
+    expect(screen.queryByText("总市值")).not.toBeInTheDocument();
+  });
+
+  it("shows one financial metric per tab and keeps its range independent", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("tab", { name: "财务数据" }));
+
+    expect(screen.getByRole("tab", { name: "营业收入" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "经营活动现金流" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("img", { name: "营业收入 图表" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "经营活动现金流 图表" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "近5年" })).toHaveClass("bg-blue-50");
+    expect(screen.getByText("+100.00%")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "经营活动现金流" }));
+    expect(screen.queryByRole("img", { name: "营业收入 图表" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "经营活动现金流 图表" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "近3年" }));
+    expect(screen.getByRole("button", { name: "近3年" })).toHaveClass("bg-blue-50");
+    expect(screen.queryByText("+100.00%")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "概览" }));
+    expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("bg-blue-50");
   });
 
   it("keeps the paginator at the bottom of the viewport-height list panel", () => {
