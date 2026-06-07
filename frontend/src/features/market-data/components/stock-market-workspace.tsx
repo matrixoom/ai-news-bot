@@ -284,7 +284,7 @@ function HeaderBand() {
       <div className="text-base font-semibold text-slate-500">
         Market Data
         <span className="px-3 text-slate-300">/</span>
-        <span className="text-slate-950">股票市场</span>
+        <span className="text-slate-950">股市</span>
       </div>
     </div>
   );
@@ -670,8 +670,8 @@ function RangeToolbar(props: {
           {(
             [
               { value: "none", label: "不复权" },
-              // { value: "forward", label: "前复权" },
-              // { value: "backward", label: "后复权" },
+              { value: "forward", label: "前复权" },
+              { value: "backward", label: "后复权" },
             ] as const
           ).map((option) => {
             const isSelected = props.priceAdjustment === option.value;

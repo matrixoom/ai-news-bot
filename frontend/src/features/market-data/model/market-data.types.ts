@@ -173,6 +173,6 @@ export type StockDetailPayload = {
 export const MARKET_DATA_TABS: readonly ModuleTabDefinition<MarketDataTab>[] = [
   { value: "commodities", label: "商品", description: "WTI原油、布伦特原油" },
   { value: "precious_metals", label: "贵金属", description: "黄金、白银、铜" },
-  { value: "stock_market", label: "股票市场", description: "A股、ETF日线与财报" },
+  { value: "stock_market", label: "股市", description: "A股、ETF日线与财报" },
   { value: "real_estate", label: "房地产", description: "70城二手房价格指数" },
 ];
