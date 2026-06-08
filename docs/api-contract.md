@@ -379,7 +379,9 @@ OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短�
 
 ### 4.4.5 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
 
-用途：手动刷新选中股票/ETF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。
+用途：手动刷新选中股票/ETF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。股票会同时
+强制刷新财务指标，确保 ROE、营收同比、净利润同比和资产负债率可以补采最新季度数据；ETF 不执行
+公司财务指标刷新。
 
 请求体：
 
@@ -392,7 +394,18 @@ OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短�
 }
 ```
 
-成功：`200`，响应同详情接口，并额外包含 `refresh_result`。
+成功：`200`，响应同详情接口，并额外包含 `refresh_result`：
+
+```json
+{
+  "refresh_result": {
+    "daily_bars": 162,
+    "financial_metrics": 846
+  }
+}
+```
+
+ETF 的 `refresh_result` 仅包含 `daily_bars`。
 
 失败：
 
@@ -1203,6 +1216,9 @@ P7 新增 `EventRetrievalService`，当前不新增公开 HTTP 端点，供后�
 ```json
 {"error":"push_trigger_failed"}
 ```
+
+定时推送会在实际发送前按“任务 ID + 计划时区本地分钟”进行跨进程原子抢占。即使同时运行多个
+FastAPI 实例，同一计划槽位也只允许一个实例执行发送。
 
 ## 6. 错误与兼容性约定
 

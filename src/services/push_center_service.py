@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import UTC, datetime
+import hashlib
 import json
 import logging
 import os
@@ -142,6 +143,9 @@ class PushCenterService:
         )
         self._state_path = self._config_path.with_name(
             f"{self._config_path.stem}.state{self._config_path.suffix}"
+        )
+        self._schedule_claim_root = self._config_path.with_name(
+            f"{self._config_path.stem}.schedule-claims"
         )
         self._template_path = self._config_path.with_name(
             f"{self._config_path.stem}.template{self._config_path.suffix}"
@@ -343,6 +347,8 @@ class PushCenterService:
             if not schedule.get("enabled"):
                 continue
             if not self._is_schedule_due(schedule, current_time, state):
+                continue
+            if not self._claim_schedule_slot(schedule, current_time):
                 continue
             run_result = self._execute_delivery(
                 config,
@@ -1201,6 +1207,49 @@ class PushCenterService:
         timezone = ZoneInfo(str(schedule.get("timezone") or DEFAULT_TIMEZONE))
         local_now = now.astimezone(timezone)
         return f"{schedule.get('id')}@{local_now.strftime('%Y-%m-%dT%H:%M')}"
+
+    def _claim_schedule_slot(self, schedule: Mapping[str, Any], now: datetime) -> bool:
+        """跨进程原子抢占计划任务的分钟槽位。
+
+        Args:
+            schedule: 当前计划任务配置。
+            now: 本轮调度检查时间。
+
+        Returns:
+            当前进程首次抢占成功时返回 ``True``，槽位已被其他进程抢占时返回 ``False``。
+        """
+
+        history_key = self._schedule_history_key(schedule, now)
+        claim_name = f"{hashlib.sha256(history_key.encode('utf-8')).hexdigest()}.json"
+        claim_path = self._schedule_claim_root / claim_name
+        self._schedule_claim_root.mkdir(parents=True, exist_ok=True)
+        try:
+            descriptor = os.open(
+                claim_path,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+            )
+        except FileExistsError:
+            logger.info("push-center schedule slot already claimed: %s", history_key)
+            return False
+        except OSError as error:
+            logger.warning(
+                "push-center schedule slot claim failed for %s: %s",
+                history_key,
+                error,
+            )
+            return False
+
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "history_key": history_key,
+                    "claimed_at": _utc_now_iso(),
+                    "process_id": os.getpid(),
+                },
+                handle,
+                ensure_ascii=False,
+            )
+        return True
 
     def _trim_scheduler_history(self, config: dict[str, Any]) -> None:
         history = dict(config.get("scheduler_history") or {})

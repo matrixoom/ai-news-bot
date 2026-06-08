@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import time
 import unittest
 from datetime import UTC, datetime
@@ -661,6 +662,80 @@ class PushCenterModuleTests(unittest.TestCase):
         self.assertIn("market-daily@2026-03-22T08:00", state_json["scheduler_history"])
         config_json = self._read_json(self.config_path)
         self.assertNotIn("scheduler_history", config_json)
+
+    def test_scheduler_claims_slot_before_delivery_across_service_instances(self):
+        """校验多个后端实例并发检查同一计划槽位时只执行一次发送。"""
+        self.push_service.update_config(
+            {
+                "selected_module_ids": ["market"],
+                "email": {
+                    "smtp_server": "smtp.example.com",
+                    "smtp_port": 587,
+                    "username": "bot@example.com",
+                    "password": "secret",
+                    "from_address": "bot@example.com",
+                    "to_addresses": "desk@example.com",
+                    "use_tls": True,
+                },
+                "schedules": [
+                    {
+                        "id": "market-daily",
+                        "name": "市场日报",
+                        "enabled": True,
+                        "module_ids": ["market"],
+                        "channel_types": ["email"],
+                        "times": ["08:00"],
+                        "timezone": "Asia/Shanghai",
+                    }
+                ],
+            }
+        )
+        second_service = PushCenterService(
+            dashboard_service=RecordingDashboardService(),
+            report_service=StubPushReportService(),
+            config_path=self.config_path,
+            enable_scheduler=False,
+            email_notifier_factory=RecordingEmailNotifier,
+        )
+        first_entered = threading.Event()
+        release_first = threading.Event()
+        first_result = {
+            "result": {"executed_at": "2026-03-22T08:00:00+08:00"},
+        }
+        second_calls: list[bool] = []
+
+        def blocking_delivery(*args, **kwargs):
+            """阻塞首个实例，模拟邮件尚未发送完成时另一个实例开始检查。"""
+            _ = (args, kwargs)
+            first_entered.set()
+            release_first.wait(timeout=2)
+            return first_result
+
+        def recording_delivery(*args, **kwargs):
+            """记录第二个实例是否错误进入了同一槽位的发送流程。"""
+            _ = (args, kwargs)
+            second_calls.append(True)
+            return first_result
+
+        self.push_service._execute_delivery = blocking_delivery
+        second_service._execute_delivery = recording_delivery
+        slot_time = datetime(2026, 3, 22, 0, 0, tzinfo=UTC)
+        first_thread = threading.Thread(
+            target=self.push_service.run_due_jobs,
+            kwargs={"now": slot_time},
+        )
+        try:
+            first_thread.start()
+            self.assertTrue(first_entered.wait(timeout=2))
+
+            second_results = second_service.run_due_jobs(now=slot_time)
+
+            self.assertEqual(second_results, [])
+            self.assertEqual(second_calls, [])
+        finally:
+            release_first.set()
+            first_thread.join(timeout=2)
+            second_service.stop_scheduler()
 
     def test_manual_trigger_sends_same_preview_payload_as_email_body(self):
         push_service = PushCenterService(
