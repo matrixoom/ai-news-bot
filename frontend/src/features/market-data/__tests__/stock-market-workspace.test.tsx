@@ -495,7 +495,12 @@ describe("StockMarketWorkspace", () => {
 
     await waitFor(() => expect(mocks.echartOptions.length).toBeGreaterThan(0));
     const klineOption = mocks.echartOptions[0] as {
-      legend?: { right?: number; orient?: string; data?: string[] };
+      legend?: {
+        right?: number;
+        orient?: string;
+        data?: string[];
+        selected?: Record<string, boolean>;
+      };
       tooltip?: { padding?: number[]; textStyle?: { fontSize?: number } };
       grid?: Array<{ height?: string | number }>;
       yAxis?: Array<{ axisLabel?: { show?: boolean; fontSize?: number } }>;
@@ -510,6 +515,12 @@ describe("StockMarketWorkspace", () => {
     expect(klineOption.legend?.data).toEqual(
       expect.arrayContaining(["PE(TTM)", "PB(MRQ)", "股息率(TTM)", "总市值"]),
     );
+    expect(klineOption.legend?.selected).toEqual({
+      "PE(TTM)": false,
+      "PB(MRQ)": false,
+      "股息率(TTM)": false,
+      总市值: false,
+    });
     expect(seriesByName["PE(TTM)"]?.data).toEqual([5.1, null]);
     expect(klineOption.tooltip?.textStyle?.fontSize).toBe(10);
     expect(klineOption.tooltip?.padding).toEqual([6, 8]);
