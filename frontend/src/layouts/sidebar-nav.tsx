@@ -6,6 +6,7 @@ import {
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   Cog6ToothIcon,
+  CpuChipIcon,
   DocumentTextIcon,
   PaperAirplaneIcon,
   SparklesIcon,
@@ -164,6 +165,10 @@ function CompactNavIcon({ item }: { item: NavItem }) {
 
   if (pathname === "/trend-models") {
     return <SparklesIcon aria-hidden="true" className={iconClassName} />;
+  }
+
+  if (pathname === "/ai-agent") {
+    return <CpuChipIcon aria-hidden="true" className={iconClassName} />;
   }
 
   return <PaperAirplaneIcon aria-hidden="true" className={iconClassName} />;

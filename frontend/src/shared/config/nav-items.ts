@@ -19,6 +19,7 @@ export const moduleRootNavItems: NavItem[] = [
   { to: "/push", title: "Push Center", description: "Templates and schedules" },
   { to: "/market-data", title: "Market Data", description: "Commodities, precious metals, and stock indices" },
   { to: "/trend-models", title: "Trend Models", description: "AI trend analysis and forecasting" },
+  { to: "/ai-agent", title: "AI Agent", description: "AI agent workspace" },
 ];
 
 export const primaryNavItems: NavItem[] = [...moduleRootNavItems];
@@ -179,6 +180,12 @@ export const moduleDirectories: ModuleDirectory[] = [
   {
     id: "trend-models",
     item: moduleRootNavItems[5],
+    children: [],
+    defaultExpanded: false,
+  },
+  {
+    id: "ai-agent",
+    item: moduleRootNavItems[6],
     children: [],
     defaultExpanded: false,
   },

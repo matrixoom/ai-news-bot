@@ -7,11 +7,21 @@ import { NotesPage } from "../pages/notes-page";
 import { PushPage } from "../pages/push-page";
 import { TrendModelsPage } from "../pages/trend-models-page";
 import { SettingsPage } from "../pages/settings-page";
+import { ModulePlaceholderPage } from "../pages/module-placeholder-page";
 import { DEFAULT_ROUTE_STORAGE_KEY, readStringPreference } from "../shared/lib/workbench-preferences";
 
 function AppIndexRedirect() {
   const defaultRoute = readStringPreference(DEFAULT_ROUTE_STORAGE_KEY, "/push");
-  const allowedRoutes = new Set(["/macro-data", "/event-outlook", "/notes", "/market-data", "/trend-models", "/push", "/settings"]);
+  const allowedRoutes = new Set([
+    "/macro-data",
+    "/event-outlook",
+    "/notes",
+    "/market-data",
+    "/trend-models",
+    "/ai-agent",
+    "/push",
+    "/settings",
+  ]);
   const nextRoute = allowedRoutes.has(defaultRoute) ? defaultRoute : "/push";
 
   return <Navigate to={nextRoute} replace />;
@@ -55,6 +65,11 @@ export const appRoutes: RouteObject[] = [
         path: "trend-models",
         element: <TrendModelsPage />,
         handle: { title: "Trend Models", description: "AI trend analysis and forecasting" },
+      },
+      {
+        path: "ai-agent",
+        element: <ModulePlaceholderPage />,
+        handle: { title: "AI Agent", description: "AI agent workspace" },
       },
       {
         path: "settings",
