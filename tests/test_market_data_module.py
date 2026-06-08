@@ -1087,6 +1087,55 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(sync_call.kwargs["start_date"], date(2026, 5, 7))
         self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 7))
 
+    def test_manual_refresh_forces_financial_indicator_sync(self) -> None:
+        """校验手动刷新即使已有旧财务数据，也会主动补采最新财务指标。"""
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_financial_metrics(
+            "000001.SZ",
+            [
+                {
+                    "report_period": "2025-12-31",
+                    "report_type": "yearly",
+                    "metric": metric,
+                    "label": metric,
+                    "value": 1,
+                    "unit": "%",
+                }
+                for metric in ("roe", "revenue_yoy", "net_profit_yoy", "debt_asset_ratio")
+            ],
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 2}
+        syncer.sync_financials.return_value = {"financial_metrics": 4}
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        payload = service.refresh_stock_detail(
+            "000001.SZ",
+            range_type="custom",
+            start_date="2026-06-01",
+            end_date="2026-06-07",
+        )
+
+        instrument = repository.get_instrument("000001.SZ")
+        syncer.sync_financials.assert_called_once_with(instrument)
+        self.assertEqual(
+            payload["refresh_result"],
+            {"daily_bars": 2, "financial_metrics": 4},
+        )
+
     def test_stock_detail_logs_compact_warning_when_lazy_daily_sync_fails(self) -> None:
         """校验日线懒加载失败时只记录短 warning，不输出完整异常栈。"""
         repository = self._repository()

@@ -165,11 +165,11 @@ class StockMarketService:
         end_date: str | None = None,
         financial_report_type: str = "quarterly",
     ) -> dict[str, Any]:
-        """手动刷新选中日期范围内的日线数据并返回详情。"""
+        """手动刷新选中日期范围内的日线与财务数据并返回详情。"""
 
         instrument = self._require_instrument(symbol)
         resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
-        warning = ""
+        warnings: list[str] = []
         result = {"daily_bars": 0}
         try:
             result = self._sync_service.sync_symbol_window(
@@ -179,14 +179,23 @@ class StockMarketService:
             )
         except Exception as error:
             warning = f"行情刷新失败：{_compact_error_message(error)}"
+            warnings.append(warning)
             logger.warning("stock daily refresh failed for %s: %s", instrument.symbol, warning)
             self._repository.record_sync_warning(instrument.symbol, warning)
-        self._ensure_profile_and_financials(instrument)
+        if instrument.instrument_type == "stock":
+            try:
+                result.update(self._sync_service.sync_financials(instrument))
+            except Exception as error:
+                warning = f"财报刷新失败：{_compact_error_message(error)}"
+                warnings.append(warning)
+                logger.warning("stock financial refresh failed for %s: %s", instrument.symbol, warning)
+                self._repository.record_sync_warning(instrument.symbol, warning)
+        self._ensure_profile_and_financials(instrument, ensure_financials=False)
         payload = self._build_detail_payload(
             instrument,
             resolved_range=resolved_range,
             financial_report_type=financial_report_type,
-            warning_message=warning,
+            warning_message="；".join(warnings),
         )
         payload["refresh_result"] = result
         return payload
@@ -268,8 +277,21 @@ class StockMarketService:
             },
         }
 
-    def _ensure_profile_and_financials(self, instrument: StockInstrument) -> None:
-        """按需补齐概况和财报，失败时保留详情主体可用。"""
+    def _ensure_profile_and_financials(
+        self,
+        instrument: StockInstrument,
+        *,
+        ensure_financials: bool = True,
+    ) -> None:
+        """按需补齐概况和财报，失败时保留详情主体可用。
+
+        Args:
+            instrument: 当前股票或 ETF 标的。
+            ensure_financials: 是否检查并补采缺失的股票财务指标。
+
+        Returns:
+            无返回值。
+        """
 
         if self._repository.get_profile(instrument.symbol) is None:
             try:
@@ -279,7 +301,8 @@ class StockMarketService:
                 logger.warning("stock profile sync failed for %s: %s", instrument.symbol, warning)
                 self._repository.record_sync_warning(instrument.symbol, warning)
         if (
-            instrument.instrument_type == "stock"
+            ensure_financials
+            and instrument.instrument_type == "stock"
             and not self._repository.has_financial_metrics(
                 instrument.symbol,
                 required_metrics=STOCK_REQUIRED_FINANCIAL_METRICS,
