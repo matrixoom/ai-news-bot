@@ -758,6 +758,12 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
           "股息率(TTM)",
           "总市值",
         ],
+        selected: {
+          "PE(TTM)": false,
+          "PB(MRQ)": false,
+          "股息率(TTM)": false,
+          总市值: false,
+        },
       },
       grid: [
         { left: 54, right: 112, top: 38, height: "56%" },
