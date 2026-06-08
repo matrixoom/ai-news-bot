@@ -15,7 +15,7 @@ describe("Workbench shell", () => {
     return render(<App />);
   }
 
-  it("renders the remaining Macro Data, Outlook, Notes, Push Center, and Settings routes", async () => {
+  it("renders the remaining Macro Data, Outlook, Notes, AI Agent, Push Center, and Settings routes", async () => {
     installWorkbenchFetchMock({ push: pushPayload });
 
     renderApp("/macro-data");
@@ -35,6 +35,11 @@ describe("Workbench shell", () => {
     installWorkbenchFetchMock({ push: pushPayload });
     renderApp("/push");
     expect(await screen.findByTitle("Push preview")).toBeInTheDocument();
+
+    cleanup();
+    installWorkbenchFetchMock({ push: pushPayload });
+    renderApp("/ai-agent");
+    expect(await screen.findByRole("heading", { name: "Route ready" })).toBeInTheDocument();
 
     cleanup();
     installWorkbenchFetchMock({ push: pushPayload });
@@ -84,6 +89,7 @@ describe("Workbench shell", () => {
     expect(screen.getByRole("link", { name: "Outlook > 主题溯源" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Outlook > 关系网络" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "AI Agent" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Market ticker" })).not.toBeInTheDocument();
   });
@@ -136,12 +142,13 @@ describe("Workbench shell", () => {
     const primaryNavigation = screen.getByRole("navigation", { name: "Primary" });
     const links = within(primaryNavigation).getAllByRole("link");
 
-    expect(links).toHaveLength(7);
+    expect(links).toHaveLength(8);
     expect(within(primaryNavigation).getByRole("link", { name: "Macro Data" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Outlook" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Notes" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Push Center" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Market Data" })).toBeInTheDocument();
+    expect(within(primaryNavigation).getByRole("link", { name: "AI Agent" })).toBeInTheDocument();
     expect(within(primaryNavigation).getByRole("link", { name: "Settings" })).toBeInTheDocument();
     expect(within(primaryNavigation).queryByText("TI")).not.toBeInTheDocument();
     expect(within(primaryNavigation).queryByText("PC")).not.toBeInTheDocument();
