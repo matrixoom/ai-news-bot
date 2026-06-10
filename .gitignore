@@ -68,7 +68,7 @@ frontend/dist/
 to_delete
 .merge-backups
 .superpowers
-
+push_center.schedule-claims
 # db
 *.db-wal
 *.db-shm
