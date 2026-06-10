@@ -12,6 +12,7 @@ import type {
 } from "../model/market-data.types";
 import { RangeControl } from "../../../shared/ui/range-control";
 import { ChartFullscreen } from "../../../shared/ui/chart-fullscreen";
+import { buildCartesianTheme, useWorkbenchChartTheme } from "../../../shared/charts/use-workbench-chart-theme";
 
 type RealEstateChartCardProps = {
   chart: MarketChartDefinition;
@@ -96,6 +97,8 @@ export function RealEstateChartCard({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const workbenchTheme = useWorkbenchChartTheme();
+  const chartTheme = useMemo(() => buildCartesianTheme(workbenchTheme), [workbenchTheme]);
   const query = useRealEstateChartQuery(chart.id, range, frequency, selectedCities);
   const refreshMutation = useMarketDataRefreshMutation(chart.id);
   const [refreshLabel, setRefreshLabel] = useState<string | null>(null);
@@ -153,30 +156,33 @@ export function RealEstateChartCard({
     if (chartLabels.length === 0) return null;
     return {
       animation: false,
-      tooltip: { trigger: "axis" },
+      tooltip: { trigger: "axis", ...chartTheme.tooltip },
       legend: {
         orient: "vertical",
         right: 0,
         top: "middle",
-        textStyle: { fontSize: 11 },
+        textStyle: chartTheme.legendText,
         data: chartSeries.map((s) => s.name),
       },
       grid: { left: 48, right: 140, top: 24, bottom: 52 },
-      xAxis: { type: "category", data: chartLabels },
+      xAxis: { type: "category", data: chartLabels, ...chartTheme.categoryAxis },
       yAxis: usesMultiMetric
         ? [
             {
               type: "value",
               name: "同比/环比 %",
+              ...chartTheme.valueAxis,
             },
             {
               type: "value",
               name: "全局走势",
+              ...chartTheme.valueAxis,
             },
           ]
         : {
             type: "value",
             name: query.data?.unit ?? "%",
+            ...chartTheme.valueAxis,
           },
       toolbox: {
         feature: {
@@ -206,7 +212,7 @@ export function RealEstateChartCard({
       ],
       series: chartSeries,
     };
-  }, [chartLabels, chartSeries, query.data?.unit, usesMultiMetric]);
+  }, [chartLabels, chartSeries, query.data?.unit, usesMultiMetric, chartTheme]);
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
@@ -294,15 +300,15 @@ export function RealEstateChartCard({
     : housingCities;
 
   return (
-    <section className={`relative rounded-xl border border-slate-200 bg-white p-5 shadow-sm${className ? ` ${className}` : ""}`}>
+    <section className={`workbench-panel relative p-5${className ? ` ${className}` : ""}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-950">{chart.title}</h3>
-          <p className="mt-1 text-sm text-slate-500">
+          <h3 className="text-lg font-semibold text-ink">{chart.title}</h3>
+          <p className="mt-1 text-sm text-muted">
             单位：{query.data?.unit ?? chart.unit} · 频率：{chart.frequency} ({housingCities.length} 个城市可选)
           </p>
         </div>
-        <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+        <span className="inline-flex w-fit rounded-control border border-line bg-surface-subtle px-2.5 py-1 text-xs font-medium text-muted">
           {rangeOptions.find((option) => option.value === range.type)?.label ?? "1年"}
         </span>
       </div>
@@ -336,7 +342,7 @@ export function RealEstateChartCard({
         <div className="relative" ref={cityPickerRef}>
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            className="workbench-button"
             onClick={() => (dropdownOpen ? closeCityPicker() : openCityPicker())}
           >
             {selectedCities.length === 0 ? "选择城市" : `${selectedCities.length} 个城市已选`}
@@ -344,11 +350,11 @@ export function RealEstateChartCard({
           </button>
 
           {dropdownOpen && (
-            <div className="absolute left-0 z-30 mt-1 max-h-64 w-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-              <div className="sticky top-0 flex items-center gap-1 border-b border-slate-100 bg-white p-2">
+            <div className="absolute left-0 z-30 mt-1 max-h-64 w-60 overflow-y-auto rounded-panel border border-line bg-surface shadow-lg">
+              <div className="sticky top-0 flex items-center gap-1 border-b border-line bg-surface p-2">
                 <input
                   type="text"
-                  className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                  className="workbench-input min-w-0 flex-1"
                   placeholder="搜索城市..."
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
@@ -363,7 +369,7 @@ export function RealEstateChartCard({
                 </button>
                 <button
                   type="button"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
+                  className="workbench-icon-button h-7 w-7"
                   aria-label="取消城市选择"
                   onClick={cancelCitySelection}
                 >
@@ -413,11 +419,11 @@ export function RealEstateChartCard({
       </div>
 
       {query.isPending ? (
-        <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-8 text-sm text-slate-500">图表加载中...</div>
+        <div className="mt-5 rounded-control border border-dashed border-line p-8 text-sm text-muted">图表加载中...</div>
       ) : query.isError ? (
         <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-8 text-sm text-rose-700">图表数据加载失败。</div>
       ) : chartLabels.length === 0 ? (
-        <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-8 text-sm text-slate-500">请选择至少一个城市以查看数据。</div>
+        <div className="mt-5 rounded-control border border-dashed border-line p-8 text-sm text-muted">请选择至少一个城市以查看数据。</div>
       ) : (
         <div className="mt-5">
           <div ref={chartRef} aria-label={`${chart.title} 图表`} role="img" className="h-72 w-full" />
@@ -432,7 +438,7 @@ export function RealEstateChartCard({
       <div className="absolute bottom-3 right-3 flex gap-1">
         <button
           type="button"
-          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+          className="workbench-icon-button h-8 w-8 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!chartOption}
           onClick={() => setIsFullscreen(true)}
           aria-label="全屏查看图表"
@@ -441,7 +447,7 @@ export function RealEstateChartCard({
         </button>
         <button
           type="button"
-          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+          className="workbench-button min-h-8 px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
           disabled={refreshMutation.isPending}
           onClick={() => refreshMutation.mutate()}
         >

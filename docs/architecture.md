@@ -138,6 +138,14 @@ Event Insight 约束：
 - 不直接拼装后端复杂业务逻辑
 - 尽量不依赖后端内部字段命名（通过 adapter 隔离）
 
+前端研究工作台约束：
+
+- `frontend/src/index.css` 与 `tailwind.config.ts` 维护语义设计令牌，亮暗主题仅切换 CSS 变量。
+- `frontend/src/shared/ui/` 维护面板、按钮、状态、范围控件和专业占位态。
+- `frontend/src/shared/charts/use-workbench-chart-theme.ts` 统一 ECharts 坐标轴、网格、tooltip、图例和涨跌色。
+- 壳层在桌面使用 `224px / 72px` 侧栏，在移动端使用抽屉；导航排序只在显式编辑模式开放。
+- 股票市场概览遵循 `Controller -> StockMarketService -> StockMarketRepository / MarketHistoryStore`，允许指数或市场宽度单项降级。
+
 ## 3. 依赖方向（必须遵守）
 
 推荐依赖方向：

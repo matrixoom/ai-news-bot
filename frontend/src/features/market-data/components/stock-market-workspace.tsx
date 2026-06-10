@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-query";
 import { useStockMarketInstrumentsQuery } from "../hooks/use-stock-market-instruments-query";
+import { useStockMarketOverviewQuery } from "../hooks/use-stock-market-overview-query";
 import { useStockMarketRefreshMutation } from "../hooks/use-stock-market-refresh-mutation";
 import type {
   MarketDataRangeSelection,
@@ -18,6 +19,8 @@ import type {
   StockInstrument,
 } from "../model/market-data.types";
 import { formatLocalDateTime } from "../../../shared/utils/format-local-date-time";
+import { buildCartesianTheme, useWorkbenchChartTheme } from "../../../shared/charts/use-workbench-chart-theme";
+import { MarketOverviewStrip } from "./market-overview-strip";
 
 const STOCK_RANGE_OPTIONS = [
   { value: "1m", label: "近1月", months: 1 },
@@ -96,6 +99,7 @@ export function StockMarketWorkspace() {
     pageSize: instrumentPageSize,
   });
   const detailQuery = useStockMarketDetailQuery(selectedSymbol, range, financialReportType);
+  const overviewQuery = useStockMarketOverviewQuery();
   const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType);
   const instruments = instrumentsQuery.data?.items ?? [];
   const instrumentTotal = instrumentsQuery.data?.total ?? 0;
@@ -159,8 +163,12 @@ export function StockMarketWorkspace() {
   const priceChangeRate = latestBar && previousBar && previousBar.close !== 0 ? (priceChange / previousBar.close) * 100 : 0;
 
   return (
-    <div className="-m-8 flex h-[calc(100vh-4.75rem)] min-h-[40rem] flex-col overflow-hidden bg-[#f5f7fb] text-slate-700">
-      <HeaderBand />
+    <div className="-m-4 flex min-h-[calc(100vh-4.5rem)] flex-col overflow-hidden bg-canvas text-ink md:-m-6">
+      <MarketOverviewStrip
+        data={overviewQuery.data}
+        error={overviewQuery.isError}
+        pending={overviewQuery.isPending}
+      />
       <FilterBand
         instrumentType={instrumentType}
         listingStatus={listingStatus}
@@ -173,10 +181,10 @@ export function StockMarketWorkspace() {
       />
 
       <div
-        className={`grid min-h-0 flex-1 grid-cols-1 items-stretch gap-2 overflow-hidden border-t border-slate-200 px-0 py-2 ${
+        className={`grid min-h-[42rem] flex-1 grid-cols-1 items-stretch gap-3 overflow-hidden p-3 ${
           isInstrumentListCollapsed
             ? "xl:grid-cols-[48px_minmax(0,1fr)]"
-            : "xl:grid-cols-[384px_minmax(0,1fr)]"
+            : "xl:grid-cols-[360px_minmax(0,1fr)]"
         }`}
       >
         <InstrumentListPanel
@@ -196,7 +204,7 @@ export function StockMarketWorkspace() {
         />
 
         <section
-          className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white"
+          className="workbench-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
           data-testid="stock-detail-panel"
         >
           {selectedInstrument ? (
@@ -208,7 +216,7 @@ export function StockMarketWorkspace() {
               {activeDetailTab === "overview" ? (
                 <div
                   aria-labelledby="stock-detail-tab-overview"
-                  className="flex min-h-0 flex-1 p-3"
+                  className="grid min-h-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_260px]"
                   id="stock-detail-panel-overview"
                   role="tabpanel"
                 >
@@ -231,33 +239,12 @@ export function StockMarketWorkspace() {
                       warning={detailQuery.data?.sync_state.warning_message ?? ""}
                     />
                   </main>
-
-                  {/*<aside className="space-y-3">*/}
-                  {/*  <SideInfoPanel*/}
-                  {/*    title="基础信息"*/}
-                  {/*    rows={[*/}
-                  {/*      ["股票代码", selectedInstrument.symbol],*/}
-                  {/*      ["所属交易所", selectedInstrument.exchange === "SH" ? "上海证券交易所" : selectedInstrument.exchange === "SZ" ? "深圳证券交易所" : "北京证券交易所"],*/}
-                  {/*      ["上市日期", detailQuery.data?.profile.listing_date || "--"],*/}
-                  {/*      ["所属板块", detailQuery.data?.profile.sector || selectedInstrument.market_board],*/}
-                  {/*      ["行业", detailQuery.data?.profile.industry || "--"],*/}
-                  {/*      ["地区", detailQuery.data?.profile.region || "--"],*/}
-                  {/*    ]}*/}
-                  {/*  />*/}
-                  {/*  <SideInfoPanel*/}
-                  {/*    title="行情数据"*/}
-                  {/*    rows={[*/}
-                  {/*      ["最新价", latestBar ? formatNumber(latestBar.close, 2) : "--"],*/}
-                  {/*      ["涨跌额", latestBar ? formatSigned(priceChange, 2) : "--"],*/}
-                  {/*      ["涨跌幅", latestBar ? `${formatSigned(priceChangeRate, 2)}%` : "--"],*/}
-                  {/*      ["成交量", latestBar ? formatCompactNumber(latestBar.volume) : "--"],*/}
-                  {/*      ["最高价", latestBar ? formatNumber(latestBar.high, 2) : "--"],*/}
-                  {/*      ["最低价", latestBar ? formatNumber(latestBar.low, 2) : "--"],*/}
-                  {/*      ["同步时间", detailQuery.data?.sync_state.synced_at ? formatLocalDateTime(detailQuery.data.sync_state.synced_at) : "--"],*/}
-                  {/*    ]}*/}
-                  {/*    valueTone*/}
-                  {/*  />*/}
-                  {/*</aside>*/}
+                  <ResearchSummaryPanel
+                    bars={detailQuery.data?.daily_bars ?? []}
+                    companySummary={detailQuery.data?.profile.summary ?? ""}
+                    industry={detailQuery.data?.profile.industry ?? ""}
+                    syncedAt={detailQuery.data?.sync_state.synced_at ?? ""}
+                  />
                 </div>
               ) : (
                 <div
@@ -288,14 +275,54 @@ export function StockMarketWorkspace() {
   );
 }
 
-function HeaderBand() {
+/** 渲染所选标的的基础研究摘要与关键行情指标。 */
+function ResearchSummaryPanel(props: {
+  bars: StockDailyBar[];
+  companySummary: string;
+  industry: string;
+  syncedAt: string;
+}) {
+  const latest = props.bars.at(-1);
+  const previous = props.bars.at(-2);
+  const changeRate =
+    latest && previous && previous.close !== 0
+      ? ((latest.close - previous.close) / previous.close) * 100
+      : null;
+  const direction = changeRate === null || changeRate === 0 ? "平盘" : changeRate > 0 ? "上涨" : "下跌";
+  const directionTone =
+    changeRate === null || changeRate === 0 ? "text-muted" : changeRate > 0 ? "text-positive" : "text-negative";
+
   return (
-    <div className="flex h-14 items-center border-b border-slate-200 bg-white px-6">
-      <div className="text-base font-semibold text-slate-500">
-        Market Data
-        <span className="px-3 text-slate-300">/</span>
-        <span className="text-slate-950">股市</span>
-      </div>
+    <aside aria-label="研究摘要" className="min-h-0 overflow-y-auto border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+      <p className="workbench-kicker">研究摘要</p>
+      <h3 className="mt-2 text-base font-semibold text-ink">{props.industry || "基础行情观察"}</h3>
+      <p className="mt-2 text-sm leading-6 text-muted">
+        {props.companySummary || "基于当前选择窗口展示价格趋势、成交量与估值指标，供进一步研究核验。"}
+      </p>
+      <dl className="mt-4 divide-y divide-line border-y border-line">
+        <SummaryRow label="最新收盘" value={latest ? formatNumber(latest.close, 2) : "--"} />
+        <SummaryRow
+          label="当日方向"
+          tone={directionTone}
+          value={changeRate === null ? "--" : `${direction} ${formatSigned(changeRate, 2)}%`}
+        />
+        <SummaryRow label="成交量" value={latest ? formatCompactNumber(latest.volume) : "--"} />
+        <SummaryRow label="市盈率 TTM" value={latest?.pe_ttm === null || latest?.pe_ttm === undefined ? "--" : formatNumber(latest.pe_ttm, 2)} />
+        <SummaryRow label="市净率 MRQ" value={latest?.pb_mrq === null || latest?.pb_mrq === undefined ? "--" : formatNumber(latest.pb_mrq, 2)} />
+      </dl>
+      <p className="mt-3 text-[11px] leading-5 text-muted">
+        数据更新时间：{props.syncedAt ? formatLocalDateTime(props.syncedAt) : "尚未记录"}
+      </p>
+    </aside>
+  );
+}
+
+/** 渲染研究摘要中的单项键值。 */
+function SummaryRow(props: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5 text-xs">
+      <dt className="text-muted">{props.label}</dt>
+      <dd className={`text-right font-semibold ${props.tone ?? "text-ink"}`}>{props.value}</dd>
     </div>
   );
 }
@@ -311,16 +338,16 @@ function FilterBand(props: {
   onListingStatusChange: (value: string) => void;
 }) {
   return (
-    <div className="flex min-h-20 flex-wrap items-center gap-6 border-b border-slate-200 bg-white px-6 py-4">
-      <div className="flex h-10 w-full max-w-[320px] items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+    <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3">
+      <div className="flex h-10 w-full max-w-[320px] items-center gap-2 rounded-control border border-line bg-surface px-3 text-sm">
         <input
-          className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none placeholder:text-slate-400"
+          className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-muted"
           onChange={(event) => props.onSearchTextChange(event.target.value)}
           placeholder="搜索股票代码 / 名称"
           type="search"
           value={props.searchText}
         />
-        <MagnifyingGlassIcon aria-hidden="true" className="h-5 w-5 text-slate-400" />
+        <MagnifyingGlassIcon aria-hidden="true" className="h-5 w-5 text-muted" />
       </div>
       <TopSelect label="证券类型" onChange={props.onInstrumentTypeChange} options={INSTRUMENT_TYPE_OPTIONS} value={props.instrumentType} />
       <TopSelect label="市场类型" onChange={props.onMarketBoardChange} options={MARKET_BOARD_OPTIONS} value={props.marketBoard} />
@@ -336,10 +363,10 @@ function TopSelect(props: {
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">
+    <label className="flex items-center gap-2 text-xs font-semibold text-muted">
       {props.label}
       <select
-        className="h-10 min-w-36 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none shadow-[0_1px_2px_rgba(15,23,42,0.04)] focus:border-blue-400"
+        className="workbench-input min-w-32 font-medium"
         onChange={(event) => props.onChange(event.target.value)}
         value={props.value}
       >
@@ -384,13 +411,13 @@ function InstrumentListPanel(props: {
   if (props.isCollapsed) {
     return (
       <aside
-        className="flex h-full min-h-0 items-start justify-center bg-white pt-5"
+        className="workbench-panel flex h-full min-h-0 items-start justify-center pt-5"
         data-testid="instrument-list-panel"
       >
         <button
           aria-expanded="false"
           aria-label="展开股票列表"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="workbench-icon-button h-8 w-8"
           onClick={() => props.onCollapseChange(false)}
           type="button"
         >
@@ -405,18 +432,18 @@ function InstrumentListPanel(props: {
 
   return (
     <aside
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-white"
+      className="workbench-panel flex h-full min-h-0 flex-col overflow-hidden"
       data-testid="instrument-list-panel"
     >
-      <div className="flex h-14 items-center justify-between border-b border-slate-200 px-5">
-        <div className="text-sm font-semibold text-slate-950">
+      <div className="flex h-12 items-center justify-between border-b border-line px-4">
+        <div className="text-sm font-semibold text-ink">
           全部标的
-          <span className="ml-4 text-slate-500">{formatNumber(props.total)} 只</span>
+          <span className="ml-3 text-xs font-medium text-muted">{formatNumber(props.total)} 只</span>
         </div>
         <button
           aria-expanded="true"
           aria-label="折叠股票列表"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="workbench-icon-button h-8 w-8 border-transparent"
           onClick={() => props.onCollapseChange(true)}
           type="button"
         >
@@ -424,7 +451,7 @@ function InstrumentListPanel(props: {
         </button>
       </div>
       <div
-        className="min-h-0 flex-1 overflow-hidden"
+        className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden"
         data-testid="instrument-list-body"
         ref={listBodyRef}
       >
@@ -435,9 +462,9 @@ function InstrumentListPanel(props: {
         ) : props.instruments.length === 0 ? (
           <EmptySurface text={props.warning || "暂无匹配标的。"} />
         ) : (
-          <table className="w-full table-fixed border-collapse text-left text-xs">
-            <thead className="bg-white text-slate-500">
-              <tr className="border-b border-slate-200">
+          <table className="min-w-[420px] w-full table-fixed border-collapse text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-surface-subtle text-muted">
+              <tr className="border-b border-line">
                 <th className="w-[96px] px-4 py-3 font-semibold">代码</th>
                 <th className="px-3 py-3 font-semibold">名称</th>
                 <th className="w-[80px] px-3 py-3 font-semibold">市场</th>
@@ -460,11 +487,11 @@ function InstrumentListPanel(props: {
       </div>
       <nav
         aria-label="股票列表分页"
-        className="flex h-14 shrink-0 items-center gap-3 border-t border-slate-200 px-4 text-xs text-slate-500"
+        className="flex h-12 shrink-0 items-center gap-2 border-t border-line px-3 text-xs text-muted"
       >
         <button
           aria-label="上一页"
-          className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          className="workbench-icon-button h-7 w-7 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={props.currentPage <= 1}
           onClick={() => props.onPageChange(props.currentPage - 1)}
           type="button"
@@ -478,8 +505,8 @@ function InstrumentListPanel(props: {
               aria-label={`第 ${item} 页`}
               className={`inline-flex h-7 min-w-7 items-center justify-center rounded px-1 font-semibold ${
                 item === props.currentPage
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-500 hover:bg-slate-50"
+                  ? "bg-accent text-white"
+                  : "text-muted hover:bg-accent-soft hover:text-accent"
               }`}
               key={item}
               onClick={() => props.onPageChange(item)}
@@ -493,7 +520,7 @@ function InstrumentListPanel(props: {
         )}
         <button
           aria-label="下一页"
-          className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          className="workbench-icon-button h-7 w-7 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={props.currentPage >= totalPages}
           onClick={() => props.onPageChange(props.currentPage + 1)}
           type="button"
@@ -517,23 +544,23 @@ function InstrumentRow(props: {
   onSelect: (symbol: string) => void;
 }) {
   const latestPrice = props.instrument.latest_price;
-  const priceTone = latestPrice === undefined || latestPrice === null ? "text-slate-400" : "text-rose-500";
+  const priceTone = latestPrice === undefined || latestPrice === null ? "text-muted" : "text-positive";
   const marketLabel = props.instrument.market_board.replace("主板", "");
   const typeLabel = props.instrument.instrument_type === "etf" ? "ETF" : "股票";
   const latestPriceLabel = latestPrice === undefined || latestPrice === null ? "--" : formatNumber(latestPrice, 3);
   const hoverDescription = `代码：${props.instrument.symbol}；名称：${props.instrument.name}；市场：${marketLabel}；类型：${typeLabel}；最新价：${latestPriceLabel}`;
   return (
     <tr
-      className={`cursor-pointer border-b border-slate-100 text-slate-700 hover:bg-blue-50 ${
-        props.selected ? "bg-blue-50" : ""
+      className={`cursor-pointer border-b border-line text-ink hover:bg-accent-soft/60 ${
+        props.selected ? "bg-accent-soft" : ""
       }`}
       onClick={() => props.onSelect(props.instrument.symbol)}
       title={hoverDescription}
     >
       <td className="px-4 py-2.5 font-semibold">{props.instrument.symbol}</td>
-      <td className="truncate px-3 py-2.5 font-semibold text-slate-800">{props.instrument.name}</td>
-      <td className="px-3 py-2.5 text-slate-600">{marketLabel}</td>
-      <td className="px-3 py-2.5 text-slate-600">{typeLabel}</td>
+      <td className="truncate px-3 py-2.5 font-semibold text-ink">{props.instrument.name}</td>
+      <td className="px-3 py-2.5 text-muted">{marketLabel}</td>
+      <td className="px-3 py-2.5 text-muted">{typeLabel}</td>
       <td className={`px-4 py-2.5 text-right font-semibold ${priceTone}`}>
         {latestPriceLabel}
       </td>
@@ -543,16 +570,16 @@ function InstrumentRow(props: {
 
 function StockSummaryHeader(props: { instrument: StockInstrument }) {
   return (
-    <header className="px-6 pb-3 pt-4">
+    <header className="px-5 pb-3 pt-4">
       <div className="min-w-[320px]">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-2xl font-bold text-slate-950">
+          <h2 className="text-xl font-semibold tracking-tight text-ink">
             {props.instrument.symbol}
             <span className="ml-4">{props.instrument.name}</span>
           </h2>
-          <span className="rounded-md bg-blue-50 px-3 py-1 text-sm font-semibold text-slate-600">{props.instrument.market_board}</span>
+          <span className="rounded-control bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent">{props.instrument.market_board}</span>
         </div>
-        <div className="mt-1 text-xs font-medium text-slate-400">{props.instrument.name}股份有限公司</div>
+        <div className="mt-1 text-xs font-medium text-muted">{props.instrument.name}股份有限公司</div>
       </div>
     </header>
   );
@@ -571,15 +598,15 @@ function StockDetailTabs(props: {
   ];
 
   return (
-    <div aria-label="股票详情" className="flex h-12 items-end gap-8 border-b border-slate-200 px-6" role="tablist">
+    <div aria-label="股票详情" className="flex h-11 items-end gap-7 border-b border-line px-5" role="tablist">
       {tabs.map((tab) => {
         const isActive = props.activeTab === tab.value;
         return (
           <button
             aria-controls={`stock-detail-panel-${tab.value}`}
             aria-selected={isActive}
-            className={`relative h-12 px-1 text-sm font-semibold ${
-              isActive ? "text-blue-600" : "text-slate-500 hover:text-slate-800"
+            className={`relative h-11 px-1 text-sm font-semibold ${
+              isActive ? "text-accent" : "text-muted hover:text-ink"
             }`}
             id={`stock-detail-tab-${tab.value}`}
             key={tab.value}
@@ -588,7 +615,7 @@ function StockDetailTabs(props: {
             type="button"
           >
             {tab.label}
-            {isActive ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-blue-600" /> : null}
+            {isActive ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent" /> : null}
           </button>
         );
       })}
@@ -612,12 +639,13 @@ function RangeToolbar(props: {
     <div className="flex shrink-0 flex-wrap items-center gap-2">
       <div
         aria-label="行情时间范围"
-        className="inline-flex h-8 overflow-hidden rounded-md border border-slate-200 bg-white"
+        className="inline-flex h-8 overflow-hidden rounded-control border border-line bg-surface"
       >
         {STOCK_RANGE_OPTIONS.map((option) => (
           <button
-            className={`border-r border-slate-100 px-3 text-xs font-semibold last:border-r-0 ${
-              props.range.type === option.value ? "bg-blue-50 text-slate-950" : "text-slate-500 hover:bg-slate-50"
+            aria-pressed={props.range.type === option.value}
+            className={`border-r border-line px-3 text-xs font-semibold last:border-r-0 ${
+              props.range.type === option.value ? "bg-accent text-white" : "text-muted hover:bg-accent-soft hover:text-accent"
             }`}
             key={option.value}
             onClick={() =>
@@ -634,10 +662,10 @@ function RangeToolbar(props: {
         ))}
       </div>
       {props.range.type === "custom" ? (
-        <label className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-500">
+        <label className="inline-flex h-10 items-center gap-2 rounded-control border border-line bg-surface px-3 text-sm font-semibold text-muted">
           <input
             aria-label="起始日期"
-            className="w-28 bg-transparent text-slate-700 outline-none"
+            className="w-28 bg-transparent text-ink outline-none"
             onChange={(event) => {
               setStartDate(event.target.value);
               props.onRangeChange({ type: "custom", startDate: event.target.value, endDate });
@@ -648,7 +676,7 @@ function RangeToolbar(props: {
           <span>至</span>
           <input
             aria-label="结束日期"
-            className="w-28 bg-transparent text-slate-700 outline-none"
+            className="w-28 bg-transparent text-ink outline-none"
             onChange={(event) => {
               setEndDate(event.target.value);
               props.onRangeChange({ type: "custom", startDate, endDate: event.target.value });
@@ -656,13 +684,13 @@ function RangeToolbar(props: {
             type="date"
             value={endDate}
           />
-          <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />
+          <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-muted" />
         </label>
       ) : null}
       <div className="ml-auto flex items-center gap-2">
         <button
           aria-label="刷新行情数据"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-600 shadow-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          className="workbench-icon-button h-8 w-8 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={props.refreshPending}
           onClick={props.onRefresh}
           title="刷新选中时间范围内的行情数据"
@@ -675,7 +703,7 @@ function RangeToolbar(props: {
         </button>
         <div
           aria-label="价格复权方式"
-          className="inline-flex h-8 overflow-hidden rounded-full border border-slate-200 bg-white text-xs font-semibold"
+          className="inline-flex h-8 overflow-hidden rounded-control border border-line bg-surface text-xs font-semibold"
         >
           {(
             [
@@ -688,10 +716,10 @@ function RangeToolbar(props: {
             return (
               <button
                 aria-pressed={isSelected}
-                className={`border-r border-slate-200 px-3 last:border-r-0 ${
+                className={`border-r border-line px-3 last:border-r-0 ${
                   isSelected
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                    ? "bg-accent text-white"
+                    : "text-muted hover:bg-accent-soft hover:text-accent"
                 }`}
                 key={option.value}
                 onClick={() => props.onPriceAdjustmentChange(option.value)}
@@ -718,7 +746,7 @@ function KlinePanel(props: {
   if (props.isError) return <EmptySurface danger text="行情数据加载失败。" />;
   if (props.bars.length === 0) return <EmptySurface text={props.warning || "当前时间范围暂无行情数据。"} />;
   return (
-    <section className="flex min-h-0 flex-1 border-b border-slate-200 bg-white pb-2">
+    <section className="flex min-h-0 flex-1 border-b border-line bg-surface pb-2">
       <KlineChart bars={props.bars} symbol={props.symbol} />
     </section>
   );
@@ -726,6 +754,8 @@ function KlinePanel(props: {
 
 function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const workbenchTheme = useWorkbenchChartTheme();
+  const chartTheme = useMemo(() => buildCartesianTheme(workbenchTheme), [workbenchTheme]);
   const option = useMemo((): echarts.EChartsOption => {
     const labels = props.bars.map((bar) => bar.date);
     return {
@@ -734,6 +764,7 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         trigger: "axis",
         confine: true,
         padding: [6, 8],
+        ...chartTheme.tooltip,
         textStyle: { fontSize: 10, lineHeight: 15 },
         axisPointer: { type: "cross" },
       },
@@ -745,7 +776,7 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         type: "scroll",
         itemWidth: 16,
         itemHeight: 8,
-        textStyle: { color: "#64748b", fontSize: 11 },
+        textStyle: chartTheme.legendText,
         data: [
           "K线",
           "MA5",
@@ -774,23 +805,21 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
           type: "category",
           data: labels,
           boundaryGap: true,
-          axisLabel: { color: "#64748b", fontSize: 10 },
-          axisLine: { lineStyle: { color: "#dbe3ee" } },
+          ...chartTheme.categoryAxis,
         },
         {
           type: "category",
           data: labels,
           gridIndex: 1,
           boundaryGap: true,
-          axisLabel: { color: "#94a3b8", fontSize: 10 },
+          ...chartTheme.categoryAxis,
         },
       ],
       yAxis: [
         {
           type: "value",
           scale: true,
-          axisLabel: { color: "#64748b", fontSize: 10 },
-          splitLine: { lineStyle: { color: "#edf2f7" } },
+          ...chartTheme.valueAxis,
         },
         {
           type: "value",
@@ -798,7 +827,7 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
           axisLabel: { show: false },
           axisTick: { show: false },
           axisLine: { show: false },
-          splitLine: { lineStyle: { color: "#edf2f7" } },
+          splitLine: chartTheme.valueAxis.splitLine,
         },
         hiddenValuationAxis(0),
         hiddenValuationAxis(0),
@@ -814,7 +843,12 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
           name: "K线",
           type: "candlestick",
           data: props.bars.map((bar) => [bar.open, bar.close, bar.low, bar.high]),
-          itemStyle: { color: "#ef4444", color0: "#10b981", borderColor: "#ef4444", borderColor0: "#10b981" },
+          itemStyle: {
+            color: workbenchTheme.positive,
+            color0: workbenchTheme.negative,
+            borderColor: workbenchTheme.positive,
+            borderColor0: workbenchTheme.negative,
+          },
         },
         lineSeries("MA5", props.bars.map((bar) => bar.ma5), "#f59e0b"),
         lineSeries("MA10", props.bars.map((bar) => bar.ma10), "#38bdf8"),
@@ -858,13 +892,13 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
           itemStyle: {
             color: (params: { dataIndex: number }) => {
               const bar = props.bars[params.dataIndex];
-              return bar.close >= bar.open ? "#ef4444" : "#10b981";
+              return bar.close >= bar.open ? workbenchTheme.positive : workbenchTheme.negative;
             },
           },
         },
       ],
     };
-  }, [props.bars]);
+  }, [props.bars, chartTheme, workbenchTheme]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -916,7 +950,7 @@ function FinancialCards(props: {
       {!props.isPending && sortedSeries.some((item) => item.points.length > 0) ? (
         <div
           aria-label="财务指标"
-          className="flex h-10 shrink-0 items-end gap-7 border-b border-slate-200"
+          className="flex h-10 shrink-0 items-end gap-7 border-b border-line"
           role="tablist"
         >
           {sortedSeries.map((item) => {
@@ -927,8 +961,8 @@ function FinancialCards(props: {
                 aria-selected={isActive}
                 className={`relative h-10 border-b-2 px-1 text-xs font-semibold ${
                   isActive
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "border-accent text-accent"
+                    : "border-transparent text-muted hover:text-ink"
                 }`}
                 id={`financial-metric-tab-${item.metric}`}
                 key={item.metric}
@@ -944,16 +978,17 @@ function FinancialCards(props: {
       ) : null}
       <div
         aria-label="财务筛选工具栏"
-        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 pb-3"
+        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line pb-3"
       >
         {/*<span className="text-xs font-semibold text-slate-500">时间范围</span>*/}
-        <div aria-label="财务时间范围" className="inline-flex h-8 overflow-hidden rounded-md border border-slate-200 bg-white">
+        <div aria-label="财务时间范围" className="inline-flex h-8 overflow-hidden rounded-control border border-line bg-surface">
           {STOCK_RANGE_OPTIONS.map((option) => (
             <button
-              className={`border-r border-slate-100 px-3 text-xs font-semibold last:border-r-0 ${
+              aria-pressed={props.financialRange.type === option.value}
+              className={`border-r border-line px-3 text-xs font-semibold last:border-r-0 ${
                 props.financialRange.type === option.value
-                  ? "bg-blue-50 text-slate-950"
-                  : "text-slate-500 hover:bg-slate-50"
+                  ? "bg-accent text-white"
+                  : "text-muted hover:bg-accent-soft hover:text-accent"
               }`}
               key={option.value}
               onClick={() =>
@@ -974,10 +1009,10 @@ function FinancialCards(props: {
           ))}
         </div>
         {props.financialRange.type === "custom" ? (
-          <label className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-500">
+          <label className="inline-flex h-8 items-center gap-2 rounded-control border border-line bg-surface px-3 text-xs font-semibold text-muted">
             <input
               aria-label="财务起始日期"
-              className="w-28 bg-transparent text-slate-700 outline-none"
+              className="w-28 bg-transparent text-ink outline-none"
               onChange={(event) =>
                 props.onFinancialRangeChange({
                   ...props.financialRange,
@@ -990,7 +1025,7 @@ function FinancialCards(props: {
             <span>至</span>
             <input
               aria-label="财务结束日期"
-              className="w-28 bg-transparent text-slate-700 outline-none"
+              className="w-28 bg-transparent text-ink outline-none"
               onChange={(event) =>
                 props.onFinancialRangeChange({
                   ...props.financialRange,
@@ -1000,19 +1035,20 @@ function FinancialCards(props: {
               type="date"
               value={props.financialRange.endDate ?? ""}
             />
-            <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />
+            <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-muted" />
           </label>
         ) : null}
         <div
           aria-label="财报周期"
-          className="ml-auto inline-flex h-8 overflow-hidden rounded-full border border-slate-200 bg-white text-xs font-semibold"
+          className="ml-auto inline-flex h-8 overflow-hidden rounded-control border border-line bg-surface text-xs font-semibold"
         >
           {(["quarterly", "yearly"] as const).map((type) => (
             <button
+              aria-pressed={props.reportType === type}
               className={`px-4 ${
                 props.reportType === type
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                  ? "bg-accent text-white"
+                  : "text-muted hover:bg-accent-soft hover:text-accent"
               }`}
               key={type}
               onClick={() => props.onReportTypeChange(type)}
@@ -1170,14 +1206,14 @@ function FinancialMetricCard(props: { series: StockFinancialSeries }) {
   }, [option]);
 
   return (
-    <article className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-slate-200 bg-white p-4">
+    <article className="workbench-panel flex h-full min-h-0 flex-col overflow-hidden p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className="text-sm font-bold text-slate-900">{props.series.label}</h4>
           <div className="mt-1 text-xs font-semibold text-slate-500">单位：{unit}</div>
         </div>
         <div className="text-right">
-          <div className="text-lg font-bold text-slate-950">{latestPoint ? formatNumber(latestPoint.value, 2) : "--"}</div>
+          <div className="text-lg font-bold text-ink">{latestPoint ? formatNumber(latestPoint.value, 2) : "--"}</div>
           <div className={`text-xs font-bold ${changeRate >= 0 ? "text-rose-500" : "text-emerald-600"}`}>
             {latestPoint && previousPoint ? `${formatSigned(changeRate, 2)}%` : "--"}
           </div>
@@ -1195,7 +1231,7 @@ function FinancialMetricCard(props: { series: StockFinancialSeries }) {
 
 function SideInfoPanel(props: { title: string; rows: Array<[string, string]>; valueTone?: boolean }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4">
+    <section className="workbench-panel p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-bold text-slate-900">{props.title}</h3>
         <button className="text-xs font-semibold text-slate-400" type="button">更多 &gt;</button>
@@ -1214,7 +1250,7 @@ function SideInfoPanel(props: { title: string; rows: Array<[string, string]>; va
 
 function EmptySurface(props: { text: string; danger?: boolean }) {
   return (
-    <div className={`m-4 rounded-md border p-8 text-sm ${props.danger ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-500"}`}>
+    <div className={`m-4 rounded-control border p-8 text-sm ${props.danger ? "border-negative/30 bg-negative/5 text-negative" : "border-line bg-surface text-muted"}`}>
       {props.text}
     </div>
   );

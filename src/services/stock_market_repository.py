@@ -14,6 +14,7 @@ from typing import Any, Collection, Iterator, Mapping, Sequence
 from src.services.stock_market_sharding import (
     initialize_all_market_stock_shards,
     initialize_market_stock_shard,
+    iter_market_stock_shard_paths,
     migrate_legacy_market_stock_shards,
     resolve_market_stock_shard_path,
 )
@@ -108,6 +109,19 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _unavailable_market_breadth() -> dict[str, Any]:
+    """返回市场宽度不可用时的稳定结构。"""
+
+    return {
+        "trade_date": None,
+        "advanced": 0,
+        "declined": 0,
+        "unchanged": 0,
+        "total": 0,
+        "status": "unavailable",
+    }
+
+
 class StockMarketRepository:
     """管理股票市场相关表的读写。"""
 
@@ -195,6 +209,85 @@ class StockMarketRepository:
         with self._session() as connection:
             row = connection.execute("SELECT COUNT(*) AS count FROM market_stock_instrument").fetchone()
         return int(row["count"]) if row else 0
+
+    def load_market_breadth(self) -> dict[str, Any]:
+        """聚合最近两个交易日的 A 股上涨、下跌和平盘家数。
+
+        Returns:
+            包含交易日、上涨数、下跌数、平盘数、有效总数和状态的字典。
+        """
+
+        with self._session() as connection:
+            eligible_symbols = {
+                str(row["symbol"])
+                for row in connection.execute(
+                    """
+                    SELECT symbol
+                    FROM market_stock_instrument
+                    WHERE instrument_type = 'stock' AND listing_status = 'listed'
+                    """
+                ).fetchall()
+            }
+        if not eligible_symbols:
+            return _unavailable_market_breadth()
+
+        existing_shards = [path for path in iter_market_stock_shard_paths(self._shard_dir) if path.exists()]
+        candidate_dates: set[str] = set()
+        for shard_path in existing_shards:
+            with self._shard_session(shard_path) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT DISTINCT trade_date
+                    FROM market_stock_daily_bar
+                    ORDER BY trade_date DESC
+                    LIMIT 2
+                    """
+                ).fetchall()
+            candidate_dates.update(str(row["trade_date"]) for row in rows)
+
+        latest_dates = sorted(candidate_dates, reverse=True)[:2]
+        if len(latest_dates) < 2:
+            return _unavailable_market_breadth()
+        latest_date, previous_date = latest_dates
+
+        closes_by_symbol: dict[str, dict[str, float]] = defaultdict(dict)
+        for shard_path in existing_shards:
+            with self._shard_session(shard_path) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT symbol, trade_date, close_price
+                    FROM market_stock_daily_bar
+                    WHERE trade_date IN (?, ?)
+                    """,
+                    (previous_date, latest_date),
+                ).fetchall()
+            for row in rows:
+                symbol = str(row["symbol"])
+                if symbol in eligible_symbols:
+                    closes_by_symbol[symbol][str(row["trade_date"])] = float(row["close_price"])
+
+        advanced = declined = unchanged = 0
+        for closes in closes_by_symbol.values():
+            if latest_date not in closes or previous_date not in closes:
+                continue
+            change = closes[latest_date] - closes[previous_date]
+            if change > 0:
+                advanced += 1
+            elif change < 0:
+                declined += 1
+            else:
+                unchanged += 1
+        total = advanced + declined + unchanged
+        if total == 0:
+            return _unavailable_market_breadth()
+        return {
+            "trade_date": latest_date,
+            "advanced": advanced,
+            "declined": declined,
+            "unchanged": unchanged,
+            "total": total,
+            "status": "live",
+        }
 
     def search_instruments(
         self,

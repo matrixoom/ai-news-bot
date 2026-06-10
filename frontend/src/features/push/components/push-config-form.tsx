@@ -27,11 +27,11 @@ export function PushConfigForm({
   const busy = isSaving;
 
   return (
-    <section className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="workbench-panel space-y-5 p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuration</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">Delivery configuration</h3>
+          <h3 className="mt-2 text-lg font-semibold text-ink">Delivery configuration</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Tune the active modules, report style, and SMTP delivery profile before saving.
           </p>
@@ -43,7 +43,7 @@ export function PushConfigForm({
           <span className="font-medium text-slate-900">Report style</span>
           <select
             aria-label="Report style"
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+            className="workbench-input w-full"
             onChange={(event) => {
               onDraftChange({ ...draft, reportStyle: event.target.value });
             }}
@@ -61,7 +61,7 @@ export function PushConfigForm({
           <span className="font-medium text-slate-900">Primary channel</span>
           <select
             aria-label="Primary channel"
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+            className="workbench-input w-full"
             onChange={(event) => {
               const nextChannel = event.target.value;
               onDraftChange({
@@ -94,8 +94,8 @@ export function PushConfigForm({
               <label
                 key={option.id}
                 className={[
-                  "flex items-start gap-3 rounded-2xl border px-4 py-4 text-sm",
-                  option.enabled ? "border-slate-200 bg-slate-50 text-slate-700" : "border-slate-100 bg-slate-100 text-slate-400",
+                  "flex items-start gap-3 rounded-control border px-4 py-3 text-sm",
+                  option.enabled ? "border-line bg-surface-subtle text-ink" : "border-line bg-canvas text-muted",
                 ].join(" ")}
               >
                 <input
@@ -172,7 +172,7 @@ export function PushConfigForm({
         />
       </div>
 
-      <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+      <label className="flex items-start gap-3 rounded-control border border-line bg-surface-subtle px-4 py-3 text-sm text-ink">
         <input
           checked={draft.email.useTls}
           onChange={(event) => {
@@ -188,7 +188,7 @@ export function PushConfigForm({
 
       <div className="flex flex-wrap gap-3">
         <button
-          className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="workbench-button-primary disabled:cursor-not-allowed disabled:opacity-40"
           disabled={busy}
           onClick={onSave}
           type="button"
@@ -216,7 +216,7 @@ function TextField({
       <span className="font-medium text-slate-900">{label}</span>
       <input
         aria-label={label}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+        className="workbench-input w-full"
         onChange={(event) => onChange(event.target.value)}
         type={type}
         value={value}
@@ -239,7 +239,7 @@ function NumberField({
       <span className="font-medium text-slate-900">{label}</span>
       <input
         aria-label={label}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+        className="workbench-input w-full"
         onChange={(event) => onChange(Number(event.target.value) || 587)}
         type="number"
         value={value}

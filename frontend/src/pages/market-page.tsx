@@ -120,7 +120,7 @@ export function MarketPage() {
     ) : charts.length === 0 ? (
       <EmptyPanelState title="No market charts" description="The selected category has no chart definitions yet." />
     ) : (
-      <div className="flex flex-col items-stretch gap-6">
+      <div className="flex flex-col items-stretch gap-4">
         {activeTab === "real_estate"
           ? charts.map((chart) => (
               <RealEstateChartCard

@@ -163,9 +163,9 @@ function EventGraphWorkspaceCanvas() {
   );
 
   return (
-    <section className="-m-8 h-[calc(100vh-5rem)] min-h-[720px] overflow-hidden bg-white">
+    <section className="-m-4 h-[calc(100vh-4.5rem)] min-h-[720px] overflow-hidden bg-surface md:-m-6">
       <h2 className="sr-only">关系网络</h2>
-      <div className="relative h-full w-full overflow-hidden bg-white text-slate-700" ref={canvasRef}>
+      <div className="relative h-full w-full overflow-hidden bg-surface text-ink" ref={canvasRef}>
         <div className="absolute left-4 top-5 z-20 text-sm font-semibold text-slate-700">Graph Relationship Visualization</div>
         <ReactFlow
           aria-label="关系网络画布"

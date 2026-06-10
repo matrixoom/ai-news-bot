@@ -10,18 +10,18 @@ type PanelStateProps = {
 };
 
 const toneStyles: Record<PanelStateTone, string> = {
-  neutral: "border-slate-200 bg-white text-slate-700",
-  loading: "border-slate-200 bg-white text-slate-500",
-  error: "border-rose-200 bg-rose-50 text-rose-700",
+  neutral: "border-line bg-surface text-ink",
+  loading: "border-line bg-surface text-muted",
+  error: "border-negative/30 bg-negative/5 text-negative",
 };
 
 function PanelState({ tone, title, description, action }: PanelStateProps) {
   return (
-    <section className={`rounded-[1.75rem] border p-6 shadow-sm ${toneStyles[tone]}`} aria-live="polite">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{tone === "error" ? "Problem" : "Status"}</p>
-      <h3 className="mt-3 text-lg font-semibold text-slate-950">{title}</h3>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
-      {action ? <div className="mt-5">{action}</div> : null}
+    <section className={`rounded-panel border p-5 shadow-panel ${toneStyles[tone]}`} aria-live="polite">
+      <p className="workbench-kicker">{tone === "error" ? "异常" : "状态"}</p>
+      <h3 className="mt-2 text-base font-semibold text-ink">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
+      {action ? <div className="mt-4">{action}</div> : null}
     </section>
   );
 }

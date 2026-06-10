@@ -70,11 +70,11 @@ export function PushPreviewPanel({
   }
 
   return (
-    <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="workbench-panel p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Preview</p>
-          <h3 className="mt-2 text-lg font-semibold text-slate-950">Push preview</h3>
+          <h3 className="mt-2 text-lg font-semibold text-ink">Push preview</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Refresh interval {Math.round(refreshAfterMs / 1000)}s, rendered from the current draft.
           </p>
@@ -84,7 +84,7 @@ export function PushPreviewPanel({
             <span className="sr-only">宽基指数时间范围</span>
             <select
               aria-label="宽基指数时间范围"
-              className="rounded-full border border-slate-300 bg-white px-3 py-2"
+              className="workbench-button"
               onChange={(event) => onMarketChartRangeChange?.(event.target.value as PushMarketChartRange)}
               value={marketChartRange}
             >
@@ -114,7 +114,7 @@ export function PushPreviewPanel({
 
       <div className="mt-5 space-y-3">
         <p className="text-sm font-medium text-slate-500">Subject</p>
-        <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-950">
+        <p className="rounded-control border border-line bg-surface-subtle px-4 py-3 text-sm font-medium text-ink">
           {preview.subject || "Preview subject unavailable"}
         </p>
       </div>
@@ -123,7 +123,7 @@ export function PushPreviewPanel({
         <div className="mt-5">
           <iframe
             aria-label="Push preview HTML"
-            className="w-full rounded-2xl border border-slate-200 bg-white"
+            className="w-full rounded-control border border-line bg-surface"
             onLoad={resizePreviewFrame}
             ref={iframeRef}
             sandbox="allow-same-origin"
@@ -133,7 +133,7 @@ export function PushPreviewPanel({
           />
         </div>
       ) : (
-        <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <div className="mt-5 rounded-control border border-negative/30 bg-negative/5 p-4 text-sm text-negative">
           <p className="font-medium">Preview unavailable</p>
           <p className="mt-2">{preview.error || "The backend could not build a preview."}</p>
         </div>
@@ -167,7 +167,7 @@ function IconAction({
   return (
     <button
       aria-label={label}
-      className="rounded-full border border-slate-300 bg-white p-2 text-slate-700 transition hover:border-slate-400 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+      className="workbench-icon-button disabled:cursor-not-allowed disabled:opacity-60"
       disabled={disabled}
       onClick={onClick}
       title={label}
@@ -195,18 +195,18 @@ function MarketChartRefreshDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
       role="dialog"
     >
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-xl">
+      <div className="workbench-panel w-full max-w-lg p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Market charts</p>
-            <h4 className="mt-2 text-lg font-semibold text-slate-950" id="market-chart-refresh-title">
+            <h4 className="mt-2 text-lg font-semibold text-ink" id="market-chart-refresh-title">
               宽基指数图表刷新进度
             </h4>
           </div>
           {canDismiss && onDismiss ? (
             <button
               aria-label="关闭刷新进度"
-              className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:text-slate-950"
+              className="workbench-icon-button"
               onClick={onDismiss}
               type="button"
             >

@@ -57,13 +57,13 @@ export function RssSettingsWorkspace() {
     <section className="space-y-4">
       <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">RSS 源配置</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-ink">RSS 源配置</h2>
           <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
             管理新闻抓取源。首次打开会载入代码中原有的默认 RSS 源，后续新增、修改和删除都以数据库配置为准。
           </p>
           <p className="mt-1 text-xs text-slate-500">每日 {sourcesQuery.data?.scheduler.dailyFetchTime ?? "06:30"} · {sourcesQuery.data?.scheduler.timezone ?? "Asia/Shanghai"}</p>
         </div>
-        <button className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700" onClick={() => setShowCreateForm(true)} type="button">
+        <button className="workbench-button" onClick={() => setShowCreateForm(true)} type="button">
           <PlusIcon aria-hidden="true" className="mr-1 h-4 w-4" />
           新增 RSS 源
         </button>
@@ -75,9 +75,9 @@ export function RssSettingsWorkspace() {
       {showCreateForm ? <RssSourceForm isSaving={createSource.isPending} onCancel={() => setShowCreateForm(false)} onSave={handleCreate} /> : null}
       {editingSource ? <RssSourceForm initialValue={editingSource} isSaving={updateSource.isPending} onCancel={() => setEditingSource(null)} onSave={handleUpdate} /> : null}
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-950">已配置源</h3>
+      <section className="workbench-panel overflow-hidden">
+        <header className="flex items-center justify-between border-b border-line px-4 py-3">
+          <h3 className="text-sm font-semibold text-ink">已配置源</h3>
           <span className="text-xs text-slate-500">{sourcesQuery.isLoading ? "加载中" : `${sources.length} 个 RSS 源`}</span>
         </header>
         <div className="divide-y divide-slate-100">
@@ -86,7 +86,7 @@ export function RssSettingsWorkspace() {
           {sources.map((source) => (
             <article className="grid gap-3 p-4 text-xs lg:grid-cols-[minmax(0,1fr)_auto]" key={source.id}>
               <div className="min-w-0">
-                <h4 className="truncate text-sm font-semibold text-slate-950">{source.name}</h4>
+                <h4 className="truncate text-sm font-semibold text-ink">{source.name}</h4>
                 <p className="mt-1 break-all text-slate-500">{source.url}</p>
                 <p className="mt-2 text-slate-500">{source.language} · {source.category} · {source.enabled ? "已启用" : "已停用"} · {source.fetchTime} · 每次 {source.maxItems} 条</p>
               </div>

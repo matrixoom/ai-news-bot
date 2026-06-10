@@ -1,6 +1,7 @@
 import unittest
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 
@@ -29,6 +30,15 @@ class FrontendShellSourceGuardTests(unittest.TestCase):
         self.assertNotIn("module:news:hybrid", service._background_managed_module_keys)
         self.assertNotIn("module:news:api", service._background_managed_module_keys)
         self.assertNotIn("module:news:upstream", service._background_managed_module_keys)
+
+    def test_frontend_theme_uses_semantic_tokens_without_important_overrides(self):
+        """校验新主题通过语义变量驱动，不再翻转 Tailwind 工具类。"""
+        content = Path("frontend/src/index.css").read_text(encoding="utf-8")
+
+        self.assertIn("--color-canvas:", content)
+        self.assertIn("--color-surface:", content)
+        self.assertIn("--color-accent:", content)
+        self.assertNotIn("!important", content)
 
 
 class FastAPIWebShellTests(unittest.TestCase):
@@ -84,6 +94,40 @@ class FastAPIWebShellTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertIn("Page not found", response.text)
+
+    def test_stock_market_overview_endpoint_returns_service_payload(self):
+        """校验股票市场概览接口透传 Service 的稳定契约。"""
+        stock_service = Mock()
+        stock_service.build_overview_payload.return_value = {
+            "generated_at": "2026-06-10T10:32:00Z",
+            "indices": [],
+            "breadth": {
+                "trade_date": "2026-06-09",
+                "advanced": 1,
+                "declined": 1,
+                "unchanged": 0,
+                "total": 2,
+                "status": "live",
+            },
+        }
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        response = client.get("/api/frontend/modules/market-data/stocks/overview")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["breadth"]["advanced"], 1)
+        stock_service.build_overview_payload.assert_called_once_with()
+
+    def test_stock_market_overview_endpoint_returns_503_on_service_failure(self):
+        """校验概览 Service 整体异常时返回统一不可用错误。"""
+        stock_service = Mock()
+        stock_service.build_overview_payload.side_effect = RuntimeError("boom")
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        response = client.get("/api/frontend/modules/market-data/stocks/overview")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"error": "frontend_stock_market_overview_unavailable"})
 
 
 if __name__ == "__main__":

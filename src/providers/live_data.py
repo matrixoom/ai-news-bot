@@ -480,6 +480,10 @@ class AkshareMarketDataProvider:
             ("stock_zh_index_daily", {"symbol": "sh000001"}),
             ("stock_zh_index_daily_em", {"symbol": "sh000001"}),
         ),
+        "SZSE": (
+            ("stock_zh_index_daily", {"symbol": "sz399001"}),
+            ("stock_zh_index_daily_em", {"symbol": "sz399001"}),
+        ),
         "CHINEXT": (
             ("stock_zh_index_daily", {"symbol": "sz399006"}),
             ("stock_zh_index_daily_em", {"symbol": "sz399006"}),
@@ -493,6 +497,7 @@ class AkshareMarketDataProvider:
         "CSI500": {"market": "cn", "code": "sh000905", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
         "CSI1000": {"market": "cn", "code": "sh000852", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
         "SSE": {"market": "cn", "code": "sh000001", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
+        "SZSE": {"market": "cn", "code": "sz399001", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
         "CHINEXT": {"market": "cn", "code": "sz399006", "functions": ("stock_zh_index_spot_em", "stock_zh_index_spot_sina")},
         "HSTECH": {"market": "hk", "code": "HSTECH", "functions": ("stock_hk_index_spot_sina",)},
     }

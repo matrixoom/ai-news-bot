@@ -31,8 +31,8 @@ export function EventInsightShell({
     <section className="space-y-4">
       <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{title}</h2>
-          <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">{description}</p>
+          <h2 className="text-2xl font-semibold tracking-tight text-ink">{title}</h2>
+          <p className="mt-1 max-w-4xl text-sm leading-6 text-muted">{description}</p>
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </header>
@@ -59,10 +59,10 @@ export function InsightPanel({
   children: ReactNode;
 }) {
   return (
-    <section className={`overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}>
+    <section className={`workbench-panel overflow-hidden ${className}`}>
       {title || aside ? (
-        <header className="flex min-h-12 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          {title ? <h3 className="text-sm font-semibold text-slate-950">{title}</h3> : <span />}
+        <header className="flex min-h-12 items-center justify-between gap-3 border-b border-line px-4 py-3">
+          {title ? <h3 className="text-sm font-semibold text-ink">{title}</h3> : <span />}
           {aside}
         </header>
       ) : null}

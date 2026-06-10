@@ -13,6 +13,7 @@ import type {
 import { RangeControl } from "../../../shared/ui/range-control";
 import { ChartFullscreen } from "../../../shared/ui/chart-fullscreen";
 import { calculateSMA, MA_CONFIGS } from "../../../shared/lib/moving-average";
+import { buildCartesianTheme, useWorkbenchChartTheme } from "../../../shared/charts/use-workbench-chart-theme";
 
 type MarketChartCardProps = {
   chart: MarketChartDefinition;
@@ -40,6 +41,8 @@ export function MarketChartCard({
   const refreshMutation = useMarketDataRefreshMutation(chart.id);
   const [refreshLabel, setRefreshLabel] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const workbenchTheme = useWorkbenchChartTheme();
+  const chartTheme = useMemo(() => buildCartesianTheme(workbenchTheme), [workbenchTheme]);
 
   useEffect(() => {
     if (refreshMutation.isSuccess) {
@@ -109,19 +112,20 @@ export function MarketChartCard({
     if (!query.data || points.length === 0) return null;
     return {
       animation: false,
-      tooltip: { trigger: "axis" },
+      tooltip: { trigger: "axis", ...chartTheme.tooltip },
       legend: {
         orient: "vertical",
         right: 0,
         top: "middle",
-        textStyle: { fontSize: 11 },
+        textStyle: chartTheme.legendText,
         data: allLegendNames,
       },
       grid: { left: 48, right: 140, top: 24, bottom: 48 },
-      xAxis: { type: "category", data: chartLabels },
+      xAxis: { type: "category", data: chartLabels, ...chartTheme.categoryAxis },
       yAxis: {
         type: "value",
         name: query.data.unit,
+        ...chartTheme.valueAxis,
       },
       series: allSeries,
       dataZoom: [
@@ -137,7 +141,7 @@ export function MarketChartCard({
         },
       },
     };
-  }, [query.data, points.length, allLegendNames, chartLabels, allSeries]);
+  }, [query.data, points.length, allLegendNames, chartLabels, allSeries, chartTheme]);
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) {
@@ -155,15 +159,15 @@ export function MarketChartCard({
   }, [chartOption]);
 
   return (
-    <section className={`relative rounded-xl border border-slate-200 bg-white p-5 shadow-sm${className ? ` ${className}` : ""}`}>
+    <section className={`workbench-panel relative p-5${className ? ` ${className}` : ""}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-950">{chart.title}</h3>
-          <p className="mt-1 text-sm text-slate-500">
+          <h3 className="text-lg font-semibold text-ink">{chart.title}</h3>
+          <p className="mt-1 text-sm text-muted">
             单位：{chart.unit} · 频率：{chart.frequency} · 图例：{legendNames.join(" / ") || chart.title}
           </p>
         </div>
-        <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+        <span className="inline-flex w-fit rounded-control border border-line bg-surface-subtle px-2.5 py-1 text-xs font-medium text-muted">
           {rangeOptions.find((option) => option.value === range.type)?.label ?? "1年"}
         </span>
       </div>
@@ -180,15 +184,15 @@ export function MarketChartCard({
       </div>
 
       {query.isPending ? (
-        <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-8 text-sm text-slate-500">图表加载中...</div>
+        <div className="mt-5 rounded-control border border-dashed border-line p-8 text-sm text-muted">图表加载中...</div>
       ) : query.isError ? (
-        <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-8 text-sm text-rose-700">图表数据加载失败。</div>
+        <div className="mt-5 rounded-control border border-negative/30 bg-negative/5 p-8 text-sm text-negative">图表数据加载失败。</div>
       ) : points.length === 0 ? (
-        <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-8 text-sm text-slate-500">当前时间范围暂无数据。</div>
+        <div className="mt-5 rounded-control border border-dashed border-line p-8 text-sm text-muted">当前时间范围暂无数据。</div>
       ) : (
         <div className="mt-5">
           <div ref={chartRef} aria-label={`${chart.title} 图表`} role="img" className="h-72 w-full" />
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
             <span>样本数：{points.length}</span>
             <span>状态：{query.data?.sync_state.status ?? chart.status}</span>
             {query.data?.sync_state.warning_message ? <span>{query.data.sync_state.warning_message}</span> : null}
@@ -198,7 +202,7 @@ export function MarketChartCard({
       <div className="absolute bottom-3 right-3 flex gap-1">
         <button
           type="button"
-          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+          className="workbench-icon-button h-8 w-8 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!chartOption}
           onClick={() => setIsFullscreen(true)}
           aria-label="全屏查看图表"
@@ -207,7 +211,7 @@ export function MarketChartCard({
         </button>
         <button
           type="button"
-          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+          className="workbench-button min-h-8 px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
           disabled={refreshMutation.isPending}
           onClick={() => refreshMutation.mutate()}
         >

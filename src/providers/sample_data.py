@@ -395,6 +395,7 @@ class SampleMarketDataProvider:
             "CSI500": self._build_history_points(trade_date=trade_date, start_value=5400.0, drift=2.0, history_window_days=history_window_days),
             "CSI1000": self._build_history_points(trade_date=trade_date, start_value=5980.0, drift=2.4, history_window_days=history_window_days),
             "SSE": self._build_history_points(trade_date=trade_date, start_value=3010.0, drift=1.0, history_window_days=history_window_days),
+            "SZSE": self._build_history_points(trade_date=trade_date, start_value=9700.0, drift=3.0, history_window_days=history_window_days),
             "CHINEXT": self._build_history_points(trade_date=trade_date, start_value=1830.0, drift=1.2, history_window_days=history_window_days),
             "HSTECH": self._build_history_points(trade_date=trade_date, start_value=3720.0, drift=2.6, history_window_days=history_window_days),
         }
@@ -403,6 +404,7 @@ class SampleMarketDataProvider:
             "CSI500": 5528.0,
             "CSI1000": 6124.0,
             "SSE": 3084.0,
+            "SZSE": 9824.0,
             "CHINEXT": 1918.0,
             "HSTECH": 3926.0,
         }

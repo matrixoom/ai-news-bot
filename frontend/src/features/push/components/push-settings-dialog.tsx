@@ -30,13 +30,13 @@ export function PushSettingsDialog(props: PushSettingsDialogProps) {
       className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 p-4"
       role="dialog"
     >
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-slate-50 p-5 shadow-xl sm:p-6">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-panel border border-line bg-canvas p-5 shadow-xl sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuration</p>
-            <h3 className="mt-2 text-xl font-semibold text-slate-950" id="push-settings-title">推送设置</h3>
+            <h3 className="mt-2 text-xl font-semibold text-ink" id="push-settings-title">推送设置</h3>
           </div>
-          <button aria-label="关闭推送设置" className="rounded-full border border-slate-200 bg-white p-2 text-slate-600" onClick={props.onClose} type="button">
+          <button aria-label="关闭推送设置" className="workbench-icon-button" onClick={props.onClose} type="button">
             <XMarkIcon aria-hidden="true" className="h-5 w-5" />
           </button>
         </div>

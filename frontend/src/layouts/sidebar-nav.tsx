@@ -3,12 +3,16 @@ import {
   CalendarDaysIcon,
   ChartBarSquareIcon,
   ChartPieIcon,
+  CheckIcon,
+  ChevronDownIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
+  ChevronUpIcon,
   Cog6ToothIcon,
   CpuChipIcon,
   DocumentTextIcon,
   PaperAirplaneIcon,
+  PencilSquareIcon,
   SparklesIcon,
 } from "@heroicons/react/24/outline";
 import {
@@ -184,6 +188,7 @@ function SortableDirectorySection({
   searchParams,
   childOrder,
   onChildOrderChange,
+  editing,
 }: {
   directory: ModuleDirectory;
   expanded: boolean;
@@ -192,6 +197,7 @@ function SortableDirectorySection({
   searchParams: URLSearchParams;
   childOrder: string[];
   onChildOrderChange: (newOrder: string[]) => void;
+  editing: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: directory.id });
 
@@ -226,25 +232,27 @@ function SortableDirectorySection({
   }
 
   return (
-    <section ref={setNodeRef} style={style} className="rounded-xl border border-slate-200 bg-slate-50/70 p-2">
+    <section ref={setNodeRef} style={style} className="border-b border-line py-1">
       <div className="flex items-start gap-1">
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className="mt-1 inline-flex h-8 w-6 items-center justify-center rounded text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing"
-          aria-label={`拖拽排序 ${directory.item.title}`}
-        >
-          <Bars3Icon aria-hidden="true" className="h-4 w-4" />
-        </button>
+        {editing ? (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            className="mt-1 inline-flex h-8 w-6 cursor-grab items-center justify-center rounded text-muted hover:text-ink active:cursor-grabbing"
+            aria-label={`拖拽排序 ${directory.item.title}`}
+          >
+            <Bars3Icon aria-hidden="true" className="h-4 w-4" />
+          </button>
+        ) : null}
         <Link
           aria-current={parentActive ? "page" : undefined}
           aria-label={directory.item.ariaLabel ?? directory.item.title}
           className={cn(
-            "flex-1 rounded-lg px-2 py-2 text-left transition",
+            "relative flex-1 rounded-control px-3 py-2 text-left",
             parentActive
-              ? "bg-slate-200 text-slate-900"
-              : "text-slate-700 hover:bg-white hover:text-slate-950",
+              ? "bg-accent-soft text-accent before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-accent"
+              : "text-ink hover:bg-surface-subtle",
           )}
           to={buildNavHref(directory.item.to, searchParams)}
         >
@@ -254,11 +262,15 @@ function SortableDirectorySection({
           <button
             aria-expanded={expanded}
             aria-label={expanded ? `Collapse ${directory.item.title} directory` : `Expand ${directory.item.title} directory`}
-            className="mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-600 hover:border-slate-300 hover:text-slate-900"
+            className="mt-1 inline-flex h-8 w-8 items-center justify-center rounded-control text-muted hover:bg-surface-subtle hover:text-ink"
             onClick={() => onToggleDirectory(directory.id)}
             type="button"
           >
-            {expanded ? "-" : "+"}
+            {expanded ? (
+              <ChevronUpIcon aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <ChevronDownIcon aria-hidden="true" className="h-4 w-4" />
+            )}
           </button>
         ) : null}
       </div>
@@ -266,13 +278,14 @@ function SortableDirectorySection({
       {hasChildren && expanded ? (
         <DndContext sensors={childSensors} collisionDetection={closestCenter} onDragEnd={handleChildDragEnd}>
           <SortableContext items={childOrder} strategy={verticalListSortingStrategy}>
-            <div className="mt-2 space-y-1 border-l border-slate-200 pl-3">
+            <div className="mb-1 mt-1 space-y-0.5 border-l border-line pl-3">
               {orderedChildren.map((child) => (
                 <SortableChildLink
                   key={child.to}
                   child={child}
                   pathname={pathname}
                   searchParams={searchParams}
+                  editing={editing}
                 />
               ))}
             </div>
@@ -287,10 +300,12 @@ function SortableChildLink({
   child,
   pathname,
   searchParams,
+  editing,
 }: {
   child: NavItem;
   pathname: string;
   searchParams: URLSearchParams;
+  editing: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: child.to });
 
@@ -304,23 +319,25 @@ function SortableChildLink({
 
   return (
     <div ref={setNodeRef} style={style} className="flex items-center gap-1">
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="inline-flex h-6 w-4 items-center justify-center rounded text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing"
-        aria-label={`拖拽排序 ${child.title}`}
-      >
-        <Bars3Icon aria-hidden="true" className="h-3 w-3" />
-      </button>
+      {editing ? (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="inline-flex h-6 w-4 cursor-grab items-center justify-center rounded text-muted hover:text-ink active:cursor-grabbing"
+          aria-label={`拖拽排序 ${child.title}`}
+        >
+          <Bars3Icon aria-hidden="true" className="h-3 w-3" />
+        </button>
+      ) : null}
       <Link
         aria-current={active ? "page" : undefined}
         aria-label={child.ariaLabel ?? child.title}
         className={cn(
-          "flex-1 rounded-md px-2 py-1.5 text-sm transition",
+          "relative flex-1 rounded-control px-3 py-1.5 text-sm",
           active
-            ? "border border-slate-300 bg-slate-200 text-slate-900"
-            : "text-slate-600 hover:bg-white hover:text-slate-900",
+            ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-1.5 before:-left-[13px] before:w-0.5 before:bg-accent"
+            : "text-muted hover:bg-surface-subtle hover:text-ink",
         )}
         to={buildNavHref(child.to, searchParams)}
       >
@@ -336,10 +353,12 @@ function SortableCompactItem({
   item,
   pathname,
   searchParams,
+  editing,
 }: {
   item: NavItem;
   pathname: string;
   searchParams: URLSearchParams;
+  editing: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.to });
 
@@ -359,23 +378,25 @@ function SortableCompactItem({
         title={item.title}
         to={buildNavHref(item.to, searchParams)}
         className={cn(
-          "flex h-10 w-10 items-center justify-center rounded-lg border text-xs font-semibold transition",
+          "flex h-10 w-10 items-center justify-center rounded-control border text-xs font-semibold",
           active
-            ? "border-slate-300 bg-slate-200 text-slate-900"
-            : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+            ? "border-accent/20 bg-accent-soft text-accent"
+            : "border-transparent text-muted hover:bg-surface-subtle hover:text-ink",
         )}
       >
         <CompactNavIcon item={item} />
       </Link>
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="inline-flex h-6 w-4 items-center justify-center rounded text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing"
-        aria-label={`拖拽排序 ${item.title}`}
-      >
-        <Bars3Icon aria-hidden="true" className="h-3 w-3" />
-      </button>
+      {editing ? (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="inline-flex h-6 w-4 cursor-grab items-center justify-center rounded text-muted hover:text-ink active:cursor-grabbing"
+          aria-label={`拖拽排序 ${item.title}`}
+        >
+          <Bars3Icon aria-hidden="true" className="h-3 w-3" />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -386,12 +407,14 @@ function CompactNavSection({
   searchParams,
   navOrder,
   onNavOrderChange,
+  editing,
 }: {
   items: NavItem[];
   pathname: string;
   searchParams: URLSearchParams;
   navOrder: string[];
   onNavOrderChange: (newOrder: string[]) => void;
+  editing: boolean;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -422,6 +445,7 @@ function CompactNavSection({
               item={item}
               pathname={pathname}
               searchParams={searchParams}
+              editing={editing}
             />
           ))}
         </div>
@@ -448,10 +472,10 @@ function ExpandedSingleNavItem({
       aria-current={active ? "page" : undefined}
       aria-label={item.ariaLabel ?? item.title}
       className={cn(
-        "block rounded-xl border px-3 py-3 transition",
+        "relative block rounded-control px-3 py-2.5",
         active
-          ? "border-slate-300 bg-slate-200 text-slate-900"
-          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-950",
+          ? "bg-accent-soft text-accent before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-accent"
+          : "text-ink hover:bg-surface-subtle",
       )}
       to={buildNavHref(item.to, searchParams)}
     >
@@ -470,6 +494,7 @@ function ExpandedModuleDirectories({
   childOrders,
   onDirectoryOrderChange,
   onChildOrderChange,
+  editing,
 }: {
   directories: ModuleDirectory[];
   expandedByDirectory: Record<string, boolean>;
@@ -480,6 +505,7 @@ function ExpandedModuleDirectories({
   childOrders: Record<string, string[]>;
   onDirectoryOrderChange: (newOrder: string[]) => void;
   onChildOrderChange: (directoryId: string, newOrder: string[]) => void;
+  editing: boolean;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -518,6 +544,7 @@ function ExpandedModuleDirectories({
                 onToggleDirectory={onToggleDirectory}
                 pathname={pathname}
                 searchParams={searchParams}
+                editing={editing}
               />
             );
           })}
@@ -535,8 +562,8 @@ function ExpandedSystemLinks({
   searchParams: URLSearchParams;
 }) {
   return (
-    <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50/70 p-2">
-      <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">System</p>
+    <div className="space-y-1 pt-2">
+      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">System</p>
       {secondaryNavItems.map((item) => {
         const active = isNavTargetActive(item.to, pathname, searchParams);
 
@@ -546,8 +573,10 @@ function ExpandedSystemLinks({
             aria-current={active ? "page" : undefined}
             aria-label={item.ariaLabel ?? item.title}
             className={cn(
-              "block rounded-lg px-3 py-2 text-sm transition",
-              active ? "border border-slate-300 bg-slate-200 text-slate-900" : "text-slate-600 hover:bg-white hover:text-slate-900",
+              "relative block rounded-control px-3 py-2 text-sm",
+              active
+                ? "bg-accent-soft text-accent before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:bg-accent"
+                : "text-muted hover:bg-surface-subtle hover:text-ink",
             )}
             to={buildNavHref(item.to, searchParams)}
           >
@@ -579,6 +608,7 @@ export function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
   const [primaryNavOrder, setPrimaryNavOrder] = useState<string[]>(() =>
     readStoredOrder(PRIMARY_NAV_ORDER_KEY, primaryNavItems.map((n) => n.to)),
   );
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem(DIRECTORY_STATE_STORAGE_KEY, JSON.stringify(expandedByDirectory));
@@ -614,11 +644,16 @@ export function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
       <div className={cn("min-h-0 flex-1 overflow-y-auto", collapsed ? "pr-0" : "pr-1")}>
         <div className={cn("mb-5", collapsed ? "space-y-3" : "mb-6")}>
           <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between")}>
-            {!collapsed ? <h1 className="text-xl font-semibold text-slate-950">Trend Insight</h1> : null}
+            {!collapsed ? (
+              <div>
+                <h1 className="text-base font-semibold tracking-tight text-ink">Trend Insight</h1>
+                <p className="mt-0.5 text-[11px] text-muted">研究工作台</p>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={onToggleCollapsed}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              className="workbench-icon-button h-8 w-8"
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               <SidebarToggleIcon collapsed={collapsed} />
@@ -633,6 +668,7 @@ export function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
             searchParams={searchParams}
             navOrder={primaryNavOrder}
             onNavOrderChange={setPrimaryNavOrder}
+            editing={editing}
           />
         ) : (
           <div className="space-y-2">
@@ -646,12 +682,30 @@ export function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
               onToggleDirectory={toggleDirectory}
               pathname={pathname}
               searchParams={searchParams}
+              editing={editing}
             />
           </div>
         )}
       </div>
 
-      <div className={cn("pt-3", collapsed ? "border-t border-transparent" : "border-t border-slate-200")}>
+      <div className={cn("space-y-2 pt-3", collapsed ? "border-t border-transparent" : "border-t border-line")}>
+        <button
+          aria-label={editing ? "完成导航编辑" : "编辑导航"}
+          className={cn(
+            "flex items-center justify-center rounded-control text-xs font-medium",
+            collapsed ? "h-9 w-10" : "h-9 w-full gap-2 px-3",
+            editing ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-subtle hover:text-ink",
+          )}
+          onClick={() => setEditing((value) => !value)}
+          type="button"
+        >
+          {editing ? (
+            <CheckIcon aria-hidden="true" className="h-4 w-4" />
+          ) : (
+            <PencilSquareIcon aria-hidden="true" className="h-4 w-4" />
+          )}
+          {!collapsed ? <span>{editing ? "完成" : "编辑导航"}</span> : null}
+        </button>
         {collapsed ? (
           <CompactNavSection
             items={secondaryNavItems}
@@ -659,6 +713,7 @@ export function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
             searchParams={searchParams}
             navOrder={secondaryNavItems.map((n) => n.to)}
             onNavOrderChange={() => {}}
+            editing={false}
           />
         ) : (
           <ExpandedSystemLinks pathname={pathname} searchParams={searchParams} />

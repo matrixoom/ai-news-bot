@@ -75,19 +75,19 @@ export function LlmSettingsWorkspace() {
     <section className="space-y-4">
       <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">大模型配置</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-ink">大模型配置</h2>
           <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">统一管理事件抽取、聚类、主题摘要和关系判断所使用的模型服务。密钥只在保存时提交，列表与编辑响应均不返回明文。</p>
         </div>
-        <button className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700" onClick={() => setShowCreateForm(true)} type="button">
+        <button className="workbench-button" onClick={() => setShowCreateForm(true)} type="button">
           <PlusIcon aria-hidden="true" className="mr-1 h-4 w-4" />
           新增配置
         </button>
       </header>
 
       <div className="grid gap-3 xl:grid-cols-[290px_minmax(0,1fr)]">
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h3 className="text-sm font-semibold text-slate-950">模型服务</h3>
+        <section className="workbench-panel overflow-hidden">
+          <header className="flex items-center justify-between border-b border-line px-4 py-3">
+            <h3 className="text-sm font-semibold text-ink">模型服务</h3>
             <span className="text-xs text-slate-500">{providersQuery.isLoading ? "加载中" : `${providers.length} 个配置`}</span>
           </header>
           {providersQuery.isError ? (
@@ -111,9 +111,9 @@ export function LlmSettingsWorkspace() {
           ) : null}
           {settingsMessage ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{settingsMessage}</div> : null}
 
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-slate-950">{selectedProvider?.name ?? "未选择模型服务"}</h3>
+          <section className="workbench-panel overflow-hidden">
+            <header className="flex items-center justify-between border-b border-line px-4 py-3">
+              <h3 className="text-sm font-semibold text-ink">{selectedProvider?.name ?? "未选择模型服务"}</h3>
               <span className="rounded-full bg-green-100 px-2 py-1 text-[11px] font-semibold text-green-700">真实配置</span>
             </header>
             <div className="space-y-4 p-4 text-xs text-slate-600">
@@ -146,9 +146,9 @@ export function LlmSettingsWorkspace() {
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <header className="border-b border-slate-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-slate-950">任务默认模型</h3>
+          <section className="workbench-panel overflow-hidden">
+            <header className="border-b border-line px-4 py-3">
+              <h3 className="text-sm font-semibold text-ink">任务默认模型</h3>
             </header>
             {taskConfigsQuery.isLoading ? (
               <div className="p-4 text-sm text-slate-500">正在加载任务映射...</div>

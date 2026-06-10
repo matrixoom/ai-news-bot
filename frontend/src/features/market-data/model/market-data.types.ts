@@ -106,6 +106,27 @@ export type StockInstrumentListPayload = {
   warning_message: string;
 };
 
+export type StockMarketOverviewPayload = {
+  generated_at: string;
+  indices: Array<{
+    symbol: "SSE" | "SZSE" | string;
+    display_name: string;
+    close: number | null;
+    change: number | null;
+    change_pct: number | null;
+    trade_date: string | null;
+    status: string;
+  }>;
+  breadth: {
+    trade_date: string | null;
+    advanced: number;
+    declined: number;
+    unchanged: number;
+    total: number;
+    status: string;
+  };
+};
+
 export type StockDailyBar = {
   date: string;
   open: number;

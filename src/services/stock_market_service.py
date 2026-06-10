@@ -7,6 +7,7 @@ from datetime import date
 import logging
 from typing import Any
 
+from .market_history_store import MarketHistoryStore
 from .stock_market_repository import (
     StockInstrument,
     StockMarketRepository,
@@ -42,12 +43,14 @@ class StockMarketService:
         self,
         repository: StockMarketRepository | None = None,
         sync_service: StockMarketSyncService | None = None,
+        market_history_store: MarketHistoryStore | None = None,
     ) -> None:
         """初始化股票市场业务服务。
 
         Args:
             repository: 股票市场仓储。
             sync_service: AkShare 同步服务。
+            market_history_store: 宽基指数历史仓储。
 
         Returns:
             股票市场服务实例。
@@ -55,6 +58,67 @@ class StockMarketService:
 
         self._repository = repository or StockMarketRepository()
         self._sync_service = sync_service or StockMarketSyncService(repository=self._repository)
+        self._market_history_store = market_history_store or MarketHistoryStore()
+
+    def build_overview_payload(self) -> dict[str, Any]:
+        """构建股票市场摘要，单项缺失时保留其余可用数据。
+
+        Returns:
+            包含上证指数、深证成指和市场宽度的稳定前端契约。
+        """
+
+        indices = [
+            self._build_index_overview("SSE", "上证指数"),
+            self._build_index_overview("SZSE", "深证成指"),
+        ]
+        try:
+            breadth = self._repository.load_market_breadth()
+        except Exception as error:
+            logger.warning("stock market breadth unavailable: %s", error)
+            breadth = {
+                "trade_date": None,
+                "advanced": 0,
+                "declined": 0,
+                "unchanged": 0,
+                "total": 0,
+                "status": "unavailable",
+            }
+        return {
+            "generated_at": _utc_now(),
+            "indices": indices,
+            "breadth": breadth,
+        }
+
+    def _build_index_overview(self, symbol: str, display_name: str) -> dict[str, Any]:
+        """构建单个宽基指数的最近收盘变化。"""
+
+        try:
+            points = self._market_history_store.load_latest_points(symbol=symbol, limit=2)
+        except Exception as error:
+            logger.warning("stock index overview unavailable for %s: %s", symbol, error)
+            points = []
+        if len(points) < 2:
+            return {
+                "symbol": symbol,
+                "display_name": display_name,
+                "close": None,
+                "change": None,
+                "change_pct": None,
+                "trade_date": None,
+                "status": "unavailable",
+            }
+        previous, latest = points[-2], points[-1]
+        change = latest.close_price - previous.close_price
+        change_pct = (change / previous.close_price * 100) if previous.close_price else None
+        return {
+            "symbol": symbol,
+            "display_name": display_name,
+            "close": latest.close_price,
+            "change": round(change, 4),
+            "change_pct": change_pct,
+            "trade_date": latest.trade_date.isoformat(),
+            "status": "live",
+        }
 
     def sync_universe(self) -> dict[str, Any]:
         """手动同步 A 股和 ETF 标的列表。"""

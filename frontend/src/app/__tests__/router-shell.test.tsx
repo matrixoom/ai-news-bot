@@ -114,6 +114,37 @@ describe("Workbench shell", () => {
     expect(screen.queryByRole("link", { name: "Push Center > Overview" })).not.toBeInTheDocument();
   });
 
+  it("keeps navigation drag handles inside an explicit edit mode", async () => {
+    installWorkbenchFetchMock({ push: pushPayload });
+    const user = userEvent.setup();
+
+    renderApp("/push");
+
+    expect(await screen.findByRole("button", { name: "编辑导航" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "拖拽排序 Macro Data" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "编辑导航" }));
+
+    expect(screen.getByRole("button", { name: "完成导航编辑" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "拖拽排序 Macro Data" })).toBeInTheDocument();
+  });
+
+  it("opens and closes the responsive navigation drawer", async () => {
+    installWorkbenchFetchMock({ push: pushPayload });
+    const user = userEvent.setup();
+
+    renderApp("/push");
+
+    const openButton = await screen.findByRole("button", { name: "打开导航" });
+    expect(screen.getByTestId("mobile-navigation")).toHaveAttribute("data-open", "false");
+
+    await user.click(openButton);
+    expect(screen.getByTestId("mobile-navigation")).toHaveAttribute("data-open", "true");
+
+    await user.click(screen.getByRole("button", { name: "关闭导航" }));
+    expect(screen.getByTestId("mobile-navigation")).toHaveAttribute("data-open", "false");
+  });
+
   it("persists the theme and sidebar preferences", async () => {
     installWorkbenchFetchMock({ push: pushPayload });
     const user = userEvent.setup();
@@ -174,13 +205,13 @@ describe("Workbench shell", () => {
     expect(new Set([marketIcon?.innerHTML, trendIcon?.innerHTML, pushIcon?.innerHTML]).size).toBe(3);
   });
 
-  it("does not render first-level module description copy in the shell chrome", async () => {
+  it("renders route metadata once in the compact shell header", async () => {
     installWorkbenchFetchMock({ push: pushPayload });
 
     renderApp("/market-data");
 
     expect((await screen.findAllByRole("heading", { name: "Market Data" })).length).toBeGreaterThan(0);
-    expect(screen.queryAllByText("Commodities, precious metals, and stock indices")).toHaveLength(0);
+    expect(screen.getAllByText("Commodities, precious metals, and stock indices")).toHaveLength(1);
   });
 
   it("does not render redundant module workspace labels in data and push tabs", async () => {

@@ -125,12 +125,12 @@ export function MacroPage() {
         charts.length === 0 ? (
           <EmptyPanelState title="No macro charts" description="The selected category has no chart definitions yet." />
         ) : (
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className="flex flex-col gap-4">
             {charts.map((chart) => (
               <MacroChartCard
                 key={chart.id}
                 chart={chart}
-                className={chart.wide ? "xl:col-span-2" : undefined}
+                className={undefined}
                 frequency={chartFrequency(chart.id, chart.frequency)}
                 frequencyOptions={frequencyOptions}
                 onFrequencyChange={(nextFrequency) => updateChartFrequency(chart.id, nextFrequency)}

@@ -71,10 +71,10 @@ export function RangeControl({
             <button
               key={option.value}
               className={[
-                "inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium transition",
+                "inline-flex min-h-8 items-center rounded-control border px-2.5 text-xs font-medium",
                 selected
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-950",
+                  ? "border-accent bg-accent text-white"
+                  : "border-line bg-surface text-muted hover:border-accent/40 hover:bg-accent-soft hover:text-accent",
               ].join(" ")}
               onClick={() => selectRange(option.value)}
               type="button"
@@ -85,7 +85,7 @@ export function RangeControl({
         })}
 
         {frequencyOptions && frequencyOptions.length > 0 && frequency ? (
-          <div className="ml-auto flex rounded-full border border-slate-200 overflow-hidden" aria-label="数据频率切换">
+          <div className="ml-auto flex overflow-hidden rounded-control border border-line bg-surface" aria-label="数据频率切换">
             {frequencyOptions.map((option, index) => {
               const selected = option.value === frequency;
 
@@ -95,9 +95,9 @@ export function RangeControl({
                   className={[
                     "inline-flex items-center px-2 py-1 text-xs font-medium transition",
                     selected
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-transparent bg-white text-slate-500 hover:text-slate-700",
-                    index === 0 ? "border-r border-slate-200" : "",
+                      ? "border-accent bg-accent text-white"
+                      : "border-transparent bg-surface text-muted hover:bg-accent-soft hover:text-accent",
+                    index === 0 ? "border-r border-line" : "",
                   ].join(" ")}
                   onClick={() => onFrequencyChange?.(option.value)}
                   type="button"
@@ -111,33 +111,33 @@ export function RangeControl({
       </div>
 
       {customOpen ? (
-        <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_1fr_auto]">
-          <label className="text-sm font-medium text-slate-700">
+        <div className="grid gap-3 rounded-panel border border-line bg-surface-subtle p-3 md:grid-cols-[1fr_1fr_auto]">
+          <label className="text-sm font-medium text-ink">
             起始日期
             <input
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+              className="workbench-input mt-1 w-full"
               onChange={(event) => setStartDate(event.target.value)}
               type="date"
               value={startDate}
             />
           </label>
-          <label className="text-sm font-medium text-slate-700">
+          <label className="text-sm font-medium text-ink">
             结束日期
             <input
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+              className="workbench-input mt-1 w-full"
               onChange={(event) => setEndDate(event.target.value)}
               type="date"
               value={endDate}
             />
           </label>
           <button
-            className="self-end rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+            className="workbench-button-primary self-end"
             onClick={applyCustomRange}
             type="button"
           >
             应用自定义范围
           </button>
-          {error ? <p className="text-sm text-rose-600 md:col-span-3">{error}</p> : null}
+          {error ? <p className="text-sm text-negative md:col-span-3">{error}</p> : null}
         </div>
       ) : null}
     </div>

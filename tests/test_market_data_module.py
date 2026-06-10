@@ -1617,5 +1617,154 @@ class MarketIndexSessionBoundaryTests(unittest.TestCase):
         self.assertFalse(should_append)
 
 
+class StockMarketOverviewTests(unittest.TestCase):
+    """校验股票市场摘要的指数与市场宽度聚合。"""
+
+    def setUp(self) -> None:
+        self.temp_dir = TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.repository = StockMarketRepository(
+            self.root / "market_data.db",
+            shard_dir=self.root / "market",
+            precreate_shards=False,
+        )
+        self.history_store = MarketHistoryStore(self.root / "market_history.db")
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_repository_aggregates_latest_market_breadth(self) -> None:
+        """校验按最近两个共同交易日统计上涨、下跌和平盘家数。"""
+        instruments = [
+            ("000001.SZ", "000001", "平安银行"),
+            ("000002.SZ", "000002", "万科A"),
+            ("600000.SH", "600000", "浦发银行"),
+        ]
+        self.repository.upsert_instruments(
+            [
+                {
+                    "symbol": symbol,
+                    "code": code,
+                    "exchange": symbol[-2:],
+                    "name": name,
+                    "instrument_type": "stock",
+                    "market_board": "主板",
+                    "listing_status": "listed",
+                }
+                for symbol, code, name in instruments
+            ]
+        )
+        closes = {
+            "000001.SZ": (10.0, 10.5),
+            "000002.SZ": (4.0, 3.8),
+            "600000.SH": (8.0, 8.0),
+        }
+        for symbol, (previous, latest) in closes.items():
+            self.repository.upsert_daily_bars(
+                symbol,
+                [
+                    _stock_bar("2026-06-08", previous),
+                    _stock_bar("2026-06-09", latest),
+                ],
+            )
+
+        breadth = self.repository.load_market_breadth()
+
+        self.assertEqual(
+            breadth,
+            {
+                "trade_date": "2026-06-09",
+                "advanced": 1,
+                "declined": 1,
+                "unchanged": 1,
+                "total": 3,
+                "status": "live",
+            },
+        )
+
+    def test_service_combines_index_changes_and_breadth(self) -> None:
+        """校验 Service 输出最近收盘、涨跌额、涨跌幅和市场宽度。"""
+        for symbol, display_name, previous, latest in (
+            ("SSE", "上证指数", 3200.0, 3242.18),
+            ("SZSE", "深证成指", 10100.0, 10186.45),
+        ):
+            self.history_store.upsert_symbol_history(
+                symbol=symbol,
+                display_name=display_name,
+                currency="CNY",
+                provider_key="unit-test",
+                source_url="https://example.com",
+                points=[
+                    MarketIndexHistoryPoint(date(2026, 6, 8), previous),
+                    MarketIndexHistoryPoint(date(2026, 6, 9), latest),
+                ],
+                status="live",
+                window_label="2 sessions",
+                warning_message="",
+            )
+        self.repository.load_market_breadth = Mock(
+            return_value={
+                "trade_date": "2026-06-09",
+                "advanced": 3421,
+                "declined": 1428,
+                "unchanged": 82,
+                "total": 4931,
+                "status": "live",
+            }
+        )
+        service = StockMarketService(
+            repository=self.repository,
+            market_history_store=self.history_store,
+        )
+
+        payload = service.build_overview_payload()
+
+        self.assertEqual([item["symbol"] for item in payload["indices"]], ["SSE", "SZSE"])
+        self.assertEqual(payload["indices"][0]["change"], 42.18)
+        self.assertAlmostEqual(payload["indices"][0]["change_pct"], 1.318125)
+        self.assertEqual(payload["breadth"]["advanced"], 3421)
+
+    def test_service_degrades_missing_index_and_breadth_exception_independently(self) -> None:
+        """校验单个指数缺失和市场宽度异常不会阻断其余摘要数据。"""
+        self.history_store.upsert_symbol_history(
+            symbol="SSE",
+            display_name="上证指数",
+            currency="CNY",
+            provider_key="unit-test",
+            source_url="https://example.com",
+            points=[
+                MarketIndexHistoryPoint(date(2026, 6, 8), 3200.0),
+                MarketIndexHistoryPoint(date(2026, 6, 9), 3242.18),
+            ],
+            status="live",
+            window_label="2 sessions",
+            warning_message="",
+        )
+        self.repository.load_market_breadth = Mock(side_effect=sqlite3.DatabaseError("database unavailable"))
+        service = StockMarketService(
+            repository=self.repository,
+            market_history_store=self.history_store,
+        )
+
+        payload = service.build_overview_payload()
+
+        self.assertEqual(payload["indices"][0]["status"], "live")
+        self.assertEqual(payload["indices"][1]["status"], "unavailable")
+        self.assertEqual(payload["breadth"]["status"], "unavailable")
+
+
+def _stock_bar(trade_date: str, close_price: float) -> dict[str, object]:
+    """构造市场宽度测试所需的最小日线记录。"""
+
+    return {
+        "trade_date": trade_date,
+        "open_price": close_price,
+        "close_price": close_price,
+        "high_price": close_price,
+        "low_price": close_price,
+        "volume": 1000,
+    }
+
+
 if __name__ == "__main__":
     unittest.main()

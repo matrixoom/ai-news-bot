@@ -8,11 +8,11 @@ type SettingsSectionCardProps = {
 
 export function SettingsSectionCard({ title, description, children }: SettingsSectionCardProps) {
   return (
-    <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Settings</p>
-      <h3 className="mt-2 text-xl font-semibold text-slate-950">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
-      <div className="mt-6">{children}</div>
+    <section className="border-b border-line pb-6">
+      <p className="workbench-kicker">Settings</p>
+      <h3 className="mt-2 text-lg font-semibold text-ink">{title}</h3>
+      <p className="mt-1 text-sm leading-6 text-muted">{description}</p>
+      <div className="mt-5">{children}</div>
     </section>
   );
 }

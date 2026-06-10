@@ -277,7 +277,44 @@ uv run python main.py macro-sync
 - `400`：`invalid_stock_market_filter`
 - `503`：`frontend_stock_instruments_unavailable`
 
-### 4.4.3 `POST /api/frontend/modules/market-data/stocks/sync-universe`
+### 4.4.3 `GET /api/frontend/modules/market-data/stocks/overview`
+
+用途：返回股票研究工作台顶部的真实市场摘要。指数读取 `.data/market_history.db` 最近两个有效点；市场宽度从股票日线分片聚合最近两个交易日的上涨、下跌和平盘家数。
+
+成功：`200`
+
+```json
+{
+  "generated_at": "2026-06-10T15:23:45Z",
+  "indices": [
+    {
+      "symbol": "SSE",
+      "display_name": "上证指数",
+      "close": 3242.18,
+      "change": 42.18,
+      "change_pct": 1.318125,
+      "trade_date": "2026-06-09",
+      "status": "live"
+    }
+  ],
+  "breadth": {
+    "trade_date": "2026-06-09",
+    "advanced": 3421,
+    "declined": 1428,
+    "unchanged": 82,
+    "total": 4931,
+    "status": "live"
+  }
+}
+```
+
+兼容和降级：
+
+- 单个指数少于两个有效点时，该指数返回 `status: "unavailable"` 和空数值，其余项目仍返回。
+- 市场宽度无法聚合时仅 `breadth.status` 为 `unavailable`。
+- Service 整体异常时返回 `503 frontend_stock_market_overview_unavailable`。
+
+### 4.4.4 `POST /api/frontend/modules/market-data/stocks/sync-universe`
 
 用途：手动刷新 A 股/ETF 基础标的池。股票优先来自 AkShare `stock_info_a_code_name`，失败时回退 A 股快照端点；ETF 优先来自 `fund_etf_spot_em`，失败时回退同花顺/新浪 ETF 端点。本地表以 `symbol` 幂等 upsert，不删除既有标的。股票与 ETF 分段容错，任一来源失败时不阻断另一来源入库，失败详情通过 `warnings` 返回。
 
@@ -297,7 +334,7 @@ uv run python main.py macro-sync
 
 失败：仅数据库写入等内部错误返回 `503 frontend_stock_universe_sync_failed`；外部行情源代理失败通常返回 `200` 并在 `warnings` 中说明。
 
-### 4.4.4 `GET /api/frontend/modules/market-data/stocks/{symbol}`
+### 4.4.5 `GET /api/frontend/modules/market-data/stocks/{symbol}`
 
 用途：返回选中股票/ETF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 1 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
 
@@ -377,7 +414,7 @@ OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短�
 - `400`：`invalid_stock_symbol_or_range`
 - `503`：`frontend_stock_detail_unavailable`
 
-### 4.4.5 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
+### 4.4.6 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
 
 用途：手动刷新选中股票/ETF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。股票会同时
 强制刷新财务指标，确保 ROE、营收同比、净利润同比和资产负债率可以补采最新季度数据；ETF 不执行

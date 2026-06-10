@@ -7,10 +7,10 @@ type PushRunHistoryProps = {
 
 export function PushRunHistory({ runs }: PushRunHistoryProps) {
   return (
-    <section className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="workbench-panel space-y-5 p-5">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">History</p>
-        <h3 className="mt-2 text-xl font-semibold text-slate-950">Manual runs and scheduled deliveries</h3>
+        <h3 className="mt-2 text-lg font-semibold text-ink">Manual runs and scheduled deliveries</h3>
         <p className="mt-2 text-sm leading-6 text-slate-600">Review the latest executions across manual sends and scheduler-triggered jobs.</p>
       </div>
 

@@ -69,6 +69,7 @@ def build_default_market_registry() -> Dict[str, TrackedIndexDefinition]:
         TrackedIndexDefinition("CSI500", "中证 500", "AKShare / 交易所", "CNY"),
         TrackedIndexDefinition("CSI1000", "中证 1000", "AKShare / 交易所", "CNY"),
         TrackedIndexDefinition("SSE", "上证综指", "AKShare / 交易所", "CNY"),
+        TrackedIndexDefinition("SZSE", "深证成指", "AKShare / 交易所", "CNY"),
         TrackedIndexDefinition("CHINEXT", "创业板指", "AKShare / 交易所", "CNY"),
         TrackedIndexDefinition("HSTECH", "恒生科技指数", "AKShare / 交易所", "HKD"),
     )

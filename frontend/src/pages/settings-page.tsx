@@ -15,15 +15,15 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("llm");
 
   return (
-    <section className="space-y-4">
-      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm" role="tablist" aria-label="系统配置">
+    <section className="grid gap-4 lg:grid-cols-[190px_minmax(0,1fr)]">
+      <div className="workbench-panel flex h-fit flex-col p-1" role="tablist" aria-label="系统配置">
         {SETTINGS_TABS.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
           return (
             <button
               aria-selected={active}
-              className={`inline-flex items-center rounded-md px-3 py-2 text-sm font-semibold transition ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}
+              className={`inline-flex items-center rounded-control px-3 py-2.5 text-sm font-semibold ${active ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-subtle hover:text-ink"}`}
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               role="tab"
@@ -35,7 +35,7 @@ export function SettingsPage() {
           );
         })}
       </div>
-      <div role="tabpanel">
+      <div className="min-w-0" role="tabpanel">
         {activeTab === "llm" ? <LlmSettingsWorkspace /> : <RssSettingsWorkspace />}
       </div>
     </section>

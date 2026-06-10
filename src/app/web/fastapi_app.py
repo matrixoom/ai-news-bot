@@ -349,6 +349,16 @@ def create_fastapi_app(
             logger.exception("frontend stock universe sync failed")
             return JSONResponse({"error": "frontend_stock_universe_sync_failed"}, status_code=503)
 
+    @app.get("/api/frontend/modules/market-data/stocks/overview")
+    def frontend_stock_market_overview() -> JSONResponse:
+        """返回股票市场指数与市场宽度摘要。"""
+
+        try:
+            return JSONResponse(stock_service.build_overview_payload())
+        except Exception:
+            logger.exception("frontend stock market overview failed")
+            return JSONResponse({"error": "frontend_stock_market_overview_unavailable"}, status_code=503)
+
     @app.get("/api/frontend/modules/market-data/stocks/{symbol}")
     def frontend_stock_market_detail(
         symbol: str,

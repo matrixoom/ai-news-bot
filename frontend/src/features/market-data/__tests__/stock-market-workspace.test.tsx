@@ -227,6 +227,44 @@ vi.mock("../hooks/use-stock-market-refresh-mutation", () => ({
   }),
 }));
 
+vi.mock("../hooks/use-stock-market-overview-query", () => ({
+  useStockMarketOverviewQuery: () => ({
+    isPending: false,
+    isError: false,
+    data: {
+      generated_at: "2026-06-10T10:32:00Z",
+      indices: [
+        {
+          symbol: "SSE",
+          display_name: "上证指数",
+          close: 3242.18,
+          change: 42.18,
+          change_pct: 1.32,
+          trade_date: "2026-06-09",
+          status: "live",
+        },
+        {
+          symbol: "SZSE",
+          display_name: "深证成指",
+          close: 10186.45,
+          change: -18.2,
+          change_pct: -0.18,
+          trade_date: "2026-06-09",
+          status: "live",
+        },
+      ],
+      breadth: {
+        trade_date: "2026-06-09",
+        advanced: 3421,
+        declined: 1428,
+        unchanged: 82,
+        total: 4931,
+        status: "live",
+      },
+    },
+  }),
+}));
+
 describe("StockMarketWorkspace", () => {
   beforeEach(() => {
     mocks.detailRanges.length = 0;
@@ -235,6 +273,16 @@ describe("StockMarketWorkspace", () => {
     mocks.refresh.mockClear();
     resizeObserverCallbacks.length = 0;
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+  });
+
+  it("renders real market overview metrics with non-color direction labels", () => {
+    render(<StockMarketWorkspace />);
+
+    expect(screen.getByRole("region", { name: "市场概览" })).toBeInTheDocument();
+    expect(screen.getByText("上证指数")).toBeInTheDocument();
+    expect(screen.getByText("市场宽度")).toBeInTheDocument();
+    expect(screen.getByText("↑ 3421")).toBeInTheDocument();
+    expect(screen.getByText("↓ 1428")).toBeInTheDocument();
   });
 
   it("uses real pagination and supports previous and next page navigation", async () => {
@@ -332,7 +380,7 @@ describe("StockMarketWorkspace", () => {
     render(<StockMarketWorkspace />);
 
     expect(mocks.detailRanges.at(-1)).toMatchObject({ type: "1m" });
-    expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("bg-blue-50");
+    expect(screen.getByRole("button", { name: "近1月" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("separates overview and financial content into real tabs", async () => {
@@ -378,12 +426,11 @@ describe("StockMarketWorkspace", () => {
 
     const revenueTab = screen.getByRole("tab", { name: "营业收入" });
     expect(revenueTab).toHaveAttribute("aria-selected", "true");
-    expect(revenueTab).toHaveClass("border-blue-600");
-    expect(revenueTab).not.toHaveClass("bg-blue-600");
+    expect(revenueTab).toHaveClass("border-accent");
     expect(screen.getByRole("tab", { name: "经营活动现金流" })).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("img", { name: "营业收入 图表" })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "经营活动现金流 图表" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "近5年" })).toHaveClass("bg-blue-50");
+    expect(screen.getByRole("button", { name: "近5年" })).toHaveAttribute("aria-pressed", "true");
     expect(
       within(screen.getByLabelText("财务时间范围"))
         .getAllByRole("button")
@@ -396,11 +443,11 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("img", { name: "经营活动现金流 图表" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "近3年" }));
-    expect(screen.getByRole("button", { name: "近3年" })).toHaveClass("bg-blue-50");
+    expect(screen.getByRole("button", { name: "近3年" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("+100.00%")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "近1月" }));
-    expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("bg-blue-50");
+    expect(screen.getByRole("button", { name: "近1月" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("+100.00%")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "自定义" }));
@@ -408,7 +455,7 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByLabelText("财务结束日期")).toHaveValue("2025-12-31");
 
     await user.click(screen.getByRole("tab", { name: "市场行情" }));
-    expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("bg-blue-50");
+    expect(screen.getByRole("button", { name: "近1月" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("places the report period selector in the financial range toolbar", async () => {
@@ -418,7 +465,7 @@ describe("StockMarketWorkspace", () => {
     await user.click(screen.getByRole("tab", { name: "财务数据" }));
 
     const toolbar = screen.getByLabelText("财务筛选工具栏");
-    expect(within(toolbar).getByRole("button", { name: "季度" })).toHaveClass("bg-slate-900");
+    expect(within(toolbar).getByRole("button", { name: "季度" })).toHaveAttribute("aria-pressed", "true");
     expect(within(toolbar).getByRole("button", { name: "年度" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "财务数据" })).not.toBeInTheDocument();
   });
@@ -479,7 +526,7 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByLabelText("行情时间范围")).toHaveClass("h-8");
     expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("px-3", "text-xs");
     expect(screen.getByLabelText("价格复权方式")).toHaveClass("h-8");
-    expect(screen.getByRole("button", { name: "不复权" })).toHaveClass("bg-slate-900", "text-white");
+    expect(screen.getByRole("button", { name: "不复权" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: "前复权" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "后复权" })).not.toBeInTheDocument();
   });
