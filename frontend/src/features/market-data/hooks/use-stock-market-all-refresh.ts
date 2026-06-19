@@ -28,10 +28,23 @@ export function useStockMarketAllRefresh() {
   });
 
   return {
+    errorMessage: mutation.error ? normalizeRefreshError(mutation.error) : "",
     isStarting: mutation.isPending,
     job: mutation.data?.job ?? latestQuery.data?.job ?? null,
     start: () => mutation.mutate(),
   };
+}
+
+/**
+ * 将刷新启动异常压缩成可展示的短错误文案。
+ * @param error mutation 捕获的异常对象。
+ * @returns 可直接展示给用户的错误信息。
+ */
+function normalizeRefreshError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return "unknown stock all refresh error";
 }
 
 /**

@@ -7,6 +7,7 @@ import type { StockInstrument } from "../model/market-data.types";
 
 const mocks = vi.hoisted(() => ({
   allRefresh: vi.fn(),
+  allRefreshError: "",
   allRefreshStatuses: [] as Array<Record<string, unknown> | null>,
   detailRanges: [] as Array<Record<string, unknown>>,
   echartOptions: [] as Array<Record<string, unknown>>,
@@ -234,6 +235,7 @@ vi.mock("../hooks/use-stock-market-refresh-mutation", () => ({
 
 vi.mock("../hooks/use-stock-market-all-refresh", () => ({
   useStockMarketAllRefresh: () => ({
+    errorMessage: mocks.allRefreshError,
     isStarting: false,
     job: mocks.allRefreshStatuses.at(-1) ?? null,
     start: mocks.allRefresh,
@@ -379,6 +381,7 @@ vi.mock("../hooks/use-stock-market-overview-query", () => ({
 describe("StockMarketWorkspace", () => {
   beforeEach(() => {
     mocks.allRefresh.mockClear();
+    mocks.allRefreshError = "";
     mocks.allRefreshStatuses.length = 0;
     mocks.detailRanges.length = 0;
     mocks.echartOptions.length = 0;
@@ -529,6 +532,14 @@ describe("StockMarketWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "刷新全部标的数据" }));
 
     expect(mocks.allRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a visible error when all-instrument refresh cannot start", () => {
+    mocks.allRefreshError = "stock all refresh start failed: 405";
+
+    render(<StockMarketWorkspace />);
+
+    expect(screen.getByRole("status", { name: "全部标的刷新错误" })).toHaveTextContent("全部刷新启动失败");
   });
 
   it("collapses the stock list and removes the inner list scrollbar", async () => {

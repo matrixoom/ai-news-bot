@@ -223,6 +223,7 @@ export function StockMarketWorkspace() {
               isError={instrumentsQuery.isError}
               isPending={instrumentsQuery.isPending}
               allRefreshJob={allRefresh.job}
+              allRefreshError={allRefresh.errorMessage}
               allRefreshStarting={allRefresh.isStarting}
               onCollapseChange={setIsInstrumentListCollapsed}
               onRefreshAll={allRefresh.start}
@@ -606,6 +607,7 @@ function InstrumentListPanel(props: {
   isPending: boolean;
   isError: boolean;
   allRefreshJob: StockMarketAllRefreshJob | null;
+  allRefreshError: string;
   allRefreshStarting: boolean;
   warning: string;
   onSelect: (symbol: string) => void;
@@ -673,7 +675,11 @@ function InstrumentListPanel(props: {
             全部标的
             <span className="ml-3 text-xs font-medium text-muted">{formatNumber(props.total)} 只</span>
           </div>
-          <AllInstrumentRefreshProgress job={props.allRefreshJob} />
+          {props.allRefreshError ? (
+            <AllInstrumentRefreshError message={props.allRefreshError} />
+          ) : (
+            <AllInstrumentRefreshProgress job={props.allRefreshJob} />
+          )}
         </div>
         <button
           aria-expanded="true"
@@ -765,6 +771,24 @@ function InstrumentListPanel(props: {
         <span className="ml-auto"> {formatNumber(props.total)} </span>
       </nav>
     </aside>
+  );
+}
+
+/**
+ * 渲染全部标的刷新启动失败提示。
+ * @param props.message 失败原因，用于悬停定位具体 HTTP 或网络错误。
+ * @returns 列表标题行内的紧凑错误提示。
+ */
+function AllInstrumentRefreshError(props: { message: string }) {
+  return (
+    <div
+      aria-label="全部标的刷新错误"
+      className="hidden max-w-28 shrink-0 truncate text-[10px] font-semibold text-negative sm:block"
+      role="status"
+      title={props.message}
+    >
+      全部刷新启动失败
+    </div>
   );
 }
 
