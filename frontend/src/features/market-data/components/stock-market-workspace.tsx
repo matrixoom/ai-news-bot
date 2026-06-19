@@ -87,6 +87,7 @@ export function StockMarketWorkspace() {
   const [instrumentPageSize, setInstrumentPageSize] = useState(DEFAULT_INSTRUMENT_PAGE_SIZE);
   const instrumentPageSizeRef = useRef(DEFAULT_INSTRUMENT_PAGE_SIZE);
   const [isInstrumentListCollapsed, setIsInstrumentListCollapsed] = useState(false);
+  const [isResearchSummaryCollapsed, setIsResearchSummaryCollapsed] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<StockDetailTab>("overview");
   const [priceAdjustment, setPriceAdjustment] = useState<StockPriceAdjustment>("none");
 
@@ -216,7 +217,11 @@ export function StockMarketWorkspace() {
               {activeDetailTab === "overview" ? (
                 <div
                   aria-labelledby="stock-detail-tab-overview"
-                  className="grid min-h-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_260px]"
+                  className={`grid min-h-0 flex-1 gap-3 p-3 ${
+                    isResearchSummaryCollapsed
+                      ? "lg:grid-cols-[minmax(0,1fr)_44px]"
+                      : "lg:grid-cols-[minmax(0,1fr)_260px]"
+                  }`}
                   id="stock-detail-panel-overview"
                   role="tabpanel"
                 >
@@ -243,6 +248,8 @@ export function StockMarketWorkspace() {
                     bars={detailQuery.data?.daily_bars ?? []}
                     companySummary={detailQuery.data?.profile.summary ?? ""}
                     industry={detailQuery.data?.profile.industry ?? ""}
+                    isCollapsed={isResearchSummaryCollapsed}
+                    onCollapseChange={setIsResearchSummaryCollapsed}
                     syncedAt={detailQuery.data?.sync_state.synced_at ?? ""}
                   />
                 </div>
@@ -280,6 +287,8 @@ function ResearchSummaryPanel(props: {
   bars: StockDailyBar[];
   companySummary: string;
   industry: string;
+  isCollapsed: boolean;
+  onCollapseChange: (collapsed: boolean) => void;
   syncedAt: string;
 }) {
   const latest = props.bars.at(-1);
@@ -292,9 +301,39 @@ function ResearchSummaryPanel(props: {
   const directionTone =
     changeRate === null || changeRate === 0 ? "text-muted" : changeRate > 0 ? "text-positive" : "text-negative";
 
+  if (props.isCollapsed) {
+    return (
+      <aside
+        aria-label="研究摘要"
+        className="flex min-h-0 items-start justify-center border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pt-3"
+      >
+        <button
+          aria-expanded="false"
+          aria-label="展开研究摘要"
+          className="workbench-icon-button h-8 w-8"
+          onClick={() => props.onCollapseChange(false)}
+          type="button"
+        >
+          <ChevronLeftIcon aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside aria-label="研究摘要" className="min-h-0 overflow-y-auto border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
-      <p className="workbench-kicker">研究摘要</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="workbench-kicker">研究摘要</p>
+        <button
+          aria-expanded="true"
+          aria-label="折叠研究摘要"
+          className="workbench-icon-button h-8 w-8 border-transparent"
+          onClick={() => props.onCollapseChange(true)}
+          type="button"
+        >
+          <ChevronRightIcon aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </div>
       <h3 className="mt-2 text-base font-semibold text-ink">{props.industry || "基础行情观察"}</h3>
       <p className="mt-2 text-sm leading-6 text-muted">
         {props.companySummary || "基于当前选择窗口展示价格趋势、成交量与估值指标，供进一步研究核验。"}

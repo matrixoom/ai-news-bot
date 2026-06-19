@@ -7,6 +7,8 @@ from datetime import date
 import logging
 from typing import Any
 
+from src.domain.market_monitoring import build_default_market_registry
+
 from .market_history_store import MarketHistoryStore
 from .stock_market_repository import (
     StockInstrument,
@@ -24,6 +26,7 @@ STOCK_REQUIRED_FINANCIAL_METRICS = {
     "net_profit_yoy",
     "debt_asset_ratio",
 }
+STOCK_OVERVIEW_INDEX_REGISTRY = tuple(build_default_market_registry().values())
 logger = logging.getLogger(__name__)
 
 
@@ -64,12 +67,12 @@ class StockMarketService:
         """构建股票市场摘要，单项缺失时保留其余可用数据。
 
         Returns:
-            包含上证指数、深证成指和市场宽度的稳定前端契约。
+            包含 Push Center 默认宽基指数注册表和市场宽度的稳定前端契约。
         """
 
         indices = [
-            self._build_index_overview("SSE", "上证指数"),
-            self._build_index_overview("SZSE", "深证成指"),
+            self._build_index_overview(index.symbol, index.display_name)
+            for index in STOCK_OVERVIEW_INDEX_REGISTRY
         ]
         try:
             breadth = self._repository.load_market_breadth()

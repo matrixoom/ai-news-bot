@@ -279,7 +279,7 @@ uv run python main.py macro-sync
 
 ### 4.4.3 `GET /api/frontend/modules/market-data/stocks/overview`
 
-用途：返回股票研究工作台顶部的真实市场摘要。指数读取 `.data/market_history.db` 最近两个有效点；市场宽度从股票日线分片聚合最近两个交易日的上涨、下跌和平盘家数。
+用途：返回股票研究工作台顶部的真实市场摘要。指数复用 Push Center 默认宽基注册表，读取 `.data/market_history.db` 最近两个有效点；市场宽度从股票日线分片聚合最近两个交易日的上涨、下跌和平盘家数。
 
 成功：`200`
 
@@ -288,11 +288,65 @@ uv run python main.py macro-sync
   "generated_at": "2026-06-10T15:23:45Z",
   "indices": [
     {
+      "symbol": "CSI300",
+      "display_name": "沪深 300",
+      "close": 3921.5,
+      "change": 21.5,
+      "change_pct": 0.551282,
+      "trade_date": "2026-06-09",
+      "status": "live"
+    },
+    {
+      "symbol": "CSI500",
+      "display_name": "中证 500",
+      "close": 6088.0,
+      "change": -12.0,
+      "change_pct": -0.196721,
+      "trade_date": "2026-06-09",
+      "status": "live"
+    },
+    {
+      "symbol": "CSI1000",
+      "display_name": "中证 1000",
+      "close": 6740.0,
+      "change": 40.0,
+      "change_pct": 0.597015,
+      "trade_date": "2026-06-09",
+      "status": "live"
+    },
+    {
       "symbol": "SSE",
-      "display_name": "上证指数",
+      "display_name": "上证综指",
       "close": 3242.18,
       "change": 42.18,
       "change_pct": 1.318125,
+      "trade_date": "2026-06-09",
+      "status": "live"
+    },
+    {
+      "symbol": "SZSE",
+      "display_name": "深证成指",
+      "close": 10186.45,
+      "change": 86.45,
+      "change_pct": 0.855941,
+      "trade_date": "2026-06-09",
+      "status": "live"
+    },
+    {
+      "symbol": "CHINEXT",
+      "display_name": "创业板指",
+      "close": 2112.6,
+      "change": 12.6,
+      "change_pct": 0.6,
+      "trade_date": "2026-06-09",
+      "status": "live"
+    },
+    {
+      "symbol": "HSTECH",
+      "display_name": "恒生科技指数",
+      "close": 4285.0,
+      "change": -15.0,
+      "change_pct": -0.348837,
       "trade_date": "2026-06-09",
       "status": "live"
     }
@@ -311,6 +365,7 @@ uv run python main.py macro-sync
 兼容和降级：
 
 - 单个指数少于两个有效点时，该指数返回 `status: "unavailable"` 和空数值，其余项目仍返回。
+- `indices` 当前按 Push Center 默认宽基注册表顺序返回：`CSI300`、`CSI500`、`CSI1000`、`SSE`、`SZSE`、`CHINEXT`、`HSTECH`；前端应按数组顺序渲染，不依赖固定两项。
 - 市场宽度无法聚合时仅 `breadth.status` 为 `unavailable`。
 - Service 整体异常时返回 `503 frontend_stock_market_overview_unavailable`。
 

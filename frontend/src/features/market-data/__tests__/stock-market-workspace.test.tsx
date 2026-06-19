@@ -235,6 +235,33 @@ vi.mock("../hooks/use-stock-market-overview-query", () => ({
       generated_at: "2026-06-10T10:32:00Z",
       indices: [
         {
+          symbol: "CSI300",
+          display_name: "沪深 300",
+          close: 3921.5,
+          change: 21.5,
+          change_pct: 0.55,
+          trade_date: "2026-06-09",
+          status: "live",
+        },
+        {
+          symbol: "CSI500",
+          display_name: "中证 500",
+          close: 6088,
+          change: -12,
+          change_pct: -0.2,
+          trade_date: "2026-06-09",
+          status: "live",
+        },
+        {
+          symbol: "CSI1000",
+          display_name: "中证 1000",
+          close: 6740,
+          change: 40,
+          change_pct: 0.6,
+          trade_date: "2026-06-09",
+          status: "live",
+        },
+        {
           symbol: "SSE",
           display_name: "上证指数",
           close: 3242.18,
@@ -249,6 +276,24 @@ vi.mock("../hooks/use-stock-market-overview-query", () => ({
           close: 10186.45,
           change: -18.2,
           change_pct: -0.18,
+          trade_date: "2026-06-09",
+          status: "live",
+        },
+        {
+          symbol: "CHINEXT",
+          display_name: "创业板指",
+          close: 2112.6,
+          change: 12.6,
+          change_pct: 0.6,
+          trade_date: "2026-06-09",
+          status: "live",
+        },
+        {
+          symbol: "HSTECH",
+          display_name: "恒生科技指数",
+          close: 4285,
+          change: -15,
+          change_pct: -0.35,
           trade_date: "2026-06-09",
           status: "live",
         },
@@ -279,7 +324,16 @@ describe("StockMarketWorkspace", () => {
     render(<StockMarketWorkspace />);
 
     expect(screen.getByRole("region", { name: "市场概览" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "市场概览" })).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("region", { name: "市场概览" })).toHaveStyle({
+      gridTemplateColumns: "repeat(8, minmax(8rem, 1fr))",
+    });
+    expect(screen.getByText("沪深 300")).toBeInTheDocument();
+    expect(screen.getByText("中证 500")).toBeInTheDocument();
+    expect(screen.getByText("中证 1000")).toBeInTheDocument();
     expect(screen.getByText("上证指数")).toBeInTheDocument();
+    expect(screen.getByText("创业板指")).toBeInTheDocument();
+    expect(screen.getByText("恒生科技指数")).toBeInTheDocument();
     expect(screen.getByText("市场宽度")).toBeInTheDocument();
     expect(screen.getByText("↑ 3421")).toBeInTheDocument();
     expect(screen.getByText("↓ 1428")).toBeInTheDocument();
@@ -332,6 +386,26 @@ describe("StockMarketWorkspace", () => {
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "展开股票列表" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("collapses the research summary to the right so the kline canvas can expand", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    const overviewPanel = screen.getByRole("tabpanel", { name: "市场行情" });
+    expect(overviewPanel).toHaveClass("lg:grid-cols-[minmax(0,1fr)_260px]");
+    expect(screen.getByRole("complementary", { name: "研究摘要" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "折叠研究摘要" }));
+
+    expect(overviewPanel).toHaveClass("lg:grid-cols-[minmax(0,1fr)_44px]");
+    expect(screen.queryByText("最新收盘")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开研究摘要" })).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(screen.getByRole("button", { name: "展开研究摘要" }));
+
+    expect(overviewPanel).toHaveClass("lg:grid-cols-[minmax(0,1fr)_260px]");
+    expect(screen.getByText("最新收盘")).toBeInTheDocument();
   });
 
   it("shows custom date controls without duplicate refresh buttons", async () => {

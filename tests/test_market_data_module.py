@@ -1685,8 +1685,13 @@ class StockMarketOverviewTests(unittest.TestCase):
     def test_service_combines_index_changes_and_breadth(self) -> None:
         """校验 Service 输出最近收盘、涨跌额、涨跌幅和市场宽度。"""
         for symbol, display_name, previous, latest in (
-            ("SSE", "上证指数", 3200.0, 3242.18),
+            ("CSI300", "沪深 300", 3900.0, 3921.5),
+            ("CSI500", "中证 500", 6100.0, 6088.0),
+            ("CSI1000", "中证 1000", 6700.0, 6740.0),
+            ("SSE", "上证综指", 3200.0, 3242.18),
             ("SZSE", "深证成指", 10100.0, 10186.45),
+            ("CHINEXT", "创业板指", 2100.0, 2112.6),
+            ("HSTECH", "恒生科技指数", 4300.0, 4285.0),
         ):
             self.history_store.upsert_symbol_history(
                 symbol=symbol,
@@ -1719,9 +1724,13 @@ class StockMarketOverviewTests(unittest.TestCase):
 
         payload = service.build_overview_payload()
 
-        self.assertEqual([item["symbol"] for item in payload["indices"]], ["SSE", "SZSE"])
-        self.assertEqual(payload["indices"][0]["change"], 42.18)
-        self.assertAlmostEqual(payload["indices"][0]["change_pct"], 1.318125)
+        self.assertEqual(
+            [item["symbol"] for item in payload["indices"]],
+            ["CSI300", "CSI500", "CSI1000", "SSE", "SZSE", "CHINEXT", "HSTECH"],
+        )
+        index_by_symbol = {item["symbol"]: item for item in payload["indices"]}
+        self.assertEqual(index_by_symbol["SSE"]["change"], 42.18)
+        self.assertAlmostEqual(index_by_symbol["SSE"]["change_pct"], 1.318125)
         self.assertEqual(payload["breadth"]["advanced"], 3421)
 
     def test_service_degrades_missing_index_and_breadth_exception_independently(self) -> None:
@@ -1748,8 +1757,9 @@ class StockMarketOverviewTests(unittest.TestCase):
 
         payload = service.build_overview_payload()
 
-        self.assertEqual(payload["indices"][0]["status"], "live")
-        self.assertEqual(payload["indices"][1]["status"], "unavailable")
+        index_by_symbol = {item["symbol"]: item for item in payload["indices"]}
+        self.assertEqual(index_by_symbol["SSE"]["status"], "live")
+        self.assertEqual(index_by_symbol["SZSE"]["status"], "unavailable")
         self.assertEqual(payload["breadth"]["status"], "unavailable")
 
 
