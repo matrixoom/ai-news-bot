@@ -20,6 +20,7 @@ from .stock_market_sync_service import StockMarketSyncService, _compact_error_me
 
 STOCK_MARKET_RANGES = {"1m", "3m", "6m", "1y", "3y", "5y", "custom"}
 STOCK_FINANCIAL_REPORT_TYPES = {"quarterly", "yearly"}
+STOCK_OVERVIEW_INDEX_HISTORY_DAYS = 1830
 STOCK_REQUIRED_FINANCIAL_METRICS = {
     "roe",
     "revenue_yoy",
@@ -100,6 +101,15 @@ class StockMarketService:
         except Exception as error:
             logger.warning("stock index overview unavailable for %s: %s", symbol, error)
             points = []
+        try:
+            history_points = self._market_history_store.load_points(
+                symbol=symbol,
+                end_date=date.today(),
+                window_days=STOCK_OVERVIEW_INDEX_HISTORY_DAYS,
+            )
+        except Exception as error:
+            logger.warning("stock index kline history unavailable for %s: %s", symbol, error)
+            history_points = []
         if len(points) < 2:
             return {
                 "symbol": symbol,
@@ -109,6 +119,7 @@ class StockMarketService:
                 "change_pct": None,
                 "trade_date": None,
                 "status": "unavailable",
+                "daily_bars": self._index_daily_bars(history_points),
             }
         previous, latest = points[-2], points[-1]
         change = latest.close_price - previous.close_price
@@ -121,7 +132,46 @@ class StockMarketService:
             "change_pct": change_pct,
             "trade_date": latest.trade_date.isoformat(),
             "status": "live",
+            "daily_bars": self._index_daily_bars(history_points),
         }
+
+    def _index_daily_bars(self, points: list[Any]) -> list[dict[str, Any]]:
+        """将 Push Center 收盘历史转换为前端 K 线图可复用的日线结构。
+
+        Args:
+            points: MarketHistoryStore 读取的宽基指数收盘历史。
+
+        Returns:
+            与股票 K 线组件兼容的日线数组；Push Center 不保存 OHLC 时，开盘价使用前一交易日收盘价。
+        """
+
+        closes = [float(point.close_price) for point in points]
+        bars: list[dict[str, Any]] = []
+        previous_close: float | None = None
+        for index, point in enumerate(points):
+            close_price = float(point.close_price)
+            open_price = previous_close if previous_close is not None else close_price
+            bars.append(
+                {
+                    "date": point.trade_date.isoformat(),
+                    "open": open_price,
+                    "close": close_price,
+                    "high": max(open_price, close_price),
+                    "low": min(open_price, close_price),
+                    "volume": float(point.volume) if isinstance(point.volume, (int, float)) else 0.0,
+                    "ma5": _moving_average(closes, index, 5),
+                    "ma10": _moving_average(closes, index, 10),
+                    "ma20": _moving_average(closes, index, 20),
+                    "ma60": _moving_average(closes, index, 60),
+                    "ma120": _moving_average(closes, index, 120),
+                    "pe_ttm": None,
+                    "pb_mrq": None,
+                    "dividend_yield_ttm": None,
+                    "total_market_cap": None,
+                }
+            )
+            previous_close = close_price
+        return bars
 
     def sync_universe(self) -> dict[str, Any]:
         """手动同步 A 股和 ETF 标的列表。"""
@@ -515,3 +565,21 @@ def _is_leap_year(year: int) -> bool:
     """判断闰年。"""
 
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+
+def _moving_average(values: list[float], index: int, window: int) -> float | None:
+    """计算指定窗口的简单移动均线。
+
+    Args:
+        values: 按日期升序排列的收盘价。
+        index: 当前点位下标。
+        window: 均线窗口大小。
+
+    Returns:
+        窗口不足时返回 None，否则返回四位小数均线。
+    """
+
+    if index + 1 < window:
+        return None
+    window_values = values[index - window + 1:index + 1]
+    return round(sum(window_values) / window, 4)

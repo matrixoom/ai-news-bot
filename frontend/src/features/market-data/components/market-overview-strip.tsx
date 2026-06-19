@@ -5,12 +5,20 @@ type MarketOverviewStripProps = {
   data?: StockMarketOverviewPayload;
   pending: boolean;
   error: boolean;
+  selectedIndexSymbol?: string | null;
+  onIndexSelect?: (symbol: string) => void;
 };
 
 const DEFAULT_OVERVIEW_INDEX_LABELS = ["沪深 300", "中证 500", "中证 1000", "上证综指", "深证成指", "创业板指", "恒生科技指数"];
 
 /** 渲染指数与市场宽度摘要带，状态同时使用文字和方向图标表达。 */
-export function MarketOverviewStrip({ data, pending, error }: MarketOverviewStripProps) {
+export function MarketOverviewStrip({
+  data,
+  error,
+  onIndexSelect,
+  pending,
+  selectedIndexSymbol,
+}: MarketOverviewStripProps) {
   const indices =
     data?.indices && data.indices.length > 0
       ? data.indices
@@ -36,7 +44,9 @@ export function MarketOverviewStrip({ data, pending, error }: MarketOverviewStri
           index={index}
           key={index.symbol}
           label={index.display_name}
+          onSelect={onIndexSelect}
           pending={pending}
+          selected={selectedIndexSymbol === index.symbol}
         />
       ))}
       <div className="min-w-0 border-l border-line px-3 py-2">
@@ -70,7 +80,9 @@ export function MarketOverviewStrip({ data, pending, error }: MarketOverviewStri
 function IndexMetric(props: {
   index?: StockMarketOverviewPayload["indices"][number];
   label: string;
+  selected: boolean;
   pending: boolean;
+  onSelect?: (symbol: string) => void;
 }) {
   const index = props.index;
   const change = index?.change ?? null;
@@ -79,7 +91,15 @@ function IndexMetric(props: {
   const tone = direction === "up" ? "text-positive" : direction === "down" ? "text-negative" : "text-muted";
 
   return (
-    <div className="min-w-0 border-l border-line px-3 py-2 first:border-l-0">
+    <button
+      aria-expanded={props.selected}
+      aria-label={`展开${props.label}宽基指数K线`}
+      className={`min-w-0 border-l border-line px-3 py-2 text-left first:border-l-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        props.selected ? "bg-accent-soft/70" : "hover:bg-accent-soft/45"
+      }`}
+      onClick={() => index?.symbol && props.onSelect?.(index.symbol)}
+      type="button"
+    >
       <p className="truncate text-xs font-medium text-muted" title={props.label}>{props.label}</p>
       {props.pending ? (
         <p className="mt-1 text-sm text-muted">加载中</p>
@@ -97,7 +117,7 @@ function IndexMetric(props: {
           <p className="mt-0.5 truncate text-[11px] text-muted">{index.trade_date ?? "--"} 收盘</p>
         </>
       )}
-    </div>
+    </button>
   );
 }
 

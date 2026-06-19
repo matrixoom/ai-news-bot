@@ -116,6 +116,7 @@ export type StockMarketOverviewPayload = {
     change_pct: number | null;
     trade_date: string | null;
     status: string;
+    daily_bars?: StockDailyBar[];
   }>;
   breadth: {
     trade_date: string | null;

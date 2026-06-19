@@ -17,6 +17,7 @@ import type {
   StockFinancialReportType,
   StockFinancialSeries,
   StockInstrument,
+  StockMarketOverviewPayload,
 } from "../model/market-data.types";
 import { formatLocalDateTime } from "../../../shared/utils/format-local-date-time";
 import { buildCartesianTheme, useWorkbenchChartTheme } from "../../../shared/charts/use-workbench-chart-theme";
@@ -90,6 +91,8 @@ export function StockMarketWorkspace() {
   const [isResearchSummaryCollapsed, setIsResearchSummaryCollapsed] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<StockDetailTab>("overview");
   const [priceAdjustment, setPriceAdjustment] = useState<StockPriceAdjustment>("none");
+  const [selectedIndexSymbol, setSelectedIndexSymbol] = useState<string | null>(null);
+  const [indexRange, setIndexRange] = useState<MarketDataRangeSelection>({ type: "1m" });
 
   const instrumentsQuery = useStockMarketInstrumentsQuery({
     query: searchText,
@@ -105,6 +108,10 @@ export function StockMarketWorkspace() {
   const instruments = instrumentsQuery.data?.items ?? [];
   const instrumentTotal = instrumentsQuery.data?.total ?? 0;
   const instrumentPageCount = Math.max(1, Math.ceil(instrumentTotal / instrumentPageSize));
+  const selectedOverviewIndex = useMemo(
+    () => overviewQuery.data?.indices.find((index) => index.symbol === selectedIndexSymbol) ?? null,
+    [overviewQuery.data?.indices, selectedIndexSymbol],
+  );
 
   useEffect(() => {
     if (instrumentsQuery.isPending) return;
@@ -163,121 +170,263 @@ export function StockMarketWorkspace() {
   const priceChange = latestBar && previousBar ? latestBar.close - previousBar.close : 0;
   const priceChangeRate = latestBar && previousBar && previousBar.close !== 0 ? (priceChange / previousBar.close) * 100 : 0;
 
+  /** 切换顶部宽基指数展开图，重复点击当前指数时收起。 */
+  function handleOverviewIndexSelect(symbol: string) {
+    setSelectedIndexSymbol((current) => (current === symbol ? null : symbol));
+  }
+
   return (
     <div className="-m-4 flex min-h-[calc(100vh-4.5rem)] flex-col overflow-hidden bg-canvas text-ink md:-m-6">
       <MarketOverviewStrip
         data={overviewQuery.data}
         error={overviewQuery.isError}
+        onIndexSelect={handleOverviewIndexSelect}
         pending={overviewQuery.isPending}
+        selectedIndexSymbol={selectedIndexSymbol}
       />
-      <FilterBand
-        instrumentType={instrumentType}
-        listingStatus={listingStatus}
-        marketBoard={marketBoard}
-        onInstrumentTypeChange={handleInstrumentTypeChange}
-        onListingStatusChange={handleListingStatusChange}
-        onMarketBoardChange={handleMarketBoardChange}
-        onSearchTextChange={handleSearchTextChange}
-        searchText={searchText}
-      />
-
-      <div
-        className={`grid min-h-[42rem] flex-1 grid-cols-1 items-stretch gap-3 overflow-hidden p-3 ${
-          isInstrumentListCollapsed
-            ? "xl:grid-cols-[48px_minmax(0,1fr)]"
-            : "xl:grid-cols-[360px_minmax(0,1fr)]"
-        }`}
-      >
-        <InstrumentListPanel
-          currentPage={instrumentPage}
-          instruments={instruments}
-          isCollapsed={isInstrumentListCollapsed}
-          isError={instrumentsQuery.isError}
-          isPending={instrumentsQuery.isPending}
-          onCollapseChange={setIsInstrumentListCollapsed}
-          onPageChange={setInstrumentPage}
-          onPageSizeChange={handleInstrumentPageSizeChange}
-          onSelect={setSelectedSymbol}
-          pageSize={instrumentPageSize}
-          selectedSymbol={selectedSymbol}
-          total={instrumentTotal}
-          warning={instrumentsQuery.data?.warning_message ?? ""}
+      {selectedOverviewIndex ? (
+        <IndexKlineDisclosure
+          index={selectedOverviewIndex}
+          onRangeChange={setIndexRange}
+          range={indexRange}
         />
+      ) : (
+        <>
+          <FilterBand
+            instrumentType={instrumentType}
+            listingStatus={listingStatus}
+            marketBoard={marketBoard}
+            onInstrumentTypeChange={handleInstrumentTypeChange}
+            onListingStatusChange={handleListingStatusChange}
+            onMarketBoardChange={handleMarketBoardChange}
+            onSearchTextChange={handleSearchTextChange}
+            searchText={searchText}
+          />
 
-        <section
-          className="workbench-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
-          data-testid="stock-detail-panel"
-        >
-          {selectedInstrument ? (
-            <>
-              <StockSummaryHeader
-                instrument={selectedInstrument}
-              />
-              <StockDetailTabs activeTab={activeDetailTab} onTabChange={setActiveDetailTab} />
-              {activeDetailTab === "overview" ? (
-                <div
-                  aria-labelledby="stock-detail-tab-overview"
-                  className={`grid min-h-0 flex-1 gap-3 p-3 ${
-                    isResearchSummaryCollapsed
-                      ? "lg:grid-cols-[minmax(0,1fr)_44px]"
-                      : "lg:grid-cols-[minmax(0,1fr)_260px]"
-                  }`}
-                  id="stock-detail-panel-overview"
-                  role="tabpanel"
-                >
-                  <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    <RangeToolbar
-                      endDate={range.endDate}
-                      onRangeChange={setRange}
-                      onPriceAdjustmentChange={setPriceAdjustment}
-                      onRefresh={() => refreshMutation.mutate()}
-                      priceAdjustment={priceAdjustment}
-                      range={range}
-                      refreshPending={refreshMutation.isPending}
-                      startDate={range.startDate}
-                    />
-                    <KlinePanel
-                      bars={detailQuery.data?.daily_bars ?? []}
-                      isError={detailQuery.isError}
-                      isPending={detailQuery.isPending}
-                      symbol={selectedInstrument.symbol}
-                      warning={detailQuery.data?.sync_state.warning_message ?? ""}
-                    />
-                  </main>
-                  <ResearchSummaryPanel
-                    bars={detailQuery.data?.daily_bars ?? []}
-                    companySummary={detailQuery.data?.profile.summary ?? ""}
-                    industry={detailQuery.data?.profile.industry ?? ""}
-                    isCollapsed={isResearchSummaryCollapsed}
-                    onCollapseChange={setIsResearchSummaryCollapsed}
-                    syncedAt={detailQuery.data?.sync_state.synced_at ?? ""}
+          <div
+            className={`grid min-h-[42rem] flex-1 grid-cols-1 items-stretch gap-3 overflow-hidden p-3 ${
+              isInstrumentListCollapsed
+                ? "xl:grid-cols-[48px_minmax(0,1fr)]"
+                : "xl:grid-cols-[360px_minmax(0,1fr)]"
+            }`}
+          >
+            <InstrumentListPanel
+              currentPage={instrumentPage}
+              instruments={instruments}
+              isCollapsed={isInstrumentListCollapsed}
+              isError={instrumentsQuery.isError}
+              isPending={instrumentsQuery.isPending}
+              onCollapseChange={setIsInstrumentListCollapsed}
+              onPageChange={setInstrumentPage}
+              onPageSizeChange={handleInstrumentPageSizeChange}
+              onSelect={setSelectedSymbol}
+              pageSize={instrumentPageSize}
+              selectedSymbol={selectedSymbol}
+              total={instrumentTotal}
+              warning={instrumentsQuery.data?.warning_message ?? ""}
+            />
+
+            <section
+              className="workbench-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+              data-testid="stock-detail-panel"
+            >
+              {selectedInstrument ? (
+                <>
+                  <StockSummaryHeader
+                    instrument={selectedInstrument}
                   />
-                </div>
+                  <StockDetailTabs activeTab={activeDetailTab} onTabChange={setActiveDetailTab} />
+                  {activeDetailTab === "overview" ? (
+                    <div
+                      aria-labelledby="stock-detail-tab-overview"
+                      className={`grid min-h-0 flex-1 gap-3 p-3 ${
+                        isResearchSummaryCollapsed
+                          ? "lg:grid-cols-[minmax(0,1fr)_44px]"
+                          : "lg:grid-cols-[minmax(0,1fr)_260px]"
+                      }`}
+                      id="stock-detail-panel-overview"
+                      role="tabpanel"
+                    >
+                      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        <RangeToolbar
+                          endDate={range.endDate}
+                          onRangeChange={setRange}
+                          onPriceAdjustmentChange={setPriceAdjustment}
+                          onRefresh={() => refreshMutation.mutate()}
+                          priceAdjustment={priceAdjustment}
+                          range={range}
+                          refreshPending={refreshMutation.isPending}
+                          startDate={range.startDate}
+                        />
+                        <KlinePanel
+                          bars={detailQuery.data?.daily_bars ?? []}
+                          isError={detailQuery.isError}
+                          isPending={detailQuery.isPending}
+                          symbol={selectedInstrument.symbol}
+                          warning={detailQuery.data?.sync_state.warning_message ?? ""}
+                        />
+                      </main>
+                      <ResearchSummaryPanel
+                        bars={detailQuery.data?.daily_bars ?? []}
+                        companySummary={detailQuery.data?.profile.summary ?? ""}
+                        industry={detailQuery.data?.profile.industry ?? ""}
+                        isCollapsed={isResearchSummaryCollapsed}
+                        onCollapseChange={setIsResearchSummaryCollapsed}
+                        syncedAt={detailQuery.data?.sync_state.synced_at ?? ""}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      aria-labelledby="stock-detail-tab-financial"
+                      className="min-h-0 flex-1 overflow-hidden p-3"
+                      id="stock-detail-panel-financial"
+                      role="tabpanel"
+                    >
+                      <FinancialCards
+                        activeMetric={activeFinancialMetric}
+                        financialRange={financialRange}
+                        isPending={detailQuery.isPending}
+                        onFinancialRangeChange={setFinancialRange}
+                        onMetricChange={setActiveFinancialMetric}
+                        onReportTypeChange={setFinancialReportType}
+                        reportType={financialReportType}
+                        series={detailQuery.data?.financials.series ?? []}
+                      />
+                    </div>
+                  )}
+                </>
               ) : (
-                <div
-                  aria-labelledby="stock-detail-tab-financial"
-                  className="min-h-0 flex-1 overflow-hidden p-3"
-                  id="stock-detail-panel-financial"
-                  role="tabpanel"
-                >
-                  <FinancialCards
-                    activeMetric={activeFinancialMetric}
-                    financialRange={financialRange}
-                    isPending={detailQuery.isPending}
-                    onFinancialRangeChange={setFinancialRange}
-                    onMetricChange={setActiveFinancialMetric}
-                    onReportTypeChange={setFinancialReportType}
-                    reportType={financialReportType}
-                    series={detailQuery.data?.financials.series ?? []}
-                  />
-                </div>
+                <EmptySurface text={instrumentsQuery.data?.warning_message || "请刷新基础标的或选择一只股票。"} />
               )}
-            </>
-          ) : (
-            <EmptySurface text={instrumentsQuery.data?.warning_message || "请刷新基础标的或选择一只股票。"} />
-          )}
-        </section>
+            </section>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 渲染顶部宽基指数的下发展开 K 线面板。 */
+function IndexKlineDisclosure(props: {
+  index: StockMarketOverviewPayload["indices"][number];
+  range: MarketDataRangeSelection;
+  onRangeChange: (range: MarketDataRangeSelection) => void;
+}) {
+  const bars = props.index.daily_bars ?? [];
+  const visibleBars = useMemo(() => filterDailyBarsByRange(bars, props.range), [bars, props.range]);
+  const latest = bars.at(-1);
+  const rangeChangeRate = calculateRangeChangeRate(visibleBars);
+  const rangeChangeTone =
+    rangeChangeRate === null || rangeChangeRate === 0
+      ? "text-muted"
+      : rangeChangeRate > 0
+        ? "text-positive"
+        : "text-negative";
+
+  return (
+    <div className="min-h-[42rem] flex-1 overflow-hidden p-3">
+      <section
+        aria-label={`${props.index.display_name} 宽基指数K线`}
+        className="workbench-panel flex h-full min-h-0 flex-col overflow-hidden p-4"
+      >
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-ink">{props.index.display_name} K线</h2>
+            <p className="mt-1 text-xs font-medium text-muted">
+              Push Center 历史 · {latest?.date ?? props.index.trade_date ?? "--"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3 text-xs font-semibold">
+            <span
+              aria-label={`${props.index.display_name} 当前时间跨度涨幅`}
+              className={rangeChangeTone}
+            >
+              区间涨幅 {rangeChangeRate === null ? "--" : `${formatSigned(rangeChangeRate, 2)}%`}
+            </span>
+            <span className="text-muted">{props.index.symbol}</span>
+          </div>
+        </div>
+        <IndexRangeToolbar
+          bars={bars}
+          onRangeChange={props.onRangeChange}
+          range={props.range}
+        />
+        <KlinePanel
+          bars={visibleBars}
+          chartMode="index"
+          isError={false}
+          isPending={false}
+          symbol={props.index.symbol}
+          warning="当前宽基指数暂无可展示历史。"
+        />
+      </section>
+    </div>
+  );
+}
+
+/** 渲染宽基指数 K 线的时间范围控件，选项与股票行情保持一致。 */
+function IndexRangeToolbar(props: {
+  bars: StockDailyBar[];
+  range: MarketDataRangeSelection;
+  onRangeChange: (range: MarketDataRangeSelection) => void;
+}) {
+  const firstDate = props.bars[0]?.date ?? "";
+  const latestDate = props.bars.at(-1)?.date ?? "";
+  const [startDate, setStartDate] = useState(props.range.startDate ?? firstDate);
+  const [endDate, setEndDate] = useState(props.range.endDate ?? latestDate);
+
+  return (
+    <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
+      <div
+        aria-label="宽基指数时间范围"
+        className="inline-flex h-8 overflow-hidden rounded-control border border-line bg-surface"
+      >
+        {STOCK_RANGE_OPTIONS.map((option) => (
+          <button
+            aria-pressed={props.range.type === option.value}
+            className={`border-r border-line px-3 text-xs font-semibold last:border-r-0 ${
+              props.range.type === option.value ? "bg-accent text-white" : "text-muted hover:bg-accent-soft hover:text-accent"
+            }`}
+            key={option.value}
+            onClick={() =>
+              props.onRangeChange(
+                option.value === "custom"
+                  ? { type: "custom", startDate: startDate || firstDate, endDate: endDate || latestDate }
+                  : { type: option.value },
+              )
+            }
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
+      {props.range.type === "custom" ? (
+        <label className="inline-flex h-10 items-center gap-2 rounded-control border border-line bg-surface px-3 text-sm font-semibold text-muted">
+          <input
+            aria-label="宽基指数起始日期"
+            className="w-28 bg-transparent text-ink outline-none"
+            onChange={(event) => {
+              setStartDate(event.target.value);
+              props.onRangeChange({ type: "custom", startDate: event.target.value, endDate });
+            }}
+            type="date"
+            value={startDate}
+          />
+          <span>至</span>
+          <input
+            aria-label="宽基指数结束日期"
+            className="w-28 bg-transparent text-ink outline-none"
+            onChange={(event) => {
+              setEndDate(event.target.value);
+              props.onRangeChange({ type: "custom", startDate, endDate: event.target.value });
+            }}
+            type="date"
+            value={endDate}
+          />
+          <CalendarDaysIcon aria-hidden="true" className="h-4 w-4 text-muted" />
+        </label>
+      ) : null}
     </div>
   );
 }
@@ -780,23 +929,71 @@ function KlinePanel(props: {
   isPending: boolean;
   isError: boolean;
   warning: string;
+  chartMode?: "stock" | "index";
 }) {
   if (props.isPending) return <EmptySurface text="行情数据加载中..." />;
   if (props.isError) return <EmptySurface danger text="行情数据加载失败。" />;
   if (props.bars.length === 0) return <EmptySurface text={props.warning || "当前时间范围暂无行情数据。"} />;
   return (
     <section className="flex min-h-0 flex-1 border-b border-line bg-surface pb-2">
-      <KlineChart bars={props.bars} symbol={props.symbol} />
+      <KlineChart bars={props.bars} mode={props.chartMode ?? "stock"} symbol={props.symbol} />
     </section>
   );
 }
 
-function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
+function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; symbol: string }) {
   const chartRef = useRef<HTMLDivElement | null>(null);
   const workbenchTheme = useWorkbenchChartTheme();
   const chartTheme = useMemo(() => buildCartesianTheme(workbenchTheme), [workbenchTheme]);
   const option = useMemo((): echarts.EChartsOption => {
     const labels = props.bars.map((bar) => bar.date);
+    const isIndexChart = props.mode === "index";
+    const legendData = isIndexChart
+      ? ["MA5", "MA10", "MA20", "MA60", "MA120"]
+      : [
+          "K线",
+          "MA5",
+          "MA10",
+          "MA20",
+          "MA60",
+          "MA120",
+          "PE(TTM)",
+          "PB(MRQ)",
+          "股息率(TTM)",
+          "总市值",
+        ];
+    const valuationSeries = isIndexChart
+      ? []
+      : [
+          valuationLineSeries(
+            "PE(TTM)",
+            props.bars.map((bar) => bar.pe_ttm),
+            "#f97316",
+            2,
+            "倍",
+          ),
+          valuationLineSeries(
+            "PB(MRQ)",
+            props.bars.map((bar) => bar.pb_mrq),
+            "#ec4899",
+            3,
+            "倍",
+          ),
+          valuationLineSeries(
+            "股息率(TTM)",
+            props.bars.map((bar) => bar.dividend_yield_ttm),
+            "#14b8a6",
+            4,
+            "%",
+          ),
+          valuationLineSeries(
+            "总市值",
+            props.bars.map((bar) => bar.total_market_cap),
+            "#6366f1",
+            5,
+            "亿元",
+          ),
+        ];
     return {
       animation: false,
       tooltip: {
@@ -816,24 +1013,15 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         itemWidth: 16,
         itemHeight: 8,
         textStyle: chartTheme.legendText,
-        data: [
-          "K线",
-          "MA5",
-          "MA10",
-          "MA20",
-          "MA60",
-          "MA120",
-          "PE(TTM)",
-          "PB(MRQ)",
-          "股息率(TTM)",
-          "总市值",
-        ],
-        selected: {
-          "PE(TTM)": false,
-          "PB(MRQ)": false,
-          "股息率(TTM)": false,
-          总市值: false,
-        },
+        data: legendData,
+        selected: isIndexChart
+          ? {}
+          : {
+              "PE(TTM)": false,
+              "PB(MRQ)": false,
+              "股息率(TTM)": false,
+              总市值: false,
+            },
       },
       grid: [
         { left: 54, right: 112, top: 38, height: "56%" },
@@ -894,34 +1082,7 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         lineSeries("MA20", props.bars.map((bar) => bar.ma20), "#a78bfa"),
         lineSeries("MA60", props.bars.map((bar) => bar.ma60), "#34d399"),
         lineSeries("MA120", props.bars.map((bar) => bar.ma120), "#93c5fd"),
-        valuationLineSeries(
-          "PE(TTM)",
-          props.bars.map((bar) => bar.pe_ttm),
-          "#f97316",
-          2,
-          "倍",
-        ),
-        valuationLineSeries(
-          "PB(MRQ)",
-          props.bars.map((bar) => bar.pb_mrq),
-          "#ec4899",
-          3,
-          "倍",
-        ),
-        valuationLineSeries(
-          "股息率(TTM)",
-          props.bars.map((bar) => bar.dividend_yield_ttm),
-          "#14b8a6",
-          4,
-          "%",
-        ),
-        valuationLineSeries(
-          "总市值",
-          props.bars.map((bar) => bar.total_market_cap),
-          "#6366f1",
-          5,
-          "亿元",
-        ),
+        ...valuationSeries,
         {
           name: "成交量",
           type: "bar",
@@ -937,7 +1098,7 @@ function KlineChart(props: { bars: StockDailyBar[]; symbol: string }) {
         },
       ],
     };
-  }, [props.bars, chartTheme, workbenchTheme]);
+  }, [props.bars, props.mode, chartTheme, workbenchTheme]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -1123,6 +1284,45 @@ function FinancialCards(props: {
 }
 
 /**
+ * 按行情时间范围裁剪日线序列，预设范围使用序列最新交易日作为终点。
+ * @param bars 原始日线序列。
+ * @param range 行情时间范围。
+ * @returns 裁剪后的日线序列。
+ */
+function filterDailyBarsByRange(
+  bars: StockDailyBar[],
+  range: MarketDataRangeSelection,
+): StockDailyBar[] {
+  if (range.type === "custom") {
+    return bars.filter(
+      (bar) =>
+        (!range.startDate || bar.date >= range.startDate) &&
+        (!range.endDate || bar.date <= range.endDate),
+    );
+  }
+
+  const selectedOption = STOCK_RANGE_OPTIONS.find((option) => option.value === range.type);
+  const latestDate = bars.at(-1)?.date;
+  if (!selectedOption?.months || !latestDate) return bars;
+
+  const cutoffDate = shiftIsoDateByMonths(latestDate, -selectedOption.months);
+  if (!cutoffDate) return bars;
+  return bars.filter((bar) => bar.date >= cutoffDate);
+}
+
+/**
+ * 计算当前可见日线首尾收盘价的区间涨幅。
+ * @param bars 已按时间范围裁剪后的日线序列。
+ * @returns 区间涨幅百分比；数据不足或起点为 0 时返回 null。
+ */
+function calculateRangeChangeRate(bars: StockDailyBar[]): number | null {
+  const firstBar = bars[0];
+  const latestBar = bars.at(-1);
+  if (!firstBar || !latestBar || firstBar.close === 0) return null;
+  return ((latestBar.close - firstBar.close) / Math.abs(firstBar.close)) * 100;
+}
+
+/**
  * 按所选时间范围裁剪单项财务序列，预设范围使用该序列最新报告期作为终点。
  * @param series 原始财务指标序列。
  * @param range 财务页独立时间范围，预设范围按月计算，自定义范围按日期闭区间计算。
@@ -1169,6 +1369,28 @@ function periodMonthIndex(period: string): number | null {
   const month = Number(period.slice(5, 7));
   if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
   return year * 12 + month - 1;
+}
+
+/**
+ * 将 ISO 日期按月份偏移，月底日期会收敛到目标月份最后一天。
+ * @param isoDate ISO 日期字符串。
+ * @param months 月份偏移量。
+ * @returns 偏移后的 ISO 日期；输入无效时返回 null。
+ */
+function shiftIsoDateByMonths(isoDate: string, months: number): string | null {
+  const year = Number(isoDate.slice(0, 4));
+  const month = Number(isoDate.slice(5, 7));
+  const day = Number(isoDate.slice(8, 10));
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  const monthIndex = month - 1 + months;
+  const targetYear = year + Math.floor(monthIndex / 12);
+  const targetMonthIndex = ((monthIndex % 12) + 12) % 12;
+  const targetMonth = targetMonthIndex + 1;
+  const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+  const targetDay = Math.min(day, lastDay);
+  return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
 }
 
 function FinancialMetricCard(props: { series: StockFinancialSeries }) {

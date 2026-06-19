@@ -280,6 +280,7 @@ uv run python main.py macro-sync
 ### 4.4.3 `GET /api/frontend/modules/market-data/stocks/overview`
 
 用途：返回股票研究工作台顶部的真实市场摘要。指数复用 Push Center 默认宽基注册表，读取 `.data/market_history.db` 最近两个有效点；市场宽度从股票日线分片聚合最近两个交易日的上涨、下跌和平盘家数。
+每个指数同时返回 `daily_bars`，供前端点击概览项后下发展示宽基 K 线。该字段复用 Push Center 宽基历史近 5 年收盘与成交量；因历史库不保存完整 OHLC，开盘价使用前一交易日收盘价派生，最高/最低价取开收盘边界。
 
 成功：`200`
 
@@ -294,7 +295,43 @@ uv run python main.py macro-sync
       "change": 21.5,
       "change_pct": 0.551282,
       "trade_date": "2026-06-09",
-      "status": "live"
+      "status": "live",
+      "daily_bars": [
+        {
+          "date": "2026-06-08",
+          "open": 3900.0,
+          "close": 3900.0,
+          "high": 3900.0,
+          "low": 3900.0,
+          "volume": 1000.0,
+          "ma5": null,
+          "ma10": null,
+          "ma20": null,
+          "ma60": null,
+          "ma120": null,
+          "pe_ttm": null,
+          "pb_mrq": null,
+          "dividend_yield_ttm": null,
+          "total_market_cap": null
+        },
+        {
+          "date": "2026-06-09",
+          "open": 3900.0,
+          "close": 3921.5,
+          "high": 3921.5,
+          "low": 3900.0,
+          "volume": 1200.0,
+          "ma5": null,
+          "ma10": null,
+          "ma20": null,
+          "ma60": null,
+          "ma120": null,
+          "pe_ttm": null,
+          "pb_mrq": null,
+          "dividend_yield_ttm": null,
+          "total_market_cap": null
+        }
+      ]
     },
     {
       "symbol": "CSI500",
@@ -365,6 +402,7 @@ uv run python main.py macro-sync
 兼容和降级：
 
 - 单个指数少于两个有效点时，该指数返回 `status: "unavailable"` 和空数值，其余项目仍返回。
+- `daily_bars` 为兼容新增字段；旧前端可忽略，新前端在字段为空或缺失时展示宽基历史暂无可用数据。
 - `indices` 当前按 Push Center 默认宽基注册表顺序返回：`CSI300`、`CSI500`、`CSI1000`、`SSE`、`SZSE`、`CHINEXT`、`HSTECH`；前端应按数组顺序渲染，不依赖固定两项。
 - 市场宽度无法聚合时仅 `breadth.status` 为 `unavailable`。
 - Service 整体异常时返回 `503 frontend_stock_market_overview_unavailable`。

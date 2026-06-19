@@ -647,7 +647,6 @@ export function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
             {!collapsed ? (
               <div>
                 <h1 className="text-base font-semibold tracking-tight text-ink">Trend Insight</h1>
-                <p className="mt-0.5 text-[11px] text-muted">研究工作台</p>
               </div>
             ) : null}
             <button

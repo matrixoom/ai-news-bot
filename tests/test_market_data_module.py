@@ -1733,6 +1733,98 @@ class StockMarketOverviewTests(unittest.TestCase):
         self.assertAlmostEqual(index_by_symbol["SSE"]["change_pct"], 1.318125)
         self.assertEqual(payload["breadth"]["advanced"], 3421)
 
+    def test_service_includes_push_center_index_kline_history(self) -> None:
+        """校验股票市场摘要复用 Push Center 宽基历史生成可展开 K 线数据。"""
+        self.history_store.upsert_symbol_history(
+            symbol="CSI300",
+            display_name="沪深 300",
+            currency="CNY",
+            provider_key="unit-test",
+            source_url="https://example.com",
+            points=[
+                MarketIndexHistoryPoint(date(2026, 6, 5), 3900.0, volume=1000),
+                MarketIndexHistoryPoint(date(2026, 6, 8), 3921.5, volume=1200),
+                MarketIndexHistoryPoint(date(2026, 6, 9), 3910.0, volume=900),
+            ],
+            status="live",
+            window_label="3 sessions",
+            warning_message="",
+        )
+        self.repository.load_market_breadth = Mock(
+            return_value={
+                "trade_date": "2026-06-09",
+                "advanced": 0,
+                "declined": 0,
+                "unchanged": 0,
+                "total": 0,
+                "status": "live",
+            }
+        )
+        service = StockMarketService(
+            repository=self.repository,
+            market_history_store=self.history_store,
+        )
+
+        payload = service.build_overview_payload()
+
+        csi300 = next(item for item in payload["indices"] if item["symbol"] == "CSI300")
+        self.assertEqual(
+            csi300["daily_bars"],
+            [
+                {
+                    "date": "2026-06-05",
+                    "open": 3900.0,
+                    "close": 3900.0,
+                    "high": 3900.0,
+                    "low": 3900.0,
+                    "volume": 1000.0,
+                    "ma5": None,
+                    "ma10": None,
+                    "ma20": None,
+                    "ma60": None,
+                    "ma120": None,
+                    "pe_ttm": None,
+                    "pb_mrq": None,
+                    "dividend_yield_ttm": None,
+                    "total_market_cap": None,
+                },
+                {
+                    "date": "2026-06-08",
+                    "open": 3900.0,
+                    "close": 3921.5,
+                    "high": 3921.5,
+                    "low": 3900.0,
+                    "volume": 1200.0,
+                    "ma5": None,
+                    "ma10": None,
+                    "ma20": None,
+                    "ma60": None,
+                    "ma120": None,
+                    "pe_ttm": None,
+                    "pb_mrq": None,
+                    "dividend_yield_ttm": None,
+                    "total_market_cap": None,
+                },
+                {
+                    "date": "2026-06-09",
+                    "open": 3921.5,
+                    "close": 3910.0,
+                    "high": 3921.5,
+                    "low": 3910.0,
+                    "volume": 900.0,
+                    "ma5": None,
+                    "ma10": None,
+                    "ma20": None,
+                    "ma60": None,
+                    "ma120": None,
+                    "pe_ttm": None,
+                    "pb_mrq": None,
+                    "dividend_yield_ttm": None,
+                    "total_market_cap": None,
+                },
+            ],
+        )
+
     def test_service_degrades_missing_index_and_breadth_exception_independently(self) -> None:
         """校验单个指数缺失和市场宽度异常不会阻断其余摘要数据。"""
         self.history_store.upsert_symbol_history(

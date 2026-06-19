@@ -242,6 +242,59 @@ vi.mock("../hooks/use-stock-market-overview-query", () => ({
           change_pct: 0.55,
           trade_date: "2026-06-09",
           status: "live",
+          daily_bars: [
+            {
+              date: "2026-04-01",
+              open: 3850,
+              high: 3860,
+              low: 3840,
+              close: 3850,
+              volume: 800,
+              ma5: null,
+              ma10: null,
+              ma20: null,
+              ma60: null,
+              ma120: null,
+              pe_ttm: null,
+              pb_mrq: null,
+              dividend_yield_ttm: null,
+              total_market_cap: null,
+            },
+            {
+              date: "2026-06-05",
+              open: 3900,
+              high: 3900,
+              low: 3900,
+              close: 3900,
+              volume: 1000,
+              ma5: null,
+              ma10: null,
+              ma20: null,
+              ma60: null,
+              ma120: null,
+              pe_ttm: null,
+              pb_mrq: null,
+              dividend_yield_ttm: null,
+              total_market_cap: null,
+            },
+            {
+              date: "2026-06-09",
+              open: 3900,
+              high: 3921.5,
+              low: 3900,
+              close: 3921.5,
+              volume: 1200,
+              ma5: null,
+              ma10: null,
+              ma20: null,
+              ma60: null,
+              ma120: null,
+              pe_ttm: null,
+              pb_mrq: null,
+              dividend_yield_ttm: null,
+              total_market_cap: null,
+            },
+          ],
         },
         {
           symbol: "CSI500",
@@ -337,6 +390,51 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByText("市场宽度")).toBeInTheDocument();
     expect(screen.getByText("↑ 3421")).toBeInTheDocument();
     expect(screen.getByText("↓ 1428")).toBeInTheDocument();
+  });
+
+  it("expands a broad index kline chart from the overview strip", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("button", { name: /展开沪深 300宽基指数K线/ }));
+
+    expect(screen.getByRole("region", { name: "沪深 300 宽基指数K线" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "CSI300 日级别行情K线" })).toBeInTheDocument();
+    expect(screen.getByLabelText("宽基指数时间范围")).toBeInTheDocument();
+    expect(screen.getByLabelText("沪深 300 当前时间跨度涨幅")).toHaveTextContent("区间涨幅 +0.55%");
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("instrument-list-panel")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("stock-detail-panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /展开沪深 300宽基指数K线/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    await waitFor(() => {
+      const indexOption = mocks.echartOptions.at(-1) as {
+        legend?: { data?: string[]; selected?: Record<string, boolean> };
+        series?: Array<{ name?: string; data?: unknown[] }>;
+      };
+      expect(indexOption.legend?.data).toEqual(["MA5", "MA10", "MA20", "MA60", "MA120"]);
+      expect(indexOption.legend?.selected).toEqual({});
+      expect(indexOption.series?.find((series) => series.name === "PE(TTM)")).toBeUndefined();
+      expect(indexOption.series?.find((series) => series.name === "PB(MRQ)")).toBeUndefined();
+      expect(indexOption.series?.find((series) => series.name === "K线")?.data).toHaveLength(2);
+    });
+
+    await user.click(within(screen.getByLabelText("宽基指数时间范围")).getByRole("button", { name: "近3月" }));
+
+    expect(within(screen.getByLabelText("宽基指数时间范围")).getByRole("button", { name: "近3月" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByLabelText("沪深 300 当前时间跨度涨幅")).toHaveTextContent("区间涨幅 +1.86%");
+    await waitFor(() => {
+      const indexOption = mocks.echartOptions.at(-1) as {
+        series?: Array<{ name?: string; data?: unknown[] }>;
+      };
+      expect(indexOption.series?.find((series) => series.name === "K线")?.data).toHaveLength(3);
+    });
   });
 
   it("uses real pagination and supports previous and next page navigation", async () => {
