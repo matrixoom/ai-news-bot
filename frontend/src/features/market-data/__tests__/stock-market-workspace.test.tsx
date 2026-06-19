@@ -6,6 +6,8 @@ import { StockMarketWorkspace } from "../components/stock-market-workspace";
 import type { StockInstrument } from "../model/market-data.types";
 
 const mocks = vi.hoisted(() => ({
+  allRefresh: vi.fn(),
+  allRefreshStatuses: [] as Array<Record<string, unknown> | null>,
   detailRanges: [] as Array<Record<string, unknown>>,
   echartOptions: [] as Array<Record<string, unknown>>,
   instrumentFilters: [] as Array<Record<string, unknown>>,
@@ -227,6 +229,14 @@ vi.mock("../hooks/use-stock-market-refresh-mutation", () => ({
   }),
 }));
 
+vi.mock("../hooks/use-stock-market-all-refresh", () => ({
+  useStockMarketAllRefresh: () => ({
+    isStarting: false,
+    job: mocks.allRefreshStatuses.at(-1) ?? null,
+    start: mocks.allRefresh,
+  }),
+}));
+
 vi.mock("../hooks/use-stock-market-overview-query", () => ({
   useStockMarketOverviewQuery: () => ({
     isPending: false,
@@ -365,6 +375,8 @@ vi.mock("../hooks/use-stock-market-overview-query", () => ({
 
 describe("StockMarketWorkspace", () => {
   beforeEach(() => {
+    mocks.allRefresh.mockClear();
+    mocks.allRefreshStatuses.length = 0;
     mocks.detailRanges.length = 0;
     mocks.echartOptions.length = 0;
     mocks.instrumentFilters.length = 0;
@@ -444,16 +456,16 @@ describe("StockMarketWorkspace", () => {
     render(<StockMarketWorkspace />);
 
     await user.click(screen.getByRole("button", { name: "第 2 页" }));
-    expect(within(screen.getByRole("table")).getByText("000011.SZ")).toBeInTheDocument();
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 10 });
+    expect(within(screen.getByRole("table")).getByText("000016.SZ")).toBeInTheDocument();
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 15 });
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
-    expect(within(screen.getByRole("table")).getByText("000021.SZ")).toBeInTheDocument();
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 3, pageSize: 10 });
+    expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 15 });
 
     await user.click(screen.getByRole("button", { name: "上一页" }));
-    expect(within(screen.getByRole("table")).getByText("000011.SZ")).toBeInTheDocument();
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 10 });
+    expect(within(screen.getByRole("table")).getByText("000001.SZ")).toBeInTheDocument();
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 15 });
   });
 
   it("applies search and dropdown filters and resets pagination", async () => {
@@ -472,9 +484,32 @@ describe("StockMarketWorkspace", () => {
         instrumentType: "etf",
         marketBoard: "ETF",
         page: 1,
-        pageSize: 10,
+        pageSize: 15,
       });
     });
+  });
+
+  it("starts all-instrument refresh from the stock list header and shows progress", async () => {
+    const user = userEvent.setup();
+    mocks.allRefreshStatuses.push({
+      id: "job-1",
+      status: "running",
+      completed: 3,
+      total: 15,
+      percentage: 20,
+      current_symbol: "000003.SZ",
+      current_label: "测试股票3",
+      message: "正在刷新测试股票3。",
+    });
+
+    render(<StockMarketWorkspace />);
+
+    expect(screen.getByRole("button", { name: "刷新全部标的数据" })).toBeInTheDocument();
+    expect(screen.getByLabelText("全部标的刷新进度")).toHaveAttribute("aria-valuenow", "20");
+    expect(screen.getByLabelText("全部标的刷新进度")).toHaveTextContent("3/15");
+    await user.click(screen.getByRole("button", { name: "刷新全部标的数据" }));
+
+    expect(mocks.allRefresh).toHaveBeenCalledTimes(1);
   });
 
   it("collapses the stock list and removes the inner list scrollbar", async () => {
@@ -659,7 +694,7 @@ describe("StockMarketWorkspace", () => {
   it("adapts the instrument page size to the available list height", async () => {
     render(<StockMarketWorkspace />);
 
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 10 });
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 15 });
     const listBody = screen.getByTestId("instrument-list-body");
     const resizeEntry = {
       target: listBody,
@@ -690,8 +725,8 @@ describe("StockMarketWorkspace", () => {
       resizeObserverCallbacks[0]?.([resizeEntry], {} as ResizeObserver);
     });
 
-    expect(within(screen.getByRole("table")).getByText("000011.SZ")).toBeInTheDocument();
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 10 });
+    expect(within(screen.getByRole("table")).getByText("000016.SZ")).toBeInTheDocument();
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 15 });
   });
 
   it("uses compact overview range controls", () => {

@@ -427,7 +427,64 @@ uv run python main.py macro-sync
 
 失败：仅数据库写入等内部错误返回 `503 frontend_stock_universe_sync_failed`；外部行情源代理失败通常返回 `200` 并在 `warnings` 中说明。
 
-### 4.4.5 `GET /api/frontend/modules/market-data/stocks/{symbol}`
+### 4.4.5 `POST /api/frontend/modules/market-data/stocks/refresh-all`
+
+用途：启动“全部标的”后台刷新任务。服务会逐只刷新当前本地上市股票/ETF 的近 1 个月日线行情和公司概况；股票额外刷新财务指标，ETF 不拉取公司财报。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态。服务按上海本地日期做每日限次，同一天最多实际执行一次；重复点击会返回正在运行的任务或 `skipped` 状态。
+
+成功：`202`
+
+```json
+{
+  "job": {
+    "id": "f89f...",
+    "status": "running",
+    "trigger": "manual",
+    "completed": 128,
+    "total": 6931,
+    "percentage": 2,
+    "current_symbol": "000001.SZ",
+    "current_label": "平安银行",
+    "message": "正在刷新 平安银行。",
+    "errors": [],
+    "started_at": "2026-06-19T07:30:00Z",
+    "finished_at": ""
+  }
+}
+```
+
+失败：`503 frontend_stock_all_refresh_start_failed`
+
+### 4.4.6 `GET /api/frontend/modules/market-data/stocks/refresh-all/latest`
+
+用途：读取最近一次全部标的刷新任务，供前端微型进度条展示手动任务或 15:30 自动任务进度。
+
+成功：`200`
+
+```json
+{
+  "job": null,
+  "state": {
+    "last_refresh_date": "2026-06-19",
+    "last_refresh_at": "2026-06-19T07:42:00Z",
+    "last_trigger": "scheduled"
+  }
+}
+```
+
+### 4.4.7 `GET /api/frontend/modules/market-data/stocks/refresh-all/{job_id}`
+
+用途：读取指定全部标的刷新任务状态。任务状态为 `completed_with_warnings` 时表示部分标的外部数据源失败，服务保留旧数据并在 `errors` 中返回短错误摘要。
+
+失败：
+
+- `404`：任务不存在
+- `503`：`frontend_stock_all_refresh_status_failed`
+
+### 4.4.8 后台定时刷新
+
+股票市场服务启动后会在后台检查上海时间 `15:30` 槽位，到点自动触发 `scheduled` 全标的刷新。自动任务和手动任务共用每日限次状态文件 `.data/stock_market_refresh_state.json`，因此当天手动刷新完成后，15:30 不会再次拉取外部数据；反之亦然。
+
+### 4.4.9 `GET /api/frontend/modules/market-data/stocks/{symbol}`
 
 用途：返回选中股票/ETF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 1 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
 
@@ -507,7 +564,7 @@ OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短�
 - `400`：`invalid_stock_symbol_or_range`
 - `503`：`frontend_stock_detail_unavailable`
 
-### 4.4.6 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
+### 4.4.10 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
 
 用途：手动刷新选中股票/ETF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。股票会同时
 强制刷新财务指标，确保 ROE、营收同比、净利润同比和资产负债率可以补采最新季度数据；ETF 不执行

@@ -106,6 +106,30 @@ export type StockInstrumentListPayload = {
   warning_message: string;
 };
 
+export type StockMarketAllRefreshJob = {
+  id: string;
+  status: "pending" | "running" | "completed" | "completed_with_warnings" | "failed" | "skipped";
+  trigger: "manual" | "scheduled" | string;
+  completed: number;
+  total: number;
+  percentage: number;
+  current_symbol: string;
+  current_label: string;
+  message: string;
+  errors: string[];
+  started_at: string;
+  finished_at: string;
+};
+
+export type StockMarketAllRefreshPayload = {
+  job: StockMarketAllRefreshJob | null;
+  state?: {
+    last_refresh_date?: string;
+    last_refresh_at?: string;
+    last_trigger?: string;
+  };
+};
+
 export type StockMarketOverviewPayload = {
   generated_at: string;
   indices: Array<{

@@ -8,6 +8,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-query";
+import { useStockMarketAllRefresh } from "../hooks/use-stock-market-all-refresh";
 import { useStockMarketInstrumentsQuery } from "../hooks/use-stock-market-instruments-query";
 import { useStockMarketOverviewQuery } from "../hooks/use-stock-market-overview-query";
 import { useStockMarketRefreshMutation } from "../hooks/use-stock-market-refresh-mutation";
@@ -16,6 +17,7 @@ import type {
   StockDailyBar,
   StockFinancialReportType,
   StockFinancialSeries,
+  StockMarketAllRefreshJob,
   StockInstrument,
   StockMarketOverviewPayload,
 } from "../model/market-data.types";
@@ -65,9 +67,7 @@ const FINANCIAL_ORDER = [
   "net_profit_yoy",
   "debt_asset_ratio",
 ];
-const DEFAULT_INSTRUMENT_PAGE_SIZE = 10;
-const INSTRUMENT_TABLE_HEADER_HEIGHT = 41;
-const INSTRUMENT_ROW_HEIGHT = 43;
+const DEFAULT_INSTRUMENT_PAGE_SIZE = 15;
 type StockDetailTab = "overview" | "financial";
 type StockPriceAdjustment = "none" | "forward" | "backward";
 
@@ -105,6 +105,7 @@ export function StockMarketWorkspace() {
   const detailQuery = useStockMarketDetailQuery(selectedSymbol, range, financialReportType);
   const overviewQuery = useStockMarketOverviewQuery();
   const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType);
+  const allRefresh = useStockMarketAllRefresh();
   const instruments = instrumentsQuery.data?.items ?? [];
   const instrumentTotal = instrumentsQuery.data?.total ?? 0;
   const instrumentPageCount = Math.max(1, Math.ceil(instrumentTotal / instrumentPageSize));
@@ -216,7 +217,10 @@ export function StockMarketWorkspace() {
               isCollapsed={isInstrumentListCollapsed}
               isError={instrumentsQuery.isError}
               isPending={instrumentsQuery.isPending}
+              allRefreshJob={allRefresh.job}
+              allRefreshStarting={allRefresh.isStarting}
               onCollapseChange={setIsInstrumentListCollapsed}
+              onRefreshAll={allRefresh.start}
               onPageChange={setInstrumentPage}
               onPageSizeChange={handleInstrumentPageSizeChange}
               onSelect={setSelectedSymbol}
@@ -580,8 +584,11 @@ function InstrumentListPanel(props: {
   isCollapsed: boolean;
   isPending: boolean;
   isError: boolean;
+  allRefreshJob: StockMarketAllRefreshJob | null;
+  allRefreshStarting: boolean;
   warning: string;
   onSelect: (symbol: string) => void;
+  onRefreshAll: () => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onCollapseChange: (collapsed: boolean) => void;
@@ -626,10 +633,26 @@ function InstrumentListPanel(props: {
       className="workbench-panel flex h-full min-h-0 flex-col overflow-hidden"
       data-testid="instrument-list-panel"
     >
-      <div className="flex h-12 items-center justify-between border-b border-line px-4">
-        <div className="text-sm font-semibold text-ink">
-          全部标的
-          <span className="ml-3 text-xs font-medium text-muted">{formatNumber(props.total)} 只</span>
+      <div className="flex h-12 items-center justify-between gap-2 border-b border-line px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <button
+            aria-label="刷新全部标的数据"
+            className="workbench-icon-button h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={props.allRefreshStarting}
+            onClick={props.onRefreshAll}
+            title="后台刷新全部标的近 1 个月行情、公司概况和财务数据"
+            type="button"
+          >
+            <ArrowPathIcon
+              aria-hidden="true"
+              className={`h-4 w-4 ${props.allRefreshStarting || isAllRefreshRunning(props.allRefreshJob) ? "animate-spin" : ""}`}
+            />
+          </button>
+          <div className="min-w-0 text-sm font-semibold text-ink">
+            全部标的
+            <span className="ml-3 text-xs font-medium text-muted">{formatNumber(props.total)} 只</span>
+          </div>
+          <AllInstrumentRefreshProgress job={props.allRefreshJob} />
         </div>
         <button
           aria-expanded="true"
@@ -656,11 +679,11 @@ function InstrumentListPanel(props: {
           <table className="min-w-[420px] w-full table-fixed border-collapse text-left text-xs">
             <thead className="sticky top-0 z-10 bg-surface-subtle text-muted">
               <tr className="border-b border-line">
-                <th className="w-[96px] px-4 py-3 font-semibold">代码</th>
-                <th className="px-3 py-3 font-semibold">名称</th>
-                <th className="w-[80px] px-3 py-3 font-semibold">市场</th>
-                <th className="w-[58px] px-3 py-3 font-semibold">类型</th>
-                <th className="w-[72px] px-4 py-3 text-right font-semibold">最新价</th>
+                <th className="w-[96px] px-4 py-2.5 font-semibold">代码</th>
+                <th className="px-3 py-2.5 font-semibold">名称</th>
+                <th className="w-[80px] px-3 py-2.5 font-semibold">市场</th>
+                <th className="w-[58px] px-3 py-2.5 font-semibold">类型</th>
+                <th className="w-[72px] px-4 py-2.5 text-right font-semibold">最新价</th>
               </tr>
             </thead>
             <tbody>
@@ -725,6 +748,50 @@ function InstrumentListPanel(props: {
 }
 
 /**
+ * 渲染全部标的后台刷新微型进度条。
+ * @param props.job 后端刷新任务；为空时保留一个窄占位，避免标题跳动。
+ * @returns 列表标题行内的紧凑进度展示。
+ */
+function AllInstrumentRefreshProgress(props: { job: StockMarketAllRefreshJob | null }) {
+  if (!props.job) {
+    return <div className="hidden h-5 w-24 shrink-0 sm:block" />;
+  }
+
+  const percentage = Math.min(100, Math.max(0, props.job.percentage));
+  const isFailed = props.job.status === "failed";
+  const isWarning = props.job.status === "completed_with_warnings";
+  const barTone = isFailed ? "bg-negative" : isWarning ? "bg-amber-500" : "bg-accent";
+
+  return (
+    <div
+      aria-label="全部标的刷新进度"
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={percentage}
+      className="hidden w-24 shrink-0 sm:block"
+      role="progressbar"
+      title={props.job.message}
+    >
+      <div className="h-1.5 overflow-hidden rounded-full bg-surface-subtle">
+        <div className={`h-full rounded-full ${barTone}`} style={{ width: `${percentage}%` }} />
+      </div>
+      <div className="mt-0.5 truncate text-[10px] font-semibold leading-3 text-muted">
+        {formatNumber(props.job.completed)}/{formatNumber(props.job.total)}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 判断全部标的刷新任务是否仍在后台运行。
+ * @param job 后端刷新任务状态。
+ * @returns pending/running 时返回 true。
+ */
+function isAllRefreshRunning(job: StockMarketAllRefreshJob | null): boolean {
+  return job?.status === "pending" || job?.status === "running";
+}
+
+/**
  * 渲染单个标的行，并在鼠标悬停时展示完整列表信息。
  * @param props 标的数据、选中状态与点击回调。
  * @returns 可选择的标的表格行。
@@ -748,11 +815,11 @@ function InstrumentRow(props: {
       onClick={() => props.onSelect(props.instrument.symbol)}
       title={hoverDescription}
     >
-      <td className="px-4 py-2.5 font-semibold">{props.instrument.symbol}</td>
-      <td className="truncate px-3 py-2.5 font-semibold text-ink">{props.instrument.name}</td>
-      <td className="px-3 py-2.5 text-muted">{marketLabel}</td>
-      <td className="px-3 py-2.5 text-muted">{typeLabel}</td>
-      <td className={`px-4 py-2.5 text-right font-semibold ${priceTone}`}>
+      <td className="px-4 py-1.5 font-semibold">{props.instrument.symbol}</td>
+      <td className="truncate px-3 py-1.5 font-semibold text-ink">{props.instrument.name}</td>
+      <td className="px-3 py-1.5 text-muted">{marketLabel}</td>
+      <td className="px-3 py-1.5 text-muted">{typeLabel}</td>
+      <td className={`px-4 py-1.5 text-right font-semibold ${priceTone}`}>
         {latestPriceLabel}
       </td>
     </tr>
@@ -1523,14 +1590,11 @@ function EmptySurface(props: { text: string; danger?: boolean }) {
 /**
  * 根据列表内容区高度计算单页可展示的标的数量。
  * @param availableHeight 列表表头与数据行可使用的像素高度。
- * @returns 在 6 到 30 条之间的自适应分页容量。
+ * @returns 最多 15 条的分页容量，保持“全部标的”列表每页固定为 15 支。
  */
 function calculateInstrumentPageSize(availableHeight: number): number {
-  if (availableHeight <= INSTRUMENT_TABLE_HEADER_HEIGHT) return DEFAULT_INSTRUMENT_PAGE_SIZE;
-  const visibleRows = Math.floor(
-    (availableHeight - INSTRUMENT_TABLE_HEADER_HEIGHT) / INSTRUMENT_ROW_HEIGHT,
-  );
-  return Math.min(30, Math.max(6, visibleRows));
+  void availableHeight;
+  return DEFAULT_INSTRUMENT_PAGE_SIZE;
 }
 
 /**

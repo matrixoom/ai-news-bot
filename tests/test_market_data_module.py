@@ -1136,6 +1136,101 @@ class StockMarketModuleTests(unittest.TestCase):
             {"daily_bars": 2, "financial_metrics": 4},
         )
 
+    def test_all_instrument_refresh_runs_once_per_local_day(self) -> None:
+        """校验全标的刷新逐只补采近一月行情、概况和财务，且同一天不会重复启动。"""
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                },
+                {
+                    "symbol": "159915.SZ",
+                    "code": "159915",
+                    "exchange": "SZ",
+                    "name": "创业板ETF",
+                    "instrument_type": "etf",
+                    "market_board": "ETF",
+                    "listing_status": "listed",
+                },
+            ]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 3}
+        syncer.sync_profile.return_value = {"profile": 1}
+        syncer.sync_financials.return_value = {"financial_metrics": 4}
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+        )
+
+        class FixedDate(date):
+            """固定当前日期，确保近一月窗口和每日限次可断言。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的本地日期。"""
+
+                return cls(2026, 6, 19)
+
+        with patch("src.services.stock_market_service.date", FixedDate):
+            started = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
+            skipped = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
+
+        self.assertEqual(started["status"], "completed")
+        self.assertEqual(started["completed"], 2)
+        self.assertEqual(started["total"], 2)
+        self.assertEqual(started["percentage"], 100)
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertIn("今日已完成", skipped["message"])
+        self.assertEqual(syncer.sync_symbol_window.call_count, 2)
+        first_call = syncer.sync_symbol_window.call_args_list[0]
+        self.assertEqual(first_call.kwargs["start_date"], date(2026, 5, 19))
+        self.assertEqual(first_call.kwargs["end_date"], date(2026, 6, 19))
+        self.assertEqual(syncer.sync_profile.call_count, 2)
+        syncer.sync_financials.assert_called_once_with(repository.get_instrument("000001.SZ"))
+
+    def test_scheduled_all_instrument_refresh_starts_at_1530(self) -> None:
+        """校验股票服务定时任务仅在上海时间 15:30 启动全标的刷新。"""
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 1}
+        syncer.sync_profile.return_value = {"profile": 1}
+        syncer.sync_financials.return_value = {"financial_metrics": 1}
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+        )
+
+        early = service.run_due_scheduled_refresh(now=datetime(2026, 6, 19, 7, 29, tzinfo=UTC), run_inline=True)
+        due = service.run_due_scheduled_refresh(now=datetime(2026, 6, 19, 7, 30, tzinfo=UTC), run_inline=True)
+
+        self.assertEqual(early, [])
+        self.assertEqual(due[0]["job"]["trigger"], "scheduled")
+        self.assertEqual(due[0]["job"]["status"], "completed")
+        syncer.sync_symbol_window.assert_called_once()
+
     def test_stock_detail_logs_compact_warning_when_lazy_daily_sync_fails(self) -> None:
         """校验日线懒加载失败时只记录短 warning，不输出完整异常栈。"""
         repository = self._repository()

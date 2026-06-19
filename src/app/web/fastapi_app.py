@@ -125,7 +125,7 @@ def create_fastapi_app(
     )
     macro_service = macro_data_service or MacroDataService()
     market_service = market_data_service or MarketDataService()
-    stock_service = stock_market_service or StockMarketService()
+    stock_service = stock_market_service or StockMarketService(enable_scheduler=True)
     event_service = event_outlook_service or EventsOutlookService(
         research_provider=_resolve_event_outlook_research_provider(service)
     )
@@ -166,6 +166,9 @@ def create_fastapi_app(
     def shutdown_background_refresh() -> None:
         service.stop_background_refresh()
         push_service.stop_scheduler()
+        stop_stock_scheduler = getattr(stock_service, "stop_scheduler", None)
+        if callable(stop_stock_scheduler):
+            stop_stock_scheduler()
 
     @app.get("/api/frontend/modules/push")
     def frontend_push_module(refresh: bool = False, include_preview: bool = True) -> JSONResponse:
@@ -358,6 +361,38 @@ def create_fastapi_app(
         except Exception:
             logger.exception("frontend stock market overview failed")
             return JSONResponse({"error": "frontend_stock_market_overview_unavailable"}, status_code=503)
+
+    @app.post("/api/frontend/modules/market-data/stocks/refresh-all")
+    def frontend_stock_market_refresh_all() -> JSONResponse:
+        """启动全标的近一月行情、概况和财务后台刷新。"""
+
+        try:
+            return JSONResponse(stock_service.start_all_instrument_refresh(trigger="manual"), status_code=202)
+        except Exception:
+            logger.exception("frontend stock all refresh start failed")
+            return JSONResponse({"error": "frontend_stock_all_refresh_start_failed"}, status_code=503)
+
+    @app.get("/api/frontend/modules/market-data/stocks/refresh-all/latest")
+    def frontend_stock_market_refresh_all_latest() -> JSONResponse:
+        """返回最近一次全标的刷新任务，供手动与定时进度条复用。"""
+
+        try:
+            return JSONResponse(stock_service.get_latest_all_instrument_refresh())
+        except Exception:
+            logger.exception("frontend stock all refresh latest failed")
+            return JSONResponse({"error": "frontend_stock_all_refresh_latest_failed"}, status_code=503)
+
+    @app.get("/api/frontend/modules/market-data/stocks/refresh-all/{job_id}")
+    def frontend_stock_market_refresh_all_status(job_id: str) -> JSONResponse:
+        """返回指定全标的刷新任务状态。"""
+
+        try:
+            return JSONResponse(stock_service.get_all_instrument_refresh(job_id))
+        except KeyError:
+            return JSONResponse({"error": "frontend_stock_all_refresh_not_found"}, status_code=404)
+        except Exception:
+            logger.exception("frontend stock all refresh status failed", extra={"job_id": job_id})
+            return JSONResponse({"error": "frontend_stock_all_refresh_status_failed"}, status_code=503)
 
     @app.get("/api/frontend/modules/market-data/stocks/{symbol}")
     def frontend_stock_market_detail(
