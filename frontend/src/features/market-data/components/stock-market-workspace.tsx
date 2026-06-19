@@ -661,7 +661,7 @@ function InstrumentListPanel(props: {
             className="workbench-icon-button h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={props.allRefreshStarting}
             onClick={props.onRefreshAll}
-            title="后台刷新全部标的近 6 个月行情、公司概况和财务数据"
+            title="后台刷新全部标的近 6 个月行情、公司概况和财务数据；本地已覆盖的标的会跳过外部请求"
             type="button"
           >
             <ArrowPathIcon

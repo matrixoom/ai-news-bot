@@ -296,6 +296,32 @@ class MarketDataHousingTests(unittest.TestCase):
         self.assertEqual(series_by_name["北京 全局走势"]["points"][0]["unit"], "指数")
 
 
+def _stock_daily_bar(trade_date: str, *, close_price: float) -> dict[str, object]:
+    """构造股票日线测试点。
+
+    Args:
+        trade_date: 交易日期，格式为 `YYYY-MM-DD`。
+        close_price: 收盘价，用于区分不同日期点。
+
+    Returns:
+        可直接传入仓储 `upsert_daily_bars` 的日线字典。
+    """
+
+    return {
+        "trade_date": trade_date,
+        "open_price": close_price,
+        "close_price": close_price,
+        "high_price": close_price,
+        "low_price": close_price,
+        "volume": 100,
+        "ma5": None,
+        "ma10": None,
+        "ma20": None,
+        "ma60": None,
+        "ma120": None,
+    }
+
+
 class StockMarketModuleTests(unittest.TestCase):
     """校验股票市场标的、日线与懒加载链路。"""
 
@@ -1248,8 +1274,8 @@ class StockMarketModuleTests(unittest.TestCase):
             {"daily_bars": 2, "financial_metrics": 4},
         )
 
-    def test_all_instrument_refresh_runs_once_per_local_day(self) -> None:
-        """校验全标的刷新逐只补采近六月行情、概况和财务，且同一天不会重复启动。"""
+    def test_all_instrument_refresh_can_run_multiple_times_per_local_day(self) -> None:
+        """校验全标的刷新同一天可重复启动，缺少近六月窗口时继续补采。"""
         repository = self._repository()
         repository.upsert_instruments(
             [
@@ -1284,7 +1310,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         class FixedDate(date):
-            """固定当前日期，确保近六月窗口和每日限次可断言。"""
+            """固定当前日期，确保近六月窗口可断言。"""
 
             @classmethod
             def today(cls) -> date:
@@ -1294,20 +1320,132 @@ class StockMarketModuleTests(unittest.TestCase):
 
         with patch("src.services.stock_market_service.date", FixedDate):
             started = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
-            skipped = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
+            second = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
 
         self.assertEqual(started["status"], "completed")
         self.assertEqual(started["completed"], 2)
         self.assertEqual(started["total"], 2)
         self.assertEqual(started["percentage"], 100)
-        self.assertEqual(skipped["status"], "skipped")
-        self.assertIn("今日已完成", skipped["message"])
-        self.assertEqual(syncer.sync_symbol_window.call_count, 2)
+        self.assertEqual(second["status"], "completed")
+        self.assertEqual(syncer.sync_symbol_window.call_count, 4)
         first_call = syncer.sync_symbol_window.call_args_list[0]
         self.assertEqual(first_call.kwargs["start_date"], date(2025, 12, 19))
         self.assertEqual(first_call.kwargs["end_date"], date(2026, 6, 19))
-        self.assertEqual(syncer.sync_profile.call_count, 2)
-        syncer.sync_financials.assert_called_once_with(repository.get_instrument("000001.SZ"))
+        self.assertEqual(syncer.sync_profile.call_count, 4)
+        self.assertEqual(syncer.sync_financials.call_count, 2)
+
+    def test_all_instrument_refresh_skips_symbols_with_complete_six_month_window(self) -> None:
+        """校验全标的刷新每次可启动，但已有近六月日线窗口时不再调用外部 API。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                },
+                {
+                    "symbol": "159915.SZ",
+                    "code": "159915",
+                    "exchange": "SZ",
+                    "name": "创业板ETF",
+                    "instrument_type": "etf",
+                    "market_board": "ETF",
+                    "listing_status": "listed",
+                },
+            ]
+        )
+        for symbol in ("000001.SZ", "159915.SZ"):
+            repository.upsert_daily_bars(
+                symbol,
+                [
+                    _stock_daily_bar("2025-12-19", close_price=10),
+                    _stock_daily_bar("2026-06-19", close_price=11),
+                ],
+            )
+        syncer = Mock(spec=StockMarketSyncService)
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+        )
+
+        class FixedDate(date):
+            """固定当前日期，确保近六月窗口可断言。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的本地日期。"""
+
+                return cls(2026, 6, 19)
+
+        with patch("src.services.stock_market_service.date", FixedDate):
+            first = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
+            second = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
+
+        self.assertEqual(first["status"], "completed")
+        self.assertEqual(second["status"], "completed")
+        self.assertEqual(second["completed"], 2)
+        self.assertEqual(second["total"], 2)
+        syncer.sync_symbol_window.assert_not_called()
+        syncer.sync_profile.assert_not_called()
+        syncer.sync_financials.assert_not_called()
+
+    def test_all_instrument_refresh_fetches_symbols_without_complete_six_month_window(self) -> None:
+        """校验近六月窗口缺失时，刷新任务仍会调用外部 API 补齐该标的。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_daily_bars(
+            "000001.SZ",
+            [_stock_daily_bar("2026-06-19", close_price=11)],
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 3}
+        syncer.sync_profile.return_value = {"profile": 1}
+        syncer.sync_financials.return_value = {"financial_metrics": 4}
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+        )
+
+        class FixedDate(date):
+            """固定当前日期，确保近六月窗口可断言。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的本地日期。"""
+
+                return cls(2026, 6, 19)
+
+        with patch("src.services.stock_market_service.date", FixedDate):
+            job = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
+
+        self.assertEqual(job["status"], "completed")
+        syncer.sync_symbol_window.assert_called_once()
+        sync_call = syncer.sync_symbol_window.call_args
+        self.assertEqual(sync_call.kwargs["start_date"], date(2025, 12, 19))
+        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
+        syncer.sync_profile.assert_called_once()
+        syncer.sync_financials.assert_called_once()
 
     def test_scheduled_all_instrument_refresh_starts_at_1530(self) -> None:
         """校验股票服务定时任务仅在上海时间 15:30 启动全标的刷新。"""

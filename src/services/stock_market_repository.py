@@ -453,6 +453,32 @@ class StockMarketRepository:
             ).fetchone()
         return row is not None
 
+    def has_daily_bar_window(self, *, symbol: str, start_date: str, end_date: str) -> bool:
+        """判断某只标的的本地日线是否已覆盖指定日期窗口。
+
+        Args:
+            symbol: 带交易所后缀的标的代码。
+            start_date: 需要覆盖的窗口起始日期，格式为 `YYYY-MM-DD`。
+            end_date: 需要覆盖的窗口结束日期，格式为 `YYYY-MM-DD`。
+
+        Returns:
+            本地最早日线不晚于起始日期，且最新日线不早于结束日期时返回 `True`。
+        """
+
+        with self._daily_bar_session(symbol) as connection:
+            row = connection.execute(
+                """
+                SELECT MIN(trade_date) AS earliest_trade_date,
+                       MAX(trade_date) AS latest_trade_date
+                FROM market_stock_daily_bar
+                WHERE symbol = ?
+                """,
+                (symbol,),
+            ).fetchone()
+        if row is None or row["earliest_trade_date"] is None or row["latest_trade_date"] is None:
+            return False
+        return str(row["earliest_trade_date"]) <= start_date and str(row["latest_trade_date"]) >= end_date
+
     def load_daily_bars(self, *, symbol: str, start_date: str, end_date: str) -> list[StockDailyBar]:
         """读取指定日期窗口内的日线行情。"""
 

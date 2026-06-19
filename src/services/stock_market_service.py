@@ -69,7 +69,7 @@ class StockMarketService:
             repository: 股票市场仓储。
             sync_service: AkShare 同步服务。
             market_history_store: 宽基指数历史仓储。
-            refresh_state_path: 全标的刷新每日限次状态文件路径。
+            refresh_state_path: 全标的刷新最近完成状态文件路径。
             enable_scheduler: 是否启动 15:30 自动刷新检查线程。
             scheduler_check_seconds: 后台定时检查间隔秒数。
 
@@ -171,22 +171,10 @@ class StockMarketService:
             可供前端轮询的任务状态。
         """
 
-        today_text = self._local_today()
         with self._all_refresh_lock:
             for existing_job in self._all_refresh_jobs.values():
                 if existing_job["status"] not in STOCK_ALL_REFRESH_TERMINAL_STATUSES:
                     return {"job": self._public_all_refresh_job(existing_job)}
-            if self._load_refresh_state().get("last_refresh_date") == today_text:
-                job = self._new_all_refresh_job(
-                    trigger=trigger,
-                    status="skipped",
-                    message=f"{today_text} 今日已完成全标的刷新，每天最多执行一次。",
-                )
-                job["completed"] = job["total"]
-                job["percentage"] = 100
-                self._all_refresh_jobs[job["id"]] = job
-                self._latest_all_refresh_job_id = job["id"]
-                return {"job": self._public_all_refresh_job(job)}
             job = self._new_all_refresh_job(trigger=trigger)
             self._all_refresh_jobs[job["id"]] = job
             self._latest_all_refresh_job_id = job["id"]
@@ -595,6 +583,21 @@ class StockMarketService:
             本标的刷新过程中产生的短错误信息。
         """
 
+        start_text = start.isoformat()
+        end_text = end.isoformat()
+        if self._repository.has_daily_bar_window(
+            symbol=instrument.symbol,
+            start_date=start_text,
+            end_date=end_text,
+        ):
+            logger.info(
+                "stock all refresh skipped cached symbol %s for %s to %s",
+                instrument.symbol,
+                start_text,
+                end_text,
+            )
+            return []
+
         errors: list[str] = []
         try:
             self._sync_service.sync_symbol_window(instrument, start_date=start, end_date=end)
@@ -672,12 +675,12 @@ class StockMarketService:
         return deepcopy(job) if job is not None else None
 
     def _local_today(self) -> str:
-        """返回上海时区当天日期，作为每日限次键。"""
+        """返回上海时区当天日期，作为最近刷新状态日期。"""
 
         return date.today().isoformat()
 
     def _load_refresh_state(self) -> dict[str, Any]:
-        """读取全标的刷新每日限次状态文件。"""
+        """读取全标的刷新最近一次完成状态文件。"""
 
         try:
             with self._refresh_state_path.open("r", encoding="utf-8") as handle:
@@ -687,7 +690,7 @@ class StockMarketService:
         return dict(payload) if isinstance(payload, dict) else {}
 
     def _save_refresh_state(self, payload: dict[str, Any]) -> None:
-        """原子写入全标的刷新每日限次状态文件。"""
+        """原子写入全标的刷新最近一次完成状态文件。"""
 
         self._refresh_state_path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = self._refresh_state_path.with_suffix(f"{self._refresh_state_path.suffix}.tmp")
