@@ -402,6 +402,8 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("img", { name: "CSI300 日级别行情K线" })).toBeInTheDocument();
     expect(screen.getByLabelText("宽基指数时间范围")).toBeInTheDocument();
     expect(screen.getByLabelText("沪深 300 当前时间跨度涨幅")).toHaveTextContent("区间涨幅 +0.55%");
+    expect(screen.getByLabelText("沪深 300 当前时间跨度涨幅")).toHaveClass("text-ink");
+    expect(within(screen.getByLabelText("沪深 300 当前时间跨度涨幅")).getByText("+0.55%")).toHaveClass("text-positive");
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.queryByTestId("instrument-list-panel")).not.toBeInTheDocument();
     expect(screen.queryByTestId("stock-detail-panel")).not.toBeInTheDocument();

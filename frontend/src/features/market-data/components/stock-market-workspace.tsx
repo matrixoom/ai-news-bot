@@ -339,9 +339,12 @@ function IndexKlineDisclosure(props: {
           <div className="flex flex-wrap items-center justify-end gap-3 text-xs font-semibold">
             <span
               aria-label={`${props.index.display_name} 当前时间跨度涨幅`}
-              className={rangeChangeTone}
+              className="text-ink"
             >
-              区间涨幅 {rangeChangeRate === null ? "--" : `${formatSigned(rangeChangeRate, 2)}%`}
+              区间涨幅{" "}
+              <span className={rangeChangeTone}>
+                {rangeChangeRate === null ? "--" : `${formatSigned(rangeChangeRate, 2)}%`}
+              </span>
             </span>
             <span className="text-muted">{props.index.symbol}</span>
           </div>
