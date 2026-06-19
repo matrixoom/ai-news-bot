@@ -696,7 +696,7 @@ class StockMarketRepository:
                     code TEXT NOT NULL,
                     exchange TEXT NOT NULL,
                     name TEXT NOT NULL,
-                    instrument_type TEXT NOT NULL CHECK(instrument_type IN ('stock', 'etf')),
+                    instrument_type TEXT NOT NULL CHECK(instrument_type IN ('stock', 'etf', 'lof')),
                     market_board TEXT NOT NULL,
                     listing_status TEXT NOT NULL,
                     source_url TEXT NOT NULL DEFAULT '',
@@ -705,6 +705,7 @@ class StockMarketRepository:
                 )
                 """
             )
+            self._migrate_stock_instrument_type_check(connection)
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_market_stock_instrument_search
@@ -771,6 +772,53 @@ class StockMarketRepository:
         if self._precreate_shards:
             initialize_all_market_stock_shards(self._shard_dir)
         self._migrate_legacy_daily_bars()
+
+    def _migrate_stock_instrument_type_check(self, connection: sqlite3.Connection) -> None:
+        """迁移旧版标的表的证券类型约束，允许 LOF 标的入库。
+
+        Args:
+            connection: 主库事务连接。
+
+        Returns:
+            无返回值；旧表已支持 `lof` 时保持幂等。
+        """
+
+        row = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_instrument'"
+        ).fetchone()
+        create_sql = str(row["sql"] if row else "")
+        if "'lof'" in create_sql:
+            return
+
+        connection.execute("ALTER TABLE market_stock_instrument RENAME TO market_stock_instrument_legacy")
+        connection.execute(
+            """
+            CREATE TABLE market_stock_instrument (
+                symbol TEXT PRIMARY KEY,
+                code TEXT NOT NULL,
+                exchange TEXT NOT NULL,
+                name TEXT NOT NULL,
+                instrument_type TEXT NOT NULL CHECK(instrument_type IN ('stock', 'etf', 'lof')),
+                market_board TEXT NOT NULL,
+                listing_status TEXT NOT NULL,
+                source_url TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO market_stock_instrument (
+                symbol, code, exchange, name, instrument_type, market_board,
+                listing_status, source_url, created_at, updated_at
+            )
+            SELECT symbol, code, exchange, name, instrument_type, market_board,
+                   listing_status, source_url, created_at, updated_at
+            FROM market_stock_instrument_legacy
+            """
+        )
+        connection.execute("DROP TABLE market_stock_instrument_legacy")
 
     def _migrate_legacy_daily_bars(self) -> None:
         """将主库旧日线表幂等迁移到分片，校验完成后移除旧表。"""

@@ -35,9 +35,9 @@ const instruments: StockInstrument[] = Array.from({ length: 25 }, (_, index) => 
     code,
     exchange: "SZ",
     name: index === 0 ? "平安银行" : index === 1 ? "名称较长的测试股票股份有限公司" : `测试股票${index + 1}`,
-    instrument_type: index === 20 ? "etf" : "stock",
-    market_board: index === 20 ? "ETF" : "深市主板",
-    listing_status: "listed",
+    instrument_type: index === 20 ? "etf" : index === 21 ? "lof" : "stock",
+    market_board: index === 20 || index === 21 ? "深市" : "深市主板",
+    listing_status: index === 2 ? "st" : index === 3 ? "delisted" : "listed",
     updated_at: "2026-06-06T00:00:00Z",
     latest_price: 10 + index,
   };
@@ -172,7 +172,10 @@ vi.mock("../hooks/use-stock-market-instruments-query", () => ({
       const matchesBoard =
         filters.marketBoard === "all" ||
         instrument.market_board === filters.marketBoard;
-      return matchesQuery && matchesType && matchesBoard;
+      const matchesStatus =
+        filters.listingStatus === "all" ||
+        instrument.listing_status === filters.listingStatus;
+      return matchesQuery && matchesType && matchesBoard && matchesStatus;
     });
     const offset = (page - 1) * pageSize;
     return {
@@ -476,15 +479,31 @@ describe("StockMarketWorkspace", () => {
     await user.clear(screen.getByRole("searchbox"));
     await user.type(screen.getByRole("searchbox"), "000021");
     await user.selectOptions(screen.getByLabelText("证券类型"), "etf");
-    await user.selectOptions(screen.getByLabelText("市场类型"), "ETF");
+    await user.selectOptions(screen.getByLabelText("市场类型"), "深市");
 
     await waitFor(() => {
       expect(mocks.instrumentFilters.at(-1)).toMatchObject({
         query: "000021",
         instrumentType: "etf",
-        marketBoard: "ETF",
+        marketBoard: "深市",
         page: 1,
         pageSize: 15,
+      });
+    });
+    expect(within(screen.getByLabelText("市场类型")).queryByRole("option", { name: "ETF" })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("市场类型")).getByRole("option", { name: "境外" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("证券类型")).getByRole("option", { name: "LOF" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("上市状态")).getByRole("option", { name: "ST" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("上市状态")).getByRole("option", { name: "退市" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("证券类型"), "lof");
+    await user.selectOptions(screen.getByLabelText("上市状态"), "st");
+
+    await waitFor(() => {
+      expect(mocks.instrumentFilters.at(-1)).toMatchObject({
+        instrumentType: "lof",
+        listingStatus: "st",
+        page: 1,
       });
     });
   });
@@ -617,8 +636,11 @@ describe("StockMarketWorkspace", () => {
     render(<StockMarketWorkspace />);
 
     expect(screen.queryByRole("button", { name: "加入自选" })).not.toBeInTheDocument();
-    expect(screen.queryByText("市盈率(TTM)")).not.toBeInTheDocument();
-    expect(screen.queryByText("总市值")).not.toBeInTheDocument();
+    expect(screen.getByText("市盈率 TTM")).toBeInTheDocument();
+    expect(screen.getByText("市净率 MRQ")).toBeInTheDocument();
+    expect(screen.getByText("总市值")).toBeInTheDocument();
+    expect(screen.getByText("区间涨幅")).toBeInTheDocument();
+    expect(screen.getByText("+4.76%")).toBeInTheDocument();
     expect(screen.queryByText(/交易中/)).not.toBeInTheDocument();
     expect(screen.queryByText(/开：/)).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "000001.SZ 日级别行情K线" })).toHaveClass(
@@ -746,7 +768,7 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("button", { name: "不复权" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("uses compact chart labels and places valuation legends on the right", async () => {
+  it("uses compact chart labels and hides valuation metrics from the kline legend", async () => {
     render(<StockMarketWorkspace />);
 
     await waitFor(() => expect(mocks.echartOptions.length).toBeGreaterThan(0));
@@ -768,16 +790,11 @@ describe("StockMarketWorkspace", () => {
 
     expect(klineOption.legend?.right).toBe(8);
     expect(klineOption.legend?.orient).toBe("vertical");
-    expect(klineOption.legend?.data).toEqual(
-      expect.arrayContaining(["PE(TTM)", "PB(MRQ)", "股息率(TTM)", "总市值"]),
-    );
-    expect(klineOption.legend?.selected).toEqual({
-      "PE(TTM)": false,
-      "PB(MRQ)": false,
-      "股息率(TTM)": false,
-      总市值: false,
-    });
-    expect(seriesByName["PE(TTM)"]?.data).toEqual([5.1, null]);
+    expect(klineOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
+    expect(klineOption.legend?.selected).toEqual({});
+    expect(seriesByName["PE(TTM)"]).toBeUndefined();
+    expect(seriesByName["PB(MRQ)"]).toBeUndefined();
+    expect(seriesByName["总市值"]).toBeUndefined();
     expect(klineOption.tooltip?.textStyle?.fontSize).toBe(10);
     expect(klineOption.tooltip?.padding).toEqual([6, 8]);
     expect(klineOption.grid?.[0]?.height).toBe("56%");

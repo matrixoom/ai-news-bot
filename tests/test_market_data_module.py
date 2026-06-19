@@ -352,28 +352,140 @@ class StockMarketModuleTests(unittest.TestCase):
             )
             connection.commit()
 
-    def test_stock_universe_sync_persists_a_share_and_etf_symbols(self) -> None:
-        """校验 A 股与 ETF 标的统一持久化，并可按名称或代码搜索。"""
+    def test_stock_universe_sync_persists_a_share_etf_and_lof_symbols(self) -> None:
+        """校验 A 股、ETF 与 LOF 标的统一持久化，并按真实市场和状态分类。"""
         repository = self._repository()
         syncer = StockMarketSyncService(
             repository=repository,
             stock_universe_loader=lambda: pd.DataFrame(
                 [
                     {"code": "000001", "name": "平安银行"},
+                    {"code": "000004", "name": "*ST国华"},
                     {"code": "688111", "name": "金山办公"},
                 ]
             ),
-            etf_universe_loader=lambda: pd.DataFrame([{"代码": "159915", "名称": "创业板ETF"}]),
+            etf_universe_loader=lambda: pd.DataFrame(
+                [
+                    {"代码": "159915", "名称": "创业板ETF", "类型": "指数型-股票"},
+                    {"代码": "510300", "名称": "沪深300ETF", "类型": "指数型-股票"},
+                    {"代码": "513100", "名称": "纳指ETF", "类型": "指数型-海外股票"},
+                ]
+            ),
+            lof_universe_loader=lambda: pd.DataFrame([{"基金代码": "160216", "基金简称": "国泰商品LOF"}]),
         )
 
         result = syncer.sync_universe()
         items, total = repository.search_instruments(query="平安", limit=10, offset=0)
 
-        self.assertEqual(result["total"], 3)
+        self.assertEqual(result["total"], 7)
         self.assertEqual(total, 1)
         self.assertEqual(items[0].symbol, "000001.SZ")
         self.assertEqual(repository.get_instrument("688111.SH").market_board, "科创板")
+        self.assertEqual(repository.get_instrument("000004.SZ").listing_status, "st")
         self.assertEqual(repository.get_instrument("159915.SZ").instrument_type, "etf")
+        self.assertEqual(repository.get_instrument("159915.SZ").market_board, "深市")
+        self.assertEqual(repository.get_instrument("510300.SH").market_board, "沪市")
+        self.assertEqual(repository.get_instrument("513100.SH").market_board, "境外")
+        self.assertEqual(repository.get_instrument("160216.SZ").instrument_type, "lof")
+        self.assertEqual(repository.get_instrument("160216.SZ").market_board, "深市")
+
+    def test_lof_universe_loader_falls_back_to_sina_category(self) -> None:
+        """校验东方财富 LOF 源不可用时，会回退新浪 LOF 分类源。"""
+        expected = pd.DataFrame([{"代码": "sz160216", "名称": "国泰商品LOF"}])
+
+        with (
+            patch("akshare.fund_lof_spot_em", side_effect=RuntimeError("eastmoney unavailable")),
+            patch("akshare.fund_exchange_rank_em", return_value=pd.DataFrame()) as rank_loader,
+            patch("akshare.fund_etf_category_sina", return_value=expected) as sina_loader,
+        ):
+            frame = stock_market_sync_service._ak_lof_universe()
+
+        sina_loader.assert_called_once_with(symbol="LOF基金")
+        rank_loader.assert_not_called()
+        self.assertEqual(frame.iloc[0]["代码"], "sz160216")
+
+    def test_existing_stock_table_migrates_to_accept_lof_instrument_type(self) -> None:
+        """校验旧库的证券类型约束会迁移，避免 LOF 入库被旧 CHECK 拦截。"""
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute(
+                """
+                CREATE TABLE market_stock_instrument (
+                    symbol TEXT PRIMARY KEY,
+                    code TEXT NOT NULL,
+                    exchange TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    instrument_type TEXT NOT NULL CHECK(instrument_type IN ('stock', 'etf')),
+                    market_board TEXT NOT NULL,
+                    listing_status TEXT NOT NULL,
+                    source_url TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.commit()
+
+        repository = self._repository()
+
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "160216.SZ",
+                    "code": "160216",
+                    "exchange": "SZ",
+                    "name": "国泰商品LOF",
+                    "instrument_type": "lof",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+
+        self.assertEqual(repository.get_instrument("160216.SZ").instrument_type, "lof")
+
+    def test_service_accepts_lof_st_and_delisted_filters(self) -> None:
+        """校验前端筛选契约支持 LOF、ST 和退市状态。"""
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "160216.SZ",
+                    "code": "160216",
+                    "exchange": "SZ",
+                    "name": "国泰商品LOF",
+                    "instrument_type": "lof",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                },
+                {
+                    "symbol": "000004.SZ",
+                    "code": "000004",
+                    "exchange": "SZ",
+                    "name": "*ST国华",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "st",
+                },
+                {
+                    "symbol": "000003.SZ",
+                    "code": "000003",
+                    "exchange": "SZ",
+                    "name": "PT金田A",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "delisted",
+                },
+            ]
+        )
+        service = StockMarketService(repository=repository, sync_service=Mock(spec=StockMarketSyncService))
+
+        lof_payload = service.build_instruments_payload(instrument_type="lof", ensure_universe=False)
+        st_payload = service.build_instruments_payload(listing_status="st", ensure_universe=False)
+        delisted_payload = service.build_instruments_payload(listing_status="delisted", ensure_universe=False)
+
+        self.assertEqual([item["symbol"] for item in lof_payload["items"]], ["160216.SZ"])
+        self.assertEqual([item["symbol"] for item in st_payload["items"]], ["000004.SZ"])
+        self.assertEqual([item["symbol"] for item in delisted_payload["items"]], ["000003.SZ"])
 
     def test_stock_universe_sync_keeps_stock_rows_when_etf_source_fails(self) -> None:
         """校验 ETF 上游失败不会拖垮 A 股标的入库。"""

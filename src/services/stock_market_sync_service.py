@@ -21,8 +21,10 @@ class StockMarketSyncService:
         repository: 股票市场本地仓储。
         stock_universe_loader: A 股代码名称加载函数，测试可注入。
         etf_universe_loader: ETF 代码名称加载函数，测试可注入。
+        lof_universe_loader: LOF 代码名称加载函数，测试可注入。
         stock_daily_loader: A 股日线加载函数，测试可注入。
         etf_daily_loader: ETF 日线加载函数，测试可注入。
+        lof_daily_loader: LOF 日线加载函数，测试可注入。
 
     Returns:
         可执行同步任务的服务实例。
@@ -34,8 +36,10 @@ class StockMarketSyncService:
         *,
         stock_universe_loader: DataFrameLoader | None = None,
         etf_universe_loader: DataFrameLoader | None = None,
+        lof_universe_loader: DataFrameLoader | None = None,
         stock_daily_loader: DataFrameLoader | None = None,
         etf_daily_loader: DataFrameLoader | None = None,
+        lof_daily_loader: DataFrameLoader | None = None,
         profile_loader: DataFrameLoader | None = None,
         benefit_loader: DataFrameLoader | None = None,
         cash_loader: DataFrameLoader | None = None,
@@ -50,8 +54,10 @@ class StockMarketSyncService:
             repository: 股票市场仓储。
             stock_universe_loader: A 股标的加载器。
             etf_universe_loader: ETF 标的加载器。
+            lof_universe_loader: LOF 标的加载器。
             stock_daily_loader: A 股日线加载器。
             etf_daily_loader: ETF 日线加载器。
+            lof_daily_loader: LOF 日线加载器。
             profile_loader: 公司概况加载器。
             benefit_loader: 利润表加载器。
             cash_loader: 现金流量表加载器。
@@ -64,8 +70,10 @@ class StockMarketSyncService:
         self._repository = repository or StockMarketRepository()
         self._stock_universe_loader = stock_universe_loader or _ak_stock_universe
         self._etf_universe_loader = etf_universe_loader or _ak_etf_universe
+        self._lof_universe_loader = lof_universe_loader or _ak_lof_universe
         self._stock_daily_loader = stock_daily_loader or _ak_stock_daily
         self._etf_daily_loader = etf_daily_loader or _ak_etf_daily
+        self._lof_daily_loader = lof_daily_loader or _ak_lof_daily
         self._profile_loader = profile_loader or _ak_stock_profile
         self._benefit_loader = benefit_loader or _ak_financial_benefit
         self._cash_loader = cash_loader or _ak_financial_cash
@@ -75,7 +83,7 @@ class StockMarketSyncService:
         self._financial_analysis_loader = financial_analysis_loader or _ak_financial_analysis
 
     def sync_universe(self) -> dict[str, Any]:
-        """同步 A 股全市场股票和 ETF 标的列表。
+        """同步 A 股全市场股票、ETF 和 LOF 标的列表。
 
         Returns:
             分类型写入数量和可展示的上游告警。
@@ -84,6 +92,7 @@ class StockMarketSyncService:
         warnings: list[str] = []
         stock_rows: list[dict[str, str]] = []
         etf_rows: list[dict[str, str]] = []
+        lof_rows: list[dict[str, str]] = []
         try:
             stock_rows = _stock_universe_from_frame(self._stock_universe_loader())
         except Exception as error:
@@ -94,13 +103,19 @@ class StockMarketSyncService:
         except Exception as error:
             logger.warning("ETF universe source failed: %s", _compact_error_message(error))
             warnings.append(f"ETF标的同步失败：{_compact_error_message(error)}")
+        try:
+            lof_rows = _lof_universe_from_frame(self._lof_universe_loader())
+        except Exception as error:
+            logger.warning("LOF universe source failed: %s", _compact_error_message(error))
+            warnings.append(f"LOF标的同步失败：{_compact_error_message(error)}")
 
-        rows = [*stock_rows, *etf_rows]
+        rows = [*stock_rows, *etf_rows, *lof_rows]
         if rows:
             self._repository.upsert_instruments(rows)
         return {
             "stock": len(stock_rows),
             "etf": len(etf_rows),
+            "lof": len(lof_rows),
             "total": len(rows),
             "warnings": warnings,
         }
@@ -121,7 +136,12 @@ class StockMarketSyncService:
             raise ValueError("start_date must be before end_date")
         # 为 MA120 留出足够的历史缓冲，避免窗口开始处均线断裂。
         padded_start = start_date - timedelta(days=220)
-        loader = self._etf_daily_loader if instrument.instrument_type == "etf" else self._stock_daily_loader
+        if instrument.instrument_type == "lof":
+            loader = self._lof_daily_loader
+        elif instrument.instrument_type == "etf":
+            loader = self._etf_daily_loader
+        else:
+            loader = self._stock_daily_loader
         frame = loader(
             symbol=instrument.code,
             start_date=padded_start.strftime("%Y%m%d"),
@@ -154,10 +174,10 @@ class StockMarketSyncService:
         return {"daily_bars": count}
 
     def sync_profile(self, instrument: StockInstrument) -> dict[str, int]:
-        """同步单只股票公司概况；ETF 使用基础信息兜底。"""
+        """同步单只股票公司概况；ETF/LOF 使用基础信息兜底。"""
 
-        if instrument.instrument_type == "etf":
-            self._repository.upsert_profile(_etf_profile(instrument))
+        if _is_fund_instrument(instrument):
+            self._repository.upsert_profile(_fund_profile(instrument))
             return {"profile": 1}
         try:
             frame = self._profile_loader(symbol=instrument.code)
@@ -169,9 +189,9 @@ class StockMarketSyncService:
         return {"profile": 1}
 
     def sync_financials(self, instrument: StockInstrument) -> dict[str, int]:
-        """同步单只股票财报摘要；ETF 没有公司财报，保持空结果。"""
+        """同步单只股票财报摘要；ETF/LOF 没有公司财报，保持空结果。"""
 
-        if instrument.instrument_type == "etf":
+        if _is_fund_instrument(instrument):
             return {"financial_metrics": 0}
         code = instrument.code
         benefit_frame = self._benefit_loader(symbol=code)
@@ -222,6 +242,20 @@ def _ak_etf_universe() -> Any:
             ("fund_etf_spot_ths", lambda: ak.fund_etf_spot_ths()),
             ("fund_etf_category_ths", lambda: ak.fund_etf_category_ths(symbol="ETF")),
             ("fund_etf_category_sina", lambda: ak.fund_etf_category_sina(symbol="ETF基金")),
+        ]
+    )
+
+
+def _ak_lof_universe() -> Any:
+    """读取 AkShare LOF 列表，主端点失败时回退场内基金排行和新浪分类。"""
+
+    import akshare as ak
+
+    return _first_successful_akshare_call(
+        [
+            ("fund_lof_spot_em", lambda: ak.fund_lof_spot_em()),
+            ("fund_etf_category_sina", lambda: ak.fund_etf_category_sina(symbol="LOF基金")),
+            ("fund_exchange_rank_em", lambda: ak.fund_exchange_rank_em()),
         ]
     )
 
@@ -322,6 +356,20 @@ def _ak_etf_daily(**kwargs: Any) -> Any:
                 ),
             ),
         ]
+    )
+
+
+def _ak_lof_daily(**kwargs: Any) -> Any:
+    """读取 LOF 历史日线。"""
+
+    import akshare as ak
+
+    return ak.fund_lof_hist_em(
+        symbol=str(kwargs["symbol"]),
+        period="daily",
+        start_date=str(kwargs["start_date"]),
+        end_date=str(kwargs["end_date"]),
+        adjust="",
     )
 
 
@@ -477,7 +525,7 @@ def _stock_universe_from_frame(frame: Any) -> list[dict[str, str]]:
             "name": name,
             "instrument_type": "stock",
             "market_board": _board_for_stock_code(code),
-            "listing_status": "listed",
+            "listing_status": _listing_status_for_name(name),
             "source_url": "https://akshare.akfamily.xyz/",
         })
     return _dedupe_rows(rows)
@@ -501,8 +549,33 @@ def _etf_universe_from_frame(frame: Any) -> list[dict[str, str]]:
             "exchange": exchange,
             "name": name,
             "instrument_type": "etf",
-            "market_board": "ETF",
-            "listing_status": "listed",
+            "market_board": _board_for_fund_code(code, name, _cell(row, ["类型", "基金类型"])),
+            "listing_status": _listing_status_for_name(name),
+            "source_url": "https://akshare.akfamily.xyz/",
+        })
+    return _dedupe_rows(rows)
+
+
+def _lof_universe_from_frame(frame: Any) -> list[dict[str, str]]:
+    """将 AkShare LOF 列表转换为统一标的列表。"""
+
+    rows: list[dict[str, str]] = []
+    for _, row in frame.iterrows():
+        code = _normalize_code(_cell(row, ["代码", "基金代码", "symbol", "code", "基金代码", "代码代码"]))
+        name = _cell(row, ["名称", "基金简称", "name", "基金简称", "简称"])
+        if not _is_lof_code(code) or not name:
+            continue
+        exchange = _exchange_for_code(code)
+        if not exchange:
+            continue
+        rows.append({
+            "symbol": f"{code}.{exchange}",
+            "code": code,
+            "exchange": exchange,
+            "name": name,
+            "instrument_type": "lof",
+            "market_board": _board_for_fund_code(code, name, _cell(row, ["类型", "基金类型"])),
+            "listing_status": _listing_status_for_name(name),
             "source_url": "https://akshare.akfamily.xyz/",
         })
     return _dedupe_rows(rows)
@@ -611,19 +684,21 @@ def _fallback_profile(instrument: StockInstrument) -> dict[str, Any]:
     }
 
 
-def _etf_profile(instrument: StockInstrument) -> dict[str, Any]:
-    """构造 ETF 概况。"""
+def _fund_profile(instrument: StockInstrument) -> dict[str, Any]:
+    """构造 ETF/LOF 概况。"""
+
+    fund_type = "LOF" if instrument.instrument_type == "lof" else "ETF"
 
     return {
         "symbol": instrument.symbol,
         "company_name": instrument.name,
-        "industry": "ETF",
-        "sector": "ETF",
+        "industry": fund_type,
+        "sector": instrument.market_board,
         "region": "",
         "listing_date": "",
-        "attributes": ["ETF"],
-        "summary": f"{instrument.name} 是交易型开放式指数基金，暂无公司财报口径。",
-        "provider_key": "akshare_etf",
+        "attributes": [fund_type],
+        "summary": f"{instrument.name} 是{fund_type}场内基金，暂无公司财报口径。",
+        "provider_key": f"akshare_{instrument.instrument_type}",
         "source_url": "https://akshare.akfamily.xyz/",
     }
 
@@ -821,6 +896,12 @@ def _infer_stock_attributes(instrument: StockInstrument, industry: str) -> list[
     return attributes
 
 
+def _is_fund_instrument(instrument: StockInstrument) -> bool:
+    """判断标的是否为没有公司财报口径的场内基金。"""
+
+    return instrument.instrument_type in {"etf", "lof"}
+
+
 def _board_for_stock_code(code: str) -> str:
     """按 A 股代码前缀识别交易板块。"""
 
@@ -837,12 +918,75 @@ def _board_for_stock_code(code: str) -> str:
     return "A股"
 
 
+def _board_for_fund_code(code: str, name: str, category: str = "") -> str:
+    """按基金底层资产和上市交易所识别市场类型。
+
+    Args:
+        code: 六位基金代码。
+        name: 基金简称。
+        category: AkShare 返回的基金类型字段。
+
+    Returns:
+        `境外`、`沪市`、`深市` 或兜底的 `场内基金`。
+    """
+
+    if _is_overseas_fund(name, category):
+        return "境外"
+    exchange = _exchange_for_code(code)
+    if exchange == "SH":
+        return "沪市"
+    if exchange == "SZ":
+        return "深市"
+    return "场内基金"
+
+
+def _listing_status_for_name(name: str) -> str:
+    """从简称识别上市、ST 或退市状态。"""
+
+    normalized = name.strip().upper()
+    if "退市" in name or normalized.startswith(("退", "PT")):
+        return "delisted"
+    if normalized.startswith(("*ST", "ST", "S*ST", "SST")):
+        return "st"
+    return "listed"
+
+
+def _is_overseas_fund(name: str, category: str = "") -> bool:
+    """判断场内基金是否主要跟踪境外市场。"""
+
+    text = f"{name} {category}".upper()
+    overseas_keywords = (
+        "海外",
+        "QDII",
+        "港股",
+        "香港",
+        "恒生",
+        "恒指",
+        "纳指",
+        "纳斯达克",
+        "标普",
+        "日经",
+        "日本",
+        "德国",
+        "法国",
+        "韩国",
+        "中韩",
+        "沙特",
+        "亚太",
+        "印度",
+        "美国",
+        "中概",
+        "全球",
+    )
+    return any(keyword.upper() in text for keyword in overseas_keywords)
+
+
 def _exchange_for_code(code: str) -> str:
     """按代码前缀推断交易所后缀。"""
 
-    if code.startswith(("600", "601", "603", "605", "688", "689", "510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588")):
+    if code.startswith(("600", "601", "603", "605", "688", "689", "501", "502", "510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588")):
         return "SH"
-    if code.startswith(("000", "001", "002", "003", "300", "301", "150", "159", "160", "161", "162")):
+    if code.startswith(("000", "001", "002", "003", "300", "301", "150", "159", "160", "161", "162", "163", "164", "165", "166", "167", "168", "169")):
         return "SZ"
     if code.startswith(("8", "4", "920")):
         return "BJ"
@@ -852,13 +996,26 @@ def _exchange_for_code(code: str) -> str:
 def _is_stock_code(code: str) -> bool:
     """判断是否为 6 位 A 股股票代码。"""
 
-    return bool(re.fullmatch(r"\d{6}", code)) and bool(_exchange_for_code(code)) and not _is_etf_code(code)
+    return (
+        bool(re.fullmatch(r"\d{6}", code))
+        and bool(_exchange_for_code(code))
+        and not _is_etf_code(code)
+        and not _is_lof_code(code)
+    )
 
 
 def _is_etf_code(code: str) -> bool:
     """判断是否为常见沪深 ETF 代码。"""
 
-    return bool(re.fullmatch(r"\d{6}", code)) and code.startswith(("15", "16", "51", "56", "58"))
+    return bool(re.fullmatch(r"\d{6}", code)) and not _is_lof_code(code) and code.startswith(("15", "51", "56", "58"))
+
+
+def _is_lof_code(code: str) -> bool:
+    """判断是否为常见沪深 LOF 代码。"""
+
+    return bool(re.fullmatch(r"\d{6}", code)) and code.startswith(
+        ("160", "161", "162", "163", "164", "165", "166", "167", "168", "169", "501", "502")
+    )
 
 
 def _cell(row: Any, keys: Sequence[str]) -> str:

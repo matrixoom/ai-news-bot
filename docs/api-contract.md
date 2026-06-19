@@ -241,14 +241,14 @@ uv run python main.py macro-sync
 
 ### 4.4.2 `GET /api/frontend/modules/market-data/stocks`
 
-用途：股票市场页读取 A 股全市场股票与 ETF 标的列表。服务在本地标的池为空时会尝试通过 AkShare 首次同步股票代码/名称并落库，避免每次搜索都访问外部接口。
+用途：股票市场页读取 A 股全市场股票、ETF 与 LOF 标的列表。服务在本地标的池为空时会尝试通过 AkShare 首次同步股票代码/名称并落库，避免每次搜索都访问外部接口。
 
 查询参数：
 
 - `query`：股票代码、带后缀代码或名称关键字。
-- `instrument_type`：`all | stock | etf`，默认 `all`。
-- `market_board`：`all | 沪市主板 | 深市主板 | 科创板 | 创业板 | 北交所 | ETF`，默认 `all`。
-- `listing_status`：`all | listed`，默认 `all`。
+- `instrument_type`：`all | stock | etf | lof`，默认 `all`。
+- `market_board`：`all | 沪市 | 深市 | 沪市主板 | 深市主板 | 科创板 | 创业板 | 北交所 | 境外`，默认 `all`。ETF/LOF 不再使用 `ETF` 作为市场类型，境外 ETF 归入 `境外`。
+- `listing_status`：`all | listed | st | delisted`，默认 `all`。
 - `limit` / `offset`：分页参数，`limit` 最大 200。
 
 成功：`200`
@@ -409,7 +409,7 @@ uv run python main.py macro-sync
 
 ### 4.4.4 `POST /api/frontend/modules/market-data/stocks/sync-universe`
 
-用途：手动刷新 A 股/ETF 基础标的池。股票优先来自 AkShare `stock_info_a_code_name`，失败时回退 A 股快照端点；ETF 优先来自 `fund_etf_spot_em`，失败时回退同花顺/新浪 ETF 端点。本地表以 `symbol` 幂等 upsert，不删除既有标的。股票与 ETF 分段容错，任一来源失败时不阻断另一来源入库，失败详情通过 `warnings` 返回。
+用途：手动刷新 A 股/ETF/LOF 基础标的池。股票优先来自 AkShare `stock_info_a_code_name`，失败时回退 A 股快照端点；ETF 优先来自 `fund_etf_spot_em`，失败时回退同花顺/新浪 ETF 端点；LOF 优先来自 `fund_lof_spot_em`，失败时回退新浪 `LOF基金` 分类，再以场内基金排行端点兜底。本地表以 `symbol` 幂等 upsert，不删除既有标的。股票、ETF 与 LOF 分段容错，任一来源失败时不阻断另一来源入库，失败详情通过 `warnings` 返回。
 
 成功：`200`
 
@@ -419,7 +419,8 @@ uv run python main.py macro-sync
   "counts": {
     "stock": 5200,
     "etf": 438,
-    "total": 5638
+    "lof": 120,
+    "total": 5758
   },
   "warnings": []
 }
@@ -429,7 +430,7 @@ uv run python main.py macro-sync
 
 ### 4.4.5 `POST /api/frontend/modules/market-data/stocks/refresh-all`
 
-用途：启动“全部标的”后台刷新任务。服务会逐只刷新当前本地上市股票/ETF 的近 1 个月日线行情和公司概况；股票额外刷新财务指标，ETF 不拉取公司财报。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态。服务按上海本地日期做每日限次，同一天最多实际执行一次；重复点击会返回正在运行的任务或 `skipped` 状态。
+用途：启动“全部标的”后台刷新任务。服务会逐只刷新当前本地上市和 ST 状态股票、ETF、LOF 的近 1 个月日线行情和公司概况；股票额外刷新财务指标，ETF/LOF 不拉取公司财报。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态。服务按上海本地日期做每日限次，同一天最多实际执行一次；重复点击会返回正在运行的任务或 `skipped` 状态。
 
 成功：`202`
 
@@ -486,7 +487,7 @@ uv run python main.py macro-sync
 
 ### 4.4.9 `GET /api/frontend/modules/market-data/stocks/{symbol}`
 
-用途：返回选中股票/ETF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 1 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
+用途：返回选中股票/ETF/LOF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 1 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
 
 查询参数：
 
@@ -496,7 +497,7 @@ uv run python main.py macro-sync
 
 日线同步策略：
 
-- A 股使用 AkShare `stock_zh_a_hist`，ETF 使用 `fund_etf_hist_em`。
+- A 股使用 AkShare `stock_zh_a_hist`，ETF 使用 `fund_etf_hist_em`，LOF 使用 `fund_lof_hist_em`。
 - A 股日线在东方财富端点失败时回退 `stock_zh_a_hist_tx` / `stock_zh_a_daily`；腾讯接口的 `amount` 手数会转换为统一的 `volume` 股数。ETF 日线在东方财富端点失败时回退 `fund_etf_hist_sina`。
 - 本地事实表以 `(symbol, trade_date)` 作为幂等键，刷新同一天只更新，不重复插入。
 - 服务会为 MA120 额外拉取起始日前约 220 天缓冲数据，返回 payload 仍只包含用户所选时间跨度。
@@ -566,8 +567,8 @@ OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短�
 
 ### 4.4.10 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
 
-用途：手动刷新选中股票/ETF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。股票会同时
-强制刷新财务指标，确保 ROE、营收同比、净利润同比和资产负债率可以补采最新季度数据；ETF 不执行
+用途：手动刷新选中股票/ETF/LOF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。股票会同时
+强制刷新财务指标，确保 ROE、营收同比、净利润同比和资产负债率可以补采最新季度数据；ETF/LOF 不执行
 公司财务指标刷新。
 
 请求体：

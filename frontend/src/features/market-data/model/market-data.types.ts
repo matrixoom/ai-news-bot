@@ -89,7 +89,7 @@ export type StockInstrument = {
   code: string;
   exchange: string;
   name: string;
-  instrument_type: "stock" | "etf";
+  instrument_type: "stock" | "etf" | "lof";
   market_board: string;
   listing_status: string;
   updated_at: string;

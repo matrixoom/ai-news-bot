@@ -426,7 +426,7 @@ class StockMarketService:
 
         Args:
             query: 股票代码或名称关键字。
-            instrument_type: 股票/ETF 类型筛选。
+            instrument_type: 股票/ETF/LOF 类型筛选。
             market_board: 市场板块筛选。
             listing_status: 上市状态筛选。
             limit: 分页条数。
@@ -448,12 +448,16 @@ class StockMarketService:
                     universe_warning = "；".join(str(item) for item in warnings)
             except Exception as error:
                 logger.warning("stock universe sync failed: %s", error)
-                universe_warning = f"股票列表同步失败：{error}"
+            universe_warning = f"股票列表同步失败：{error}"
         items, total = self._repository.search_instruments(
             query=query,
-            instrument_type=self._validate_filter(instrument_type, {"all", "stock", "etf"}, "invalid stock type"),
+            instrument_type=self._validate_filter(instrument_type, {"all", "stock", "etf", "lof"}, "invalid stock type"),
             market_board=market_board or "all",
-            listing_status=self._validate_filter(listing_status, {"all", "listed"}, "invalid listing status"),
+            listing_status=self._validate_filter(
+                listing_status,
+                {"all", "listed", "st", "delisted"},
+                "invalid listing status",
+            ),
             limit=normalized_limit,
             offset=normalized_offset,
         )
@@ -546,10 +550,10 @@ class StockMarketService:
         return payload
 
     def _load_all_refresh_instruments(self) -> list[StockInstrument]:
-        """按分页读取全部上市标的，避免一次性加载超大结果集。
+        """按分页读取全部可交易标的，避免一次性加载超大结果集。
 
         Returns:
-            当前库内全部上市股票和 ETF 标的。
+            当前库内上市和 ST 状态的股票、ETF、LOF 标的。
         """
 
         instruments: list[StockInstrument] = []
@@ -560,11 +564,13 @@ class StockMarketService:
                 query="",
                 instrument_type="all",
                 market_board="all",
-                listing_status="listed",
+                listing_status="all",
                 limit=page_size,
                 offset=offset,
             )
-            instruments.extend(items)
+            instruments.extend(
+                item for item in items if item.listing_status in {"listed", "st"}
+            )
             offset += page_size
             if offset >= total or not items:
                 break

@@ -37,23 +37,28 @@ const STOCK_RANGE_OPTIONS = [
 
 const MARKET_BOARD_OPTIONS = [
   { value: "all", label: "全部" },
+  { value: "沪市", label: "沪市" },
+  { value: "深市", label: "深市" },
   { value: "沪市主板", label: "沪市主板" },
   { value: "深市主板", label: "深市主板" },
   { value: "科创板", label: "科创板" },
   { value: "创业板", label: "创业板" },
   { value: "北交所", label: "北交所" },
-  { value: "ETF", label: "ETF" },
+  { value: "境外", label: "境外" },
 ];
 
 const INSTRUMENT_TYPE_OPTIONS = [
   { value: "all", label: "全部" },
   { value: "stock", label: "股票" },
   { value: "etf", label: "ETF" },
+  { value: "lof", label: "LOF" },
 ];
 
 const LISTING_STATUS_OPTIONS = [
   { value: "all", label: "全部" },
   { value: "listed", label: "上市" },
+  { value: "st", label: "ST" },
+  { value: "delisted", label: "退市" },
 ];
 
 const FINANCIAL_ORDER = [
@@ -453,6 +458,13 @@ function ResearchSummaryPanel(props: {
     latest && previous && previous.close !== 0
       ? ((latest.close - previous.close) / previous.close) * 100
       : null;
+  const rangeChangeRate = calculateRangeChangeRate(props.bars);
+  const rangeChangeTone =
+    rangeChangeRate === null || rangeChangeRate === 0
+      ? "text-muted"
+      : rangeChangeRate > 0
+        ? "text-positive"
+        : "text-negative";
   const direction = changeRate === null || changeRate === 0 ? "平盘" : changeRate > 0 ? "上涨" : "下跌";
   const directionTone =
     changeRate === null || changeRate === 0 ? "text-muted" : changeRate > 0 ? "text-positive" : "text-negative";
@@ -504,6 +516,15 @@ function ResearchSummaryPanel(props: {
         <SummaryRow label="成交量" value={latest ? formatCompactNumber(latest.volume) : "--"} />
         <SummaryRow label="市盈率 TTM" value={latest?.pe_ttm === null || latest?.pe_ttm === undefined ? "--" : formatNumber(latest.pe_ttm, 2)} />
         <SummaryRow label="市净率 MRQ" value={latest?.pb_mrq === null || latest?.pb_mrq === undefined ? "--" : formatNumber(latest.pb_mrq, 2)} />
+        <SummaryRow
+          label="总市值"
+          value={latest?.total_market_cap === null || latest?.total_market_cap === undefined ? "--" : `${formatNumber(latest.total_market_cap, 2)}亿`}
+        />
+        <SummaryRow
+          label="区间涨幅"
+          tone={rangeChangeTone}
+          value={rangeChangeRate === null ? "--" : `${formatSigned(rangeChangeRate, 2)}%`}
+        />
       </dl>
       <p className="mt-3 text-[11px] leading-5 text-muted">
         数据更新时间：{props.syncedAt ? formatLocalDateTime(props.syncedAt) : "尚未记录"}
@@ -804,7 +825,12 @@ function InstrumentRow(props: {
   const latestPrice = props.instrument.latest_price;
   const priceTone = latestPrice === undefined || latestPrice === null ? "text-muted" : "text-positive";
   const marketLabel = props.instrument.market_board.replace("主板", "");
-  const typeLabel = props.instrument.instrument_type === "etf" ? "ETF" : "股票";
+  const typeLabel =
+    props.instrument.instrument_type === "etf"
+      ? "ETF"
+      : props.instrument.instrument_type === "lof"
+        ? "LOF"
+        : "股票";
   const latestPriceLabel = latestPrice === undefined || latestPrice === null ? "--" : formatNumber(latestPrice, 3);
   const hoverDescription = `代码：${props.instrument.symbol}；名称：${props.instrument.name}；市场：${marketLabel}；类型：${typeLabel}；最新价：${latestPriceLabel}`;
   return (
@@ -1020,50 +1046,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
     const isIndexChart = props.mode === "index";
     const legendData = isIndexChart
       ? ["MA5", "MA10", "MA20", "MA60", "MA120"]
-      : [
-          "K线",
-          "MA5",
-          "MA10",
-          "MA20",
-          "MA60",
-          "MA120",
-          "PE(TTM)",
-          "PB(MRQ)",
-          "股息率(TTM)",
-          "总市值",
-        ];
-    const valuationSeries = isIndexChart
-      ? []
-      : [
-          valuationLineSeries(
-            "PE(TTM)",
-            props.bars.map((bar) => bar.pe_ttm),
-            "#f97316",
-            2,
-            "倍",
-          ),
-          valuationLineSeries(
-            "PB(MRQ)",
-            props.bars.map((bar) => bar.pb_mrq),
-            "#ec4899",
-            3,
-            "倍",
-          ),
-          valuationLineSeries(
-            "股息率(TTM)",
-            props.bars.map((bar) => bar.dividend_yield_ttm),
-            "#14b8a6",
-            4,
-            "%",
-          ),
-          valuationLineSeries(
-            "总市值",
-            props.bars.map((bar) => bar.total_market_cap),
-            "#6366f1",
-            5,
-            "亿元",
-          ),
-        ];
+      : ["K线", "MA5", "MA10", "MA20", "MA60", "MA120"];
     return {
       animation: false,
       tooltip: {
@@ -1084,14 +1067,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         itemHeight: 8,
         textStyle: chartTheme.legendText,
         data: legendData,
-        selected: isIndexChart
-          ? {}
-          : {
-              "PE(TTM)": false,
-              "PB(MRQ)": false,
-              "股息率(TTM)": false,
-              总市值: false,
-            },
+        selected: {},
       },
       grid: [
         { left: 54, right: 112, top: 38, height: "56%" },
@@ -1126,10 +1102,6 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
           axisLine: { show: false },
           splitLine: chartTheme.valueAxis.splitLine,
         },
-        hiddenValuationAxis(0),
-        hiddenValuationAxis(0),
-        hiddenValuationAxis(0),
-        hiddenValuationAxis(0),
       ],
       dataZoom: [
         { type: "inside", xAxisIndex: [0, 1] },
@@ -1152,7 +1124,6 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         lineSeries("MA20", props.bars.map((bar) => bar.ma20), "#a78bfa"),
         lineSeries("MA60", props.bars.map((bar) => bar.ma60), "#34d399"),
         lineSeries("MA120", props.bars.map((bar) => bar.ma120), "#93c5fd"),
-        ...valuationSeries,
         {
           name: "成交量",
           type: "bar",
@@ -1625,53 +1596,6 @@ function lineSeries(name: string, data: Array<number | null>, color: string) {
     data,
     lineStyle: { color, width: 1.4 },
     itemStyle: { color },
-  };
-}
-
-/**
- * 创建不显示刻度的估值轴，确保不同量纲不会改变价格轴范围。
- * @param gridIndex 估值序列所在的主图网格。
- * @returns ECharts 隐藏数值轴配置。
- */
-function hiddenValuationAxis(gridIndex: number) {
-  return {
-    type: "value" as const,
-    gridIndex,
-    scale: true,
-    show: false,
-  };
-}
-
-/**
- * 创建日频估值折线，并为 tooltip 补充指标单位。
- * @param name 图例名称。
- * @param data 与交易日对齐的可空指标值。
- * @param color 折线颜色。
- * @param yAxisIndex 独立估值轴索引。
- * @param unit tooltip 展示单位。
- * @returns ECharts 折线序列配置。
- */
-function valuationLineSeries(
-  name: string,
-  data: Array<number | null>,
-  color: string,
-  yAxisIndex: number,
-  unit: string,
-) {
-  return {
-    name,
-    type: "line" as const,
-    yAxisIndex,
-    smooth: true,
-    symbol: "none",
-    connectNulls: false,
-    data,
-    lineStyle: { color, width: 1.4 },
-    itemStyle: { color },
-    tooltip: {
-      valueFormatter: (value: unknown) =>
-        typeof value === "number" ? `${formatNumber(value, 2)}${unit}` : "--",
-    },
   };
 }
 
