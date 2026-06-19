@@ -1249,7 +1249,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
     def test_all_instrument_refresh_runs_once_per_local_day(self) -> None:
-        """校验全标的刷新逐只补采近一月行情、概况和财务，且同一天不会重复启动。"""
+        """校验全标的刷新逐只补采近六月行情、概况和财务，且同一天不会重复启动。"""
         repository = self._repository()
         repository.upsert_instruments(
             [
@@ -1284,7 +1284,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         class FixedDate(date):
-            """固定当前日期，确保近一月窗口和每日限次可断言。"""
+            """固定当前日期，确保近六月窗口和每日限次可断言。"""
 
             @classmethod
             def today(cls) -> date:
@@ -1304,7 +1304,7 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertIn("今日已完成", skipped["message"])
         self.assertEqual(syncer.sync_symbol_window.call_count, 2)
         first_call = syncer.sync_symbol_window.call_args_list[0]
-        self.assertEqual(first_call.kwargs["start_date"], date(2026, 5, 19))
+        self.assertEqual(first_call.kwargs["start_date"], date(2025, 12, 19))
         self.assertEqual(first_call.kwargs["end_date"], date(2026, 6, 19))
         self.assertEqual(syncer.sync_profile.call_count, 2)
         syncer.sync_financials.assert_called_once_with(repository.get_instrument("000001.SZ"))

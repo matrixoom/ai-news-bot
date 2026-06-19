@@ -459,16 +459,16 @@ describe("StockMarketWorkspace", () => {
     render(<StockMarketWorkspace />);
 
     await user.click(screen.getByRole("button", { name: "第 2 页" }));
-    expect(within(screen.getByRole("table")).getByText("000016.SZ")).toBeInTheDocument();
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 15 });
+    expect(within(screen.getByRole("table")).getByText("000019.SZ")).toBeInTheDocument();
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 18 });
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
     expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 15 });
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 18 });
 
     await user.click(screen.getByRole("button", { name: "上一页" }));
     expect(within(screen.getByRole("table")).getByText("000001.SZ")).toBeInTheDocument();
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 15 });
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 18 });
   });
 
   it("applies search and dropdown filters and resets pagination", async () => {
@@ -487,7 +487,7 @@ describe("StockMarketWorkspace", () => {
         instrumentType: "etf",
         marketBoard: "深市",
         page: 1,
-        pageSize: 15,
+        pageSize: 18,
       });
     });
     expect(within(screen.getByLabelText("市场类型")).queryByRole("option", { name: "ETF" })).not.toBeInTheDocument();
@@ -716,7 +716,7 @@ describe("StockMarketWorkspace", () => {
   it("adapts the instrument page size to the available list height", async () => {
     render(<StockMarketWorkspace />);
 
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 15 });
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 18 });
     const listBody = screen.getByTestId("instrument-list-body");
     const resizeEntry = {
       target: listBody,
@@ -728,7 +728,7 @@ describe("StockMarketWorkspace", () => {
     });
 
     await waitFor(() => {
-      expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 15 });
+      expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 18 });
     });
   });
 
@@ -747,8 +747,8 @@ describe("StockMarketWorkspace", () => {
       resizeObserverCallbacks[0]?.([resizeEntry], {} as ResizeObserver);
     });
 
-    expect(within(screen.getByRole("table")).getByText("000016.SZ")).toBeInTheDocument();
-    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 15 });
+    expect(within(screen.getByRole("table")).getByText("000019.SZ")).toBeInTheDocument();
+    expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 2, pageSize: 18 });
   });
 
   it("uses compact overview range controls", () => {

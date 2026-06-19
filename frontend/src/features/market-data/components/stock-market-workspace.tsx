@@ -72,7 +72,7 @@ const FINANCIAL_ORDER = [
   "net_profit_yoy",
   "debt_asset_ratio",
 ];
-const DEFAULT_INSTRUMENT_PAGE_SIZE = 15;
+const DEFAULT_INSTRUMENT_PAGE_SIZE = 18;
 type StockDetailTab = "overview" | "financial";
 type StockPriceAdjustment = "none" | "forward" | "backward";
 
@@ -661,7 +661,7 @@ function InstrumentListPanel(props: {
             className="workbench-icon-button h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={props.allRefreshStarting}
             onClick={props.onRefreshAll}
-            title="后台刷新全部标的近 1 个月行情、公司概况和财务数据"
+            title="后台刷新全部标的近 6 个月行情、公司概况和财务数据"
             type="button"
           >
             <ArrowPathIcon
