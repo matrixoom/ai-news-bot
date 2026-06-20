@@ -1325,6 +1325,54 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(sync_call.kwargs["start_date"], date(2026, 5, 7))
         self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 7))
 
+    def test_stock_detail_can_skip_access_count_for_default_selection(self) -> None:
+        """校验页面默认选中读取详情时，可显式跳过访问热度计数。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_daily_bars(
+            "000001.SZ",
+            [
+                {
+                    "trade_date": "2026-06-01",
+                    "open_price": 10,
+                    "close_price": 11,
+                    "high_price": 12,
+                    "low_price": 9,
+                    "volume": 1000,
+                    "ma5": None,
+                    "ma10": None,
+                    "ma20": None,
+                    "ma60": None,
+                    "ma120": None,
+                }
+            ],
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        service.build_stock_detail_payload(
+            "000001.SZ",
+            range_type="custom",
+            start_date="2026-06-01",
+            end_date="2026-06-01",
+            record_access=False,
+        )
+
+        self.assertEqual(repository.get_instrument("000001.SZ").access_count, 0)
+
     def test_manual_refresh_forces_financial_indicator_sync(self) -> None:
         """校验手动刷新即使已有旧财务数据，也会主动补采最新财务指标。"""
         repository = self._repository()

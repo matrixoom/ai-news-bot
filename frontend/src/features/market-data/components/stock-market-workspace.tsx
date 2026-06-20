@@ -95,6 +95,7 @@ const TURTLE_HELP_TEXT = {
 } as const;
 type StockDetailTab = "overview" | "financial";
 type StockPriceAdjustment = "none" | "forward" | "backward";
+type TurtleTradingSystem = "systemOne" | "systemTwo";
 type TurtleThresholdSignal = {
   isReady: boolean;
   threshold: number | null;
@@ -112,6 +113,16 @@ type TurtleTradingMetrics = {
 };
 
 /**
+ * 清理公司摘要中的旧兜底标签。
+ *
+ * @param summary 后端返回或历史库中保存的公司摘要。
+ * @returns 去掉内部字段标签后的展示文案。
+ */
+function normalizeCompanySummary(summary: string) {
+  return summary.replace(/公司概况/g, "").trim();
+}
+
+/**
  * 渲染股票市场页，布局对齐截图中的交易终端式信息密度。
  */
 export function StockMarketWorkspace() {
@@ -120,6 +131,7 @@ export function StockMarketWorkspace() {
   const [marketBoard, setMarketBoard] = useState("all");
   const [listingStatus, setListingStatus] = useState("all");
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [detailAccessIntent, setDetailAccessIntent] = useState({ accessRequestId: 0, recordAccess: false });
   const [range, setRange] = useState<MarketDataRangeSelection>({ type: "1m" });
   const [financialReportType, setFinancialReportType] = useState<StockFinancialReportType>("quarterly");
   const [financialRange, setFinancialRange] = useState<MarketDataRangeSelection>({ type: "5y" });
@@ -134,6 +146,7 @@ export function StockMarketWorkspace() {
   const [selectedIndexSymbol, setSelectedIndexSymbol] = useState<string | null>(null);
   const [indexRange, setIndexRange] = useState<MarketDataRangeSelection>({ type: "1m" });
   const [isAllRefreshDialogOpen, setIsAllRefreshDialogOpen] = useState(false);
+  const pendingSearchSelectionRef = useRef(false);
 
   const instrumentsQuery = useStockMarketInstrumentsQuery({
     query: searchText,
@@ -143,7 +156,7 @@ export function StockMarketWorkspace() {
     page: instrumentPage,
     pageSize: instrumentPageSize,
   });
-  const detailQuery = useStockMarketDetailQuery(selectedSymbol, range, financialReportType);
+  const detailQuery = useStockMarketDetailQuery(selectedSymbol, range, financialReportType, detailAccessIntent);
   const overviewQuery = useStockMarketOverviewQuery();
   const overviewRefreshMutation = useStockMarketOverviewRefreshMutation();
   const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType);
@@ -161,16 +174,33 @@ export function StockMarketWorkspace() {
     [overviewQuery.data?.indices, selectedIndexSymbol],
   );
 
+  /** 标记下一次详情请求是否应计入访问热度，手动点击同一行也会重新请求。 */
+  const updateDetailAccessIntent = useCallback((recordAccess: boolean) => {
+    setDetailAccessIntent((current) => ({
+      accessRequestId: recordAccess ? current.accessRequestId + 1 : current.accessRequestId,
+      recordAccess,
+    }));
+  }, []);
+
   useEffect(() => {
     if (instrumentsQuery.isPending) return;
     if (instruments.length === 0) {
       setSelectedSymbol(null);
+      pendingSearchSelectionRef.current = false;
       return;
     }
     if (!selectedSymbol || !instruments.some((instrument) => instrument.symbol === selectedSymbol)) {
+      updateDetailAccessIntent(pendingSearchSelectionRef.current && searchText.trim().length > 0);
+      pendingSearchSelectionRef.current = false;
       setSelectedSymbol(instruments[0].symbol);
     }
-  }, [instruments, instrumentsQuery.isPending, selectedSymbol]);
+  }, [instruments, instrumentsQuery.isPending, searchText, selectedSymbol, updateDetailAccessIntent]);
+
+  useEffect(() => {
+    if (!detailAccessIntent.recordAccess || detailQuery.isPending) return;
+    if (detailQuery.data?.instrument.symbol !== selectedSymbol) return;
+    setDetailAccessIntent((current) => ({ ...current, recordAccess: false }));
+  }, [detailAccessIntent.recordAccess, detailQuery.data?.instrument.symbol, detailQuery.isPending, selectedSymbol]);
 
   useEffect(() => {
     if (instrumentsQuery.isPending || instrumentPage <= instrumentPageCount) return;
@@ -181,6 +211,14 @@ export function StockMarketWorkspace() {
   function handleSearchTextChange(value: string) {
     setSearchText(value);
     setInstrumentPage(1);
+    pendingSearchSelectionRef.current = value.trim().length > 0;
+    setSelectedSymbol(null);
+  }
+
+  /** 记录用户主动点击列表行，并切换当前详情标的。 */
+  function handleInstrumentSelect(symbol: string) {
+    updateDetailAccessIntent(true);
+    setSelectedSymbol(symbol);
   }
 
   /** 更新证券类型并回到筛选结果第一页。 */
@@ -279,7 +317,7 @@ export function StockMarketWorkspace() {
               onRefreshAll={() => setIsAllRefreshDialogOpen(true)}
               onPageChange={setInstrumentPage}
               onPageSizeChange={handleInstrumentPageSizeChange}
-              onSelect={setSelectedSymbol}
+              onSelect={handleInstrumentSelect}
               pageSize={instrumentPageSize}
               selectedSymbol={selectedSymbol}
               total={instrumentTotal}
@@ -547,6 +585,28 @@ function ResearchSummaryPanel(props: {
   const direction = changeRate === null || changeRate === 0 ? "平盘" : changeRate > 0 ? "上涨" : "下跌";
   const directionTone =
     changeRate === null || changeRate === 0 ? "text-muted" : changeRate > 0 ? "text-positive" : "text-negative";
+  const [selectedTurtleSystem, setSelectedTurtleSystem] = useState<TurtleTradingSystem>("systemOne");
+  const companySummary = normalizeCompanySummary(props.companySummary);
+  const selectedTurtleSignals =
+    selectedTurtleSystem === "systemOne"
+      ? {
+          entry: turtleMetrics.systemOneEntry,
+          entryHelpText: TURTLE_HELP_TEXT.systemOneEntry,
+          entryLabel: "入场",
+          exit: turtleMetrics.systemOneExit,
+          exitHelpText: TURTLE_HELP_TEXT.systemOneExit,
+          exitLabel: "离场",
+          exitThresholdLabel: "10日低点",
+        }
+      : {
+          entry: turtleMetrics.systemTwoEntry,
+          entryHelpText: TURTLE_HELP_TEXT.systemTwoEntry,
+          entryLabel: "入场",
+          exit: turtleMetrics.systemTwoExit,
+          exitHelpText: TURTLE_HELP_TEXT.systemTwoExit,
+          exitLabel: "离场",
+          exitThresholdLabel: "20日低点",
+        };
 
   if (props.isCollapsed) {
     return (
@@ -597,7 +657,7 @@ function ResearchSummaryPanel(props: {
       </div>
       <h3 className="mt-2 text-base font-semibold text-ink">{props.industry || "基础行情观察"}</h3>
       <p className="mt-2 text-sm leading-6 text-muted">
-        {props.companySummary || "基于当前选择窗口展示价格趋势、成交量与估值指标，供进一步研究核验。"}
+        {companySummary || "基于当前选择窗口展示价格趋势、成交量与估值指标，供进一步研究核验。"}
       </p>
       <dl className="mt-4 divide-y divide-line border-y border-line">
         <SummaryRow label="最新收盘" value={latest ? formatNumber(latest.close, 2) : "--"} />
@@ -628,29 +688,31 @@ function ResearchSummaryPanel(props: {
           label="20日平滑N"
           value={turtleMetrics.n === null ? "--" : formatNumber(turtleMetrics.n, 2)}
         />
+        <div className="flex items-center justify-between gap-3 py-2.5 text-xs">
+          <dt className="text-muted">交易系统</dt>
+          <dd>
+            <select
+              aria-label="海龟交易系统"
+              className="workbench-input h-8 min-w-24 py-1 text-xs font-semibold"
+              onChange={(event) => setSelectedTurtleSystem(event.target.value as TurtleTradingSystem)}
+              value={selectedTurtleSystem}
+            >
+              <option value="systemOne">系统一</option>
+              <option value="systemTwo">系统二</option>
+            </select>
+          </dd>
+        </div>
         <SummaryRow
-          helpText={TURTLE_HELP_TEXT.systemOneEntry}
-          label="系统一入场"
-          tone={turtleMetrics.systemOneEntry.triggered ? "text-positive" : undefined}
-          value={formatTurtleEntrySignal(turtleMetrics.systemOneEntry)}
+          helpText={selectedTurtleSignals.entryHelpText}
+          label={selectedTurtleSignals.entryLabel}
+          tone={selectedTurtleSignals.entry.triggered ? "text-positive" : undefined}
+          value={formatTurtleEntrySignal(selectedTurtleSignals.entry)}
         />
         <SummaryRow
-          helpText={TURTLE_HELP_TEXT.systemOneExit}
-          label="系统一离场"
-          tone={turtleMetrics.systemOneExit.triggered ? "text-negative" : undefined}
-          value={formatTurtleExitSignal(turtleMetrics.systemOneExit, "10日低点")}
-        />
-        <SummaryRow
-          helpText={TURTLE_HELP_TEXT.systemTwoEntry}
-          label="系统二入场"
-          tone={turtleMetrics.systemTwoEntry.triggered ? "text-positive" : undefined}
-          value={formatTurtleEntrySignal(turtleMetrics.systemTwoEntry)}
-        />
-        <SummaryRow
-          helpText={TURTLE_HELP_TEXT.systemTwoExit}
-          label="系统二离场"
-          tone={turtleMetrics.systemTwoExit.triggered ? "text-negative" : undefined}
-          value={formatTurtleExitSignal(turtleMetrics.systemTwoExit, "20日低点")}
+          helpText={selectedTurtleSignals.exitHelpText}
+          label={selectedTurtleSignals.exitLabel}
+          tone={selectedTurtleSignals.exit.triggered ? "text-negative" : undefined}
+          value={formatTurtleExitSignal(selectedTurtleSignals.exit, selectedTurtleSignals.exitThresholdLabel)}
         />
         <SummaryRow
           helpText={TURTLE_HELP_TEXT.addOn}

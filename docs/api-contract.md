@@ -554,6 +554,7 @@ uv run python main.py macro-sync
 - `range`：`1m | 3m | 6m | 1y | 3y | 5y | 10y | 20y | custom`，默认 `1m`。
 - `start_date` / `end_date`：自定义日期，`YYYY-MM-DD`。
 - `financial_report_type`：`quarterly | yearly`，默认 `quarterly`。
+- `record_access`：`true | false`，默认 `true`。前端刷新页面时自动选中的首个标的传 `false`，仅用户手动点击或搜索触发的选中传 `true`，用于控制 `market_stock_instrument.access_count` 是否累计。
 
 日线同步策略：
 

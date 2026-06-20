@@ -12,6 +12,7 @@ export function useStockMarketDetailQuery(
   symbol: string | null,
   range: MarketDataRangeSelection,
   financialReportType: StockFinancialReportType,
+  options: { recordAccess?: boolean; accessRequestId?: number } = {},
 ) {
   return useQuery({
     enabled: Boolean(symbol),
@@ -22,12 +23,14 @@ export function useStockMarketDetailQuery(
       range.startDate ?? "",
       range.endDate ?? "",
       financialReportType,
+      options.accessRequestId ?? 0,
     ],
     queryFn: ({ signal }) =>
       getStockMarketDetail({
         symbol: symbol ?? "",
         range,
         financialReportType,
+        recordAccess: options.recordAccess ?? true,
         signal,
       }),
   });

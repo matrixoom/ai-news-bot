@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   allRefreshError: "",
   allRefreshStatuses: [] as Array<Record<string, unknown> | null>,
   detailRanges: [] as Array<Record<string, unknown>>,
+  detailAccessOptions: [] as Array<{ symbol: string; recordAccess: boolean | undefined }>,
   detailDailyBars: null as null | StockDailyBar[],
   echartOptions: [] as Array<Record<string, unknown>>,
   financialRefresh: vi.fn(),
@@ -244,8 +245,16 @@ vi.mock("../hooks/use-stock-market-instruments-query", () => ({
 }));
 
 vi.mock("../hooks/use-stock-market-detail-query", () => ({
-  useStockMarketDetailQuery: (symbol: string | null, range: Record<string, unknown>) => {
+  useStockMarketDetailQuery: (
+    symbol: string | null,
+    range: Record<string, unknown>,
+    _financialReportType: string,
+    options?: { recordAccess: boolean },
+  ) => {
     mocks.detailRanges.push(range);
+    if (symbol) {
+      mocks.detailAccessOptions.push({ symbol, recordAccess: options?.recordAccess });
+    }
     return {
       isPending: false,
       isError: false,
@@ -254,10 +263,14 @@ vi.mock("../hooks/use-stock-market-detail-query", () => ({
             instrument: instruments.find((instrument) => instrument.symbol === symbol) ?? instruments[0],
             daily_bars: mocks.detailDailyBars ?? dailyBars,
             profile: {
+              company_name: "海康威视",
               listing_date: "",
               sector: "",
               industry: "",
               region: "",
+              attributes: [],
+              summary: "海康威视，深市主板标的。公司概况等待上游数据补充。",
+              updated_at: "",
             },
             financials: { series: financialSeries },
             sync_state: {
@@ -450,6 +463,7 @@ describe("StockMarketWorkspace", () => {
     mocks.allRefreshError = "";
     mocks.allRefreshStatuses.length = 0;
     mocks.detailRanges.length = 0;
+    mocks.detailAccessOptions.length = 0;
     mocks.detailDailyBars = null;
     mocks.echartOptions.length = 0;
     mocks.financialRefresh.mockClear();
@@ -552,6 +566,37 @@ describe("StockMarketWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "上一页" }));
     expect(within(screen.getByRole("table")).getByText("000001.SZ")).toBeInTheDocument();
     expect(mocks.instrumentFilters.at(-1)).toMatchObject({ page: 1, pageSize: 18 });
+  });
+
+  it("records stock detail access only for user click or search-driven selection", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await waitFor(() => {
+      expect(mocks.detailAccessOptions.at(-1)).toEqual({
+        symbol: "000001.SZ",
+        recordAccess: false,
+      });
+    });
+
+    await user.click(screen.getByRole("row", { name: /000002\.SZ/ }));
+
+    await waitFor(() => {
+      expect(mocks.detailAccessOptions).toContainEqual({
+        symbol: "000002.SZ",
+        recordAccess: true,
+      });
+    });
+
+    await user.clear(screen.getByRole("searchbox"));
+    await user.type(screen.getByRole("searchbox"), "000021");
+
+    await waitFor(() => {
+      expect(mocks.detailAccessOptions).toContainEqual({
+        symbol: "000021.SZ",
+        recordAccess: true,
+      });
+    });
   });
 
   it("applies search and dropdown filters and resets pagination", async () => {
@@ -755,6 +800,8 @@ describe("StockMarketWorkspace", () => {
   it("removes the redundant summary metrics and watchlist action", () => {
     render(<StockMarketWorkspace />);
 
+    expect(screen.queryByText(/公司概况/)).not.toBeInTheDocument();
+    expect(screen.getByText("海康威视，深市主板标的。等待上游数据补充。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入自选" })).not.toBeInTheDocument();
     expect(screen.getByText("市盈率 TTM")).toBeInTheDocument();
     expect(screen.getByText("市净率 MRQ")).toBeInTheDocument();
@@ -769,7 +816,8 @@ describe("StockMarketWorkspace", () => {
     );
   });
 
-  it("shows turtle trading TR, N, entry, exit, and add-on signals in the research summary", () => {
+  it("shows turtle trading signals for the selected system in the research summary", async () => {
+    const user = userEvent.setup();
     mocks.detailDailyBars = buildTurtleSignalBars();
 
     render(<StockMarketWorkspace />);
@@ -778,12 +826,18 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByText("12.00")).toBeInTheDocument();
     expect(screen.getByText("20日平滑N")).toBeInTheDocument();
     expect(screen.getByText("2.50")).toBeInTheDocument();
-    expect(screen.getByText("系统一入场")).toBeInTheDocument();
-    expect(screen.getAllByText("触发（突破 101.00）")).toHaveLength(2);
-    expect(screen.getByText("系统一离场")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "海龟交易系统" })).toHaveValue("systemOne");
+    expect(screen.getByText("入场")).toBeInTheDocument();
+    expect(screen.getByText("触发（突破 101.00）")).toBeInTheDocument();
+    expect(screen.getByText("离场")).toBeInTheDocument();
     expect(screen.getByText("未触发（10日低点 99.00）")).toBeInTheDocument();
-    expect(screen.getByText("系统二入场")).toBeInTheDocument();
-    expect(screen.getByText("系统二离场")).toBeInTheDocument();
+    expect(screen.queryByText("未触发（20日低点 99.00）")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "海龟交易系统" }), "systemTwo");
+
+    expect(screen.getByText("入场")).toBeInTheDocument();
+    expect(screen.getByText("触发（突破 101.00）")).toBeInTheDocument();
+    expect(screen.getByText("离场")).toBeInTheDocument();
     expect(screen.getByText("未触发（20日低点 99.00）")).toBeInTheDocument();
     expect(screen.getByText("加仓信号")).toBeInTheDocument();
     expect(screen.getByText("触发；间隔 1.25")).toBeInTheDocument();
@@ -795,10 +849,8 @@ describe("StockMarketWorkspace", () => {
       "title",
       "初始 N 为最近 20 日 TR 简单平均；后续 N = (19 × 前一日 N + 当日 TR) / 20。",
     );
-    expect(screen.getByLabelText("系统一入场 计算方法")).toHaveAttribute("title", "当日高点突破前 20 日高点时触发入场。");
-    expect(screen.getByLabelText("系统一离场 计算方法")).toHaveAttribute("title", "多头持仓跌破前 10 日低点时触发离场。");
-    expect(screen.getByLabelText("系统二入场 计算方法")).toHaveAttribute("title", "当日高点突破前 55 日高点时触发入场。");
-    expect(screen.getByLabelText("系统二离场 计算方法")).toHaveAttribute("title", "多头持仓跌破前 20 日低点时触发离场。");
+    expect(screen.getByLabelText("入场 计算方法")).toHaveAttribute("title", "当日高点突破前 55 日高点时触发入场。");
+    expect(screen.getByLabelText("离场 计算方法")).toHaveAttribute("title", "多头持仓跌破前 20 日低点时触发离场。");
     expect(screen.getByLabelText("加仓信号 计算方法")).toHaveAttribute("title", "入场后每上涨 0.5N 触发一次加仓观察信号。");
   });
 

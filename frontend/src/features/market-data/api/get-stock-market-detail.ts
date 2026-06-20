@@ -9,6 +9,7 @@ import type {
  * @param options.symbol 带交易所后缀的股票代码。
  * @param options.range 时间范围。
  * @param options.financialReportType 财报维度。
+ * @param options.recordAccess 是否记录本次用户主动访问。
  * @param options.signal 请求取消信号。
  * @returns 股票详情 payload。
  */
@@ -16,11 +17,13 @@ export async function getStockMarketDetail(options: {
   symbol: string;
   range: MarketDataRangeSelection;
   financialReportType: StockFinancialReportType;
+  recordAccess?: boolean;
   signal?: AbortSignal;
 }): Promise<StockDetailPayload> {
   const params = new URLSearchParams({
     range: options.range.type,
     financial_report_type: options.financialReportType,
+    record_access: String(options.recordAccess ?? true),
   });
   if (options.range.type === "custom") {
     if (options.range.startDate) params.set("start_date", options.range.startDate);

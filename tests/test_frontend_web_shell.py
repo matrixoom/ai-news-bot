@@ -167,6 +167,28 @@ class FastAPIWebShellTests(unittest.TestCase):
             end_date=None,
         )
 
+    def test_stock_market_detail_endpoint_passes_record_access_flag(self):
+        """校验详情接口把访问计数开关透传给 Service。"""
+
+        stock_service = Mock()
+        stock_service.build_stock_detail_payload.return_value = {"ok": True}
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        response = client.get(
+            "/api/frontend/modules/market-data/stocks/000001.SZ",
+            params={"range": "1m", "financial_report_type": "quarterly", "record_access": "false"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        stock_service.build_stock_detail_payload.assert_called_once_with(
+            "000001.SZ",
+            range_type="1m",
+            start_date=None,
+            end_date=None,
+            financial_report_type="quarterly",
+            record_access=False,
+        )
+
     def test_stock_market_refresh_all_endpoint_passes_refresh_mode(self):
         """校验全部标的刷新接口把用户选择的刷新模式传给 Service。"""
 

@@ -432,6 +432,7 @@ def create_fastapi_app(
         start_date: str | None = None,
         end_date: str | None = None,
         financial_report_type: str = "quarterly",
+        record_access: bool = True,
     ) -> JSONResponse:
         """返回选中股票行情、概况与财报详情。"""
         try:
@@ -442,6 +443,7 @@ def create_fastapi_app(
                     start_date=start_date,
                     end_date=end_date,
                     financial_report_type=financial_report_type,
+                    record_access=record_access,
                 )
             )
         except StockMarketValidationError:
