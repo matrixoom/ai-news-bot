@@ -11,6 +11,7 @@ import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-quer
 import { useStockMarketAllRefresh } from "../hooks/use-stock-market-all-refresh";
 import { useStockMarketInstrumentsQuery } from "../hooks/use-stock-market-instruments-query";
 import { useStockMarketOverviewQuery } from "../hooks/use-stock-market-overview-query";
+import { useStockMarketOverviewRefreshMutation } from "../hooks/use-stock-market-overview-refresh-mutation";
 import { useStockMarketRefreshMutation } from "../hooks/use-stock-market-refresh-mutation";
 import type {
   MarketDataRangeSelection,
@@ -32,8 +33,13 @@ const STOCK_RANGE_OPTIONS = [
   { value: "1y", label: "近1年", months: 12 },
   { value: "3y", label: "近3年", months: 36 },
   { value: "5y", label: "近5年", months: 60 },
+  { value: "10y", label: "近10年", months: 120 },
+  { value: "20y", label: "近20年", months: 240 },
   { value: "custom", label: "自定义", months: null },
 ] as const;
+const FINANCIAL_RANGE_OPTIONS = STOCK_RANGE_OPTIONS.filter(
+  (option) => option.value !== "10y" && option.value !== "20y",
+);
 
 const MARKET_BOARD_OPTIONS = [
   { value: "all", label: "全部" },
@@ -109,6 +115,7 @@ export function StockMarketWorkspace() {
   });
   const detailQuery = useStockMarketDetailQuery(selectedSymbol, range, financialReportType);
   const overviewQuery = useStockMarketOverviewQuery();
+  const overviewRefreshMutation = useStockMarketOverviewRefreshMutation();
   const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType);
   const allRefresh = useStockMarketAllRefresh();
   const instruments = instrumentsQuery.data?.items ?? [];
@@ -193,8 +200,10 @@ export function StockMarketWorkspace() {
       {selectedOverviewIndex ? (
         <IndexKlineDisclosure
           index={selectedOverviewIndex}
+          onRefresh={() => overviewRefreshMutation.mutate(indexRange)}
           onRangeChange={setIndexRange}
           range={indexRange}
+          refreshPending={overviewRefreshMutation.isPending}
         />
       ) : (
         <>
@@ -320,7 +329,9 @@ export function StockMarketWorkspace() {
 function IndexKlineDisclosure(props: {
   index: StockMarketOverviewPayload["indices"][number];
   range: MarketDataRangeSelection;
+  refreshPending: boolean;
   onRangeChange: (range: MarketDataRangeSelection) => void;
+  onRefresh: () => void;
 }) {
   const bars = props.index.daily_bars ?? [];
   const visibleBars = useMemo(() => filterDailyBarsByRange(bars, props.range), [bars, props.range]);
@@ -357,6 +368,19 @@ function IndexKlineDisclosure(props: {
               </span>
             </span>
             <span className="text-muted">{props.index.symbol}</span>
+            <button
+              aria-label="刷新宽基K线"
+              className="workbench-icon-button h-8 w-8 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={props.refreshPending}
+              onClick={props.onRefresh}
+              title="按当前时间范围刷新宽基指数历史"
+              type="button"
+            >
+              <ArrowPathIcon
+                aria-hidden="true"
+                className={`h-4 w-4 ${props.refreshPending ? "animate-spin" : ""}`}
+              />
+            </button>
           </div>
         </div>
         <IndexRangeToolbar
@@ -663,7 +687,7 @@ function InstrumentListPanel(props: {
             className="workbench-icon-button h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={props.allRefreshStarting}
             onClick={props.onRefreshAll}
-            title="后台刷新全部标的近 6 个月行情、公司概况和财务数据；本地已覆盖的标的会跳过外部请求"
+            title="后台刷新全部标的近 1 年行情和公司概况；本地已覆盖的标的会跳过外部请求"
             type="button"
           >
             <ArrowPathIcon
@@ -1067,10 +1091,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
   const chartTheme = useMemo(() => buildCartesianTheme(workbenchTheme), [workbenchTheme]);
   const option = useMemo((): echarts.EChartsOption => {
     const labels = props.bars.map((bar) => bar.date);
-    const isIndexChart = props.mode === "index";
-    const legendData = isIndexChart
-      ? ["MA5", "MA10", "MA20", "MA60", "MA120"]
-      : ["K线", "MA5", "MA10", "MA20", "MA60", "MA120"];
+    const legendData = ["K线", "MA5", "MA10", "MA20", "MA60", "MA120"];
     return {
       animation: false,
       tooltip: {
@@ -1082,10 +1103,9 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         axisPointer: { type: "cross" },
       },
       legend: {
-        top: 8,
-        right: 8,
-        bottom: 32,
-        orient: "vertical",
+        top: 10,
+        left: "center",
+        orient: "horizontal",
         type: "scroll",
         itemWidth: 16,
         itemHeight: 8,
@@ -1094,8 +1114,8 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         selected: {},
       },
       grid: [
-        { left: 54, right: 112, top: 38, height: "56%" },
-        { left: 54, right: 112, top: "70%", height: "14%" },
+        { left: 54, right: 42, top: 48, height: "56%" },
+        { left: 54, right: 42, top: "70%", height: "14%" },
       ],
       xAxis: [
         {
@@ -1163,7 +1183,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         },
       ],
     };
-  }, [props.bars, props.mode, chartTheme, workbenchTheme]);
+  }, [props.bars, chartTheme, workbenchTheme]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -1247,7 +1267,7 @@ function FinancialCards(props: {
       >
         {/*<span className="text-xs font-semibold text-slate-500">时间范围</span>*/}
         <div aria-label="财务时间范围" className="inline-flex h-8 overflow-hidden rounded-control border border-line bg-surface">
-          {STOCK_RANGE_OPTIONS.map((option) => (
+          {FINANCIAL_RANGE_OPTIONS.map((option) => (
             <button
               aria-pressed={props.financialRange.type === option.value}
               className={`border-r border-line px-3 text-xs font-semibold last:border-r-0 ${
@@ -1408,7 +1428,7 @@ function filterFinancialSeriesByRange(
     };
   }
 
-  const selectedOption = STOCK_RANGE_OPTIONS.find((option) => option.value === range.type);
+  const selectedOption = FINANCIAL_RANGE_OPTIONS.find((option) => option.value === range.type);
   const latestPeriod = series.points.at(-1)?.period;
   if (!selectedOption?.months || !latestPeriod) return series;
 

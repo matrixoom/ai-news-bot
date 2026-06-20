@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   allRefreshStatuses: [] as Array<Record<string, unknown> | null>,
   detailRanges: [] as Array<Record<string, unknown>>,
   echartOptions: [] as Array<Record<string, unknown>>,
+  indexRefresh: vi.fn(),
   instrumentFilters: [] as Array<Record<string, unknown>>,
   refresh: vi.fn(),
 }));
@@ -242,6 +243,13 @@ vi.mock("../hooks/use-stock-market-all-refresh", () => ({
   }),
 }));
 
+vi.mock("../hooks/use-stock-market-overview-refresh-mutation", () => ({
+  useStockMarketOverviewRefreshMutation: () => ({
+    isPending: false,
+    mutate: (range: unknown) => mocks.indexRefresh(range),
+  }),
+}));
+
 vi.mock("../hooks/use-stock-market-overview-query", () => ({
   useStockMarketOverviewQuery: () => ({
     isPending: false,
@@ -385,6 +393,7 @@ describe("StockMarketWorkspace", () => {
     mocks.allRefreshStatuses.length = 0;
     mocks.detailRanges.length = 0;
     mocks.echartOptions.length = 0;
+    mocks.indexRefresh.mockClear();
     mocks.instrumentFilters.length = 0;
     mocks.refresh.mockClear();
     resizeObserverCallbacks.length = 0;
@@ -419,6 +428,10 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("region", { name: "沪深 300 宽基指数K线" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "CSI300 日级别行情K线" })).toBeInTheDocument();
     expect(screen.getByLabelText("宽基指数时间范围")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("宽基指数时间范围")).getByRole("button", { name: "近10年" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("宽基指数时间范围")).getByRole("button", { name: "近20年" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "刷新宽基K线" }));
+    expect(mocks.indexRefresh).toHaveBeenCalledWith({ type: "1m" });
     expect(screen.getByLabelText("沪深 300 当前时间跨度涨幅")).toHaveTextContent("区间涨幅 +0.55%");
     expect(screen.getByLabelText("沪深 300 当前时间跨度涨幅")).toHaveClass("text-ink");
     expect(within(screen.getByLabelText("沪深 300 当前时间跨度涨幅")).getByText("+0.55%")).toHaveClass("text-positive");
@@ -432,10 +445,13 @@ describe("StockMarketWorkspace", () => {
 
     await waitFor(() => {
       const indexOption = mocks.echartOptions.at(-1) as {
-        legend?: { data?: string[]; selected?: Record<string, boolean> };
+        legend?: { data?: string[]; left?: string; top?: number; orient?: string; selected?: Record<string, boolean> };
         series?: Array<{ name?: string; data?: unknown[] }>;
       };
-      expect(indexOption.legend?.data).toEqual(["MA5", "MA10", "MA20", "MA60", "MA120"]);
+      expect(indexOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
+      expect(indexOption.legend?.top).toBe(10);
+      expect(indexOption.legend?.left).toBe("center");
+      expect(indexOption.legend?.orient).toBe("horizontal");
       expect(indexOption.legend?.selected).toEqual({});
       expect(indexOption.series?.find((series) => series.name === "PE(TTM)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "PB(MRQ)")).toBeUndefined();
@@ -767,6 +783,8 @@ describe("StockMarketWorkspace", () => {
 
     expect(screen.getByLabelText("行情时间范围")).toHaveClass("h-8");
     expect(screen.getByRole("button", { name: "近1月" })).toHaveClass("px-3", "text-xs");
+    expect(screen.getByRole("button", { name: "近10年" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "近20年" })).toBeInTheDocument();
     expect(screen.getByLabelText("价格复权方式")).toHaveClass("h-8");
     expect(screen.getByRole("button", { name: "不复权" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: "前复权" })).not.toBeInTheDocument();
@@ -785,7 +803,8 @@ describe("StockMarketWorkspace", () => {
     await waitFor(() => expect(mocks.echartOptions.length).toBeGreaterThan(0));
     const klineOption = mocks.echartOptions[0] as {
       legend?: {
-        right?: number;
+        left?: string;
+        top?: number;
         orient?: string;
         data?: string[];
         selected?: Record<string, boolean>;
@@ -799,8 +818,9 @@ describe("StockMarketWorkspace", () => {
       (klineOption.series ?? []).map((series) => [series.name, series]),
     );
 
-    expect(klineOption.legend?.right).toBe(8);
-    expect(klineOption.legend?.orient).toBe("vertical");
+    expect(klineOption.legend?.top).toBe(10);
+    expect(klineOption.legend?.left).toBe("center");
+    expect(klineOption.legend?.orient).toBe("horizontal");
     expect(klineOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
     expect(klineOption.legend?.selected).toEqual({});
     expect(seriesByName["PE(TTM)"]).toBeUndefined();

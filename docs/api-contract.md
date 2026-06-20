@@ -280,7 +280,7 @@ uv run python main.py macro-sync
 ### 4.4.3 `GET /api/frontend/modules/market-data/stocks/overview`
 
 用途：返回股票研究工作台顶部的真实市场摘要。指数复用 Push Center 默认宽基注册表，读取 `.data/market_history.db` 最近两个有效点；市场宽度从股票日线分片聚合最近两个交易日的上涨、下跌和平盘家数。
-每个指数同时返回 `daily_bars`，供前端点击概览项后下发展示宽基 K 线。该字段复用 Push Center 宽基历史近 5 年收盘与成交量；因历史库不保存完整 OHLC，开盘价使用前一交易日收盘价派生，最高/最低价取开收盘边界。
+每个指数同时返回 `daily_bars`，供前端点击概览项后下发展示宽基 K 线。该字段复用 Push Center 宽基历史近 20 年收盘与成交量；因历史库不保存完整 OHLC，开盘价使用前一交易日收盘价派生，最高/最低价取开收盘边界。
 
 成功：`200`
 
@@ -407,7 +407,51 @@ uv run python main.py macro-sync
 - 市场宽度无法聚合时仅 `breadth.status` 为 `unavailable`。
 - Service 整体异常时返回 `503 frontend_stock_market_overview_unavailable`。
 
-### 4.4.4 `POST /api/frontend/modules/market-data/stocks/sync-universe`
+### 4.4.4 `POST /api/frontend/modules/market-data/stocks/overview/indices/refresh`
+
+用途：按股票市场宽基 K 线当前时间跨度刷新默认宽基指数历史，并返回刷新后的概览。该接口复用 Dashboard/Push Center 宽基历史刷新链路，按日期 upsert，不删除更早历史；前端刷新完成后可重新读取 `GET /overview` 或直接使用响应里的 `overview`。
+
+请求：
+
+```json
+{
+  "range": "20y",
+  "start_date": null,
+  "end_date": null
+}
+```
+
+成功：`200`
+
+```json
+{
+  "ok": true,
+  "range": {
+    "type": "20y",
+    "start_date": "2006-06-20",
+    "end_date": "2026-06-20"
+  },
+  "overview": {
+    "generated_at": "2026-06-20T06:20:00Z",
+    "indices": [],
+    "breadth": {
+      "trade_date": null,
+      "advanced": 0,
+      "declined": 0,
+      "unchanged": 0,
+      "total": 0,
+      "status": "unavailable"
+    }
+  }
+}
+```
+
+失败：
+
+- `400`：`invalid_stock_index_range`
+- `503`：`frontend_stock_index_overview_refresh_failed`
+
+### 4.4.5 `POST /api/frontend/modules/market-data/stocks/sync-universe`
 
 用途：手动刷新 A 股/ETF/LOF 基础标的池。股票优先来自 AkShare `stock_info_a_code_name`，失败时回退 A 股快照端点；ETF 优先来自 `fund_etf_spot_em`，失败时回退同花顺/新浪 ETF 端点；LOF 优先来自 `fund_lof_spot_em`，失败时回退新浪 `LOF基金` 分类，再以场内基金排行端点兜底。本地表以 `symbol` 幂等 upsert，不删除既有标的。股票、ETF 与 LOF 分段容错，任一来源失败时不阻断另一来源入库，失败详情通过 `warnings` 返回。
 
@@ -428,9 +472,9 @@ uv run python main.py macro-sync
 
 失败：仅数据库写入等内部错误返回 `503 frontend_stock_universe_sync_failed`；外部行情源代理失败通常返回 `200` 并在 `warnings` 中说明。
 
-### 4.4.5 `POST /api/frontend/modules/market-data/stocks/refresh-all`
+### 4.4.6 `POST /api/frontend/modules/market-data/stocks/refresh-all`
 
-用途：启动“全部标的”后台刷新任务。服务会逐只检查当前本地上市和 ST 状态股票、ETF、LOF 的近 6 个月日线行情；若本地日线窗口已覆盖近 6 个月，则该标的直接跳过外部请求；缺失窗口时刷新日线行情和公司概况，股票额外刷新财务指标，ETF/LOF 不拉取公司财报。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态；若已有任务正在运行，重复点击会返回正在运行的任务。
+用途：启动“全部标的”后台刷新任务。服务会逐只检查当前本地上市和 ST 状态股票、ETF、LOF 的近 1 年日线行情；若本地日线窗口已覆盖近 1 年，则该标的直接跳过外部请求；缺失窗口时仅刷新日线行情和公司概况，不再批量刷新股票财务指标。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态；若已有任务正在运行，重复点击会返回正在运行的任务。
 
 成功：`202`
 
@@ -455,7 +499,7 @@ uv run python main.py macro-sync
 
 失败：`503 frontend_stock_all_refresh_start_failed`
 
-### 4.4.6 `GET /api/frontend/modules/market-data/stocks/refresh-all/latest`
+### 4.4.7 `GET /api/frontend/modules/market-data/stocks/refresh-all/latest`
 
 用途：读取最近一次全部标的刷新任务，供前端微型进度条展示手动任务或 15:30 自动任务进度。
 
@@ -472,7 +516,7 @@ uv run python main.py macro-sync
 }
 ```
 
-### 4.4.7 `GET /api/frontend/modules/market-data/stocks/refresh-all/{job_id}`
+### 4.4.8 `GET /api/frontend/modules/market-data/stocks/refresh-all/{job_id}`
 
 用途：读取指定全部标的刷新任务状态。任务状态为 `completed_with_warnings` 时表示部分标的外部数据源失败，服务保留旧数据并在 `errors` 中返回短错误摘要。
 
@@ -481,17 +525,17 @@ uv run python main.py macro-sync
 - `404`：任务不存在
 - `503`：`frontend_stock_all_refresh_status_failed`
 
-### 4.4.8 后台定时刷新
+### 4.4.9 后台定时刷新
 
-股票市场服务启动后会在后台检查上海时间 `15:30` 槽位，到点自动触发 `scheduled` 全标的刷新。自动任务和手动任务共用最近一次完成状态文件 `.data/stock_market_refresh_state.json`，不再按自然日限制启动；每次任务都会按标的检查近 6 个月日线窗口，已覆盖窗口的标的会跳过外部请求。
+股票市场服务启动后会在后台检查上海时间 `15:30` 槽位，并先通过 A 股交易日历判断当天是否开盘；周末和节假日休市日不会触发 `scheduled` 全标的刷新。自动任务和手动任务共用最近一次完成状态文件 `.data/stock_market_refresh_state.json`，不再按自然日限制启动；每次任务都会按标的检查近 1 年日线窗口，已覆盖窗口的标的会跳过外部请求。
 
-### 4.4.9 `GET /api/frontend/modules/market-data/stocks/{symbol}`
+### 4.4.10 `GET /api/frontend/modules/market-data/stocks/{symbol}`
 
 用途：返回选中股票/ETF/LOF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 1 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
 
 查询参数：
 
-- `range`：`1m | 3m | 6m | 1y | 3y | 5y | custom`，默认 `1m`。
+- `range`：`1m | 3m | 6m | 1y | 3y | 5y | 10y | 20y | custom`，默认 `1m`。
 - `start_date` / `end_date`：自定义日期，`YYYY-MM-DD`。
 - `financial_report_type`：`quarterly | yearly`，默认 `quarterly`。
 
@@ -565,7 +609,7 @@ OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短�
 - `400`：`invalid_stock_symbol_or_range`
 - `503`：`frontend_stock_detail_unavailable`
 
-### 4.4.10 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
+### 4.4.11 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
 
 用途：手动刷新选中股票/ETF/LOF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。股票会同时
 强制刷新财务指标，确保 ROE、营收同比、净利润同比和资产负债率可以补采最新季度数据；ETF/LOF 不执行

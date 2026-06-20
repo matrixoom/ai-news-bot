@@ -10,7 +10,7 @@ import logging
 import os
 from pathlib import Path
 import threading
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -25,9 +25,9 @@ from .stock_market_repository import (
 from .stock_market_sync_service import StockMarketSyncService, _compact_error_message
 
 
-STOCK_MARKET_RANGES = {"1m", "3m", "6m", "1y", "3y", "5y", "custom"}
+STOCK_MARKET_RANGES = {"1m", "3m", "6m", "1y", "3y", "5y", "10y", "20y", "custom"}
 STOCK_FINANCIAL_REPORT_TYPES = {"quarterly", "yearly"}
-STOCK_OVERVIEW_INDEX_HISTORY_DAYS = 1830
+STOCK_OVERVIEW_INDEX_HISTORY_DAYS = 365 * 20 + 10
 STOCK_REQUIRED_FINANCIAL_METRICS = {
     "roe",
     "revenue_yoy",
@@ -38,7 +38,7 @@ STOCK_OVERVIEW_INDEX_REGISTRY = tuple(build_default_market_registry().values())
 STOCK_ALL_REFRESH_TERMINAL_STATUSES = {"completed", "completed_with_warnings", "failed", "skipped"}
 STOCK_ALL_REFRESH_SCHEDULE_TIME = "15:30"
 STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
-STOCK_ALL_REFRESH_HISTORY_MONTHS = 6
+STOCK_ALL_REFRESH_HISTORY_MONTHS = 12
 logger = logging.getLogger(__name__)
 
 
@@ -60,6 +60,8 @@ class StockMarketService:
         sync_service: StockMarketSyncService | None = None,
         market_history_store: MarketHistoryStore | None = None,
         refresh_state_path: str | Path | None = None,
+        market_module_rebuilder: Callable[..., Any] | None = None,
+        trading_day_checker: Callable[[date], bool] | None = None,
         enable_scheduler: bool = False,
         scheduler_check_seconds: float | None = None,
     ) -> None:
@@ -70,6 +72,8 @@ class StockMarketService:
             sync_service: AkShare 同步服务。
             market_history_store: 宽基指数历史仓储。
             refresh_state_path: 全标的刷新最近完成状态文件路径。
+            market_module_rebuilder: 宽基指数历史刷新回调，默认由 DashboardService 注入。
+            trading_day_checker: A 股交易日判断函数，测试可注入。
             enable_scheduler: 是否启动 15:30 自动刷新检查线程。
             scheduler_check_seconds: 后台定时检查间隔秒数。
 
@@ -81,6 +85,9 @@ class StockMarketService:
         self._sync_service = sync_service or StockMarketSyncService(repository=self._repository)
         self._market_history_store = market_history_store or MarketHistoryStore()
         self._refresh_state_path = Path(refresh_state_path or ".data/stock_market_refresh_state.json")
+        self._market_module_rebuilder = market_module_rebuilder
+        self._trading_day_checker = trading_day_checker or _default_cn_market_trading_day
+        self._trading_day_cache: dict[str, bool] = {}
         self._all_refresh_lock = threading.Lock()
         self._all_refresh_jobs: dict[str, dict[str, Any]] = {}
         self._latest_all_refresh_job_id: str | None = None
@@ -153,6 +160,9 @@ class StockMarketService:
         local_time = current_time.astimezone(ZoneInfo(STOCK_ALL_REFRESH_TIMEZONE))
         if local_time.strftime("%H:%M") != STOCK_ALL_REFRESH_SCHEDULE_TIME:
             return []
+        if not self._is_scheduled_trading_day(local_time.date()):
+            logger.info("stock market scheduled refresh skipped closed market day %s", local_time.date().isoformat())
+            return []
         return [self.start_all_instrument_refresh(trigger="scheduled", run_inline=run_inline)]
 
     def start_all_instrument_refresh(
@@ -161,7 +171,7 @@ class StockMarketService:
         trigger: str = "manual",
         run_inline: bool = False,
     ) -> dict[str, Any]:
-        """启动全标的近六月行情、概况和财务刷新任务。
+        """启动全标的近一年行情和概况刷新任务。
 
         Args:
             trigger: `manual` 或 `scheduled`，用于前端展示和状态追踪。
@@ -230,7 +240,7 @@ class StockMarketService:
             job = self._all_refresh_jobs[job_id]
             job["status"] = "running"
             job["total"] = len(instruments)
-            job["message"] = "正在刷新全部标的近 6 个月行情、概况和财务数据。"
+            job["message"] = "正在刷新全部标的近 1 年行情和概况数据。"
             job["started_at"] = _utc_now()
         try:
             for index, instrument in enumerate(instruments, start=1):
@@ -264,7 +274,7 @@ class StockMarketService:
                     job["message"] = "全标的刷新完成，部分标的失败，已保留旧数据。"
                 else:
                     job["status"] = "completed"
-                    job["message"] = "全标的近 6 个月行情、概况和财务数据已刷新。"
+                    job["message"] = "全标的近 1 年行情和概况数据已刷新。"
                 self._save_refresh_state(
                     {
                         "last_refresh_date": self._local_today(),
@@ -280,6 +290,40 @@ class StockMarketService:
                 job["finished_at"] = _utc_now()
                 job["message"] = f"全标的刷新失败：{_compact_error_message(error)}"
                 job["errors"].append(str(error))
+
+    def refresh_overview_indices(
+        self,
+        *,
+        range_type: str = "1y",
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
+        """按前端宽基 K 线当前跨度刷新指数历史并返回最新概览。
+
+        Args:
+            range_type: 宽基 K 线时间范围。
+            start_date: 自定义范围起始日期。
+            end_date: 自定义范围结束日期。
+
+        Returns:
+            刷新后的股票市场概览和实际刷新窗口。
+        """
+
+        resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
+        window_days = (
+            date.fromisoformat(resolved_range.end_date) - date.fromisoformat(resolved_range.start_date)
+        ).days + 1
+        if callable(self._market_module_rebuilder):
+            self._market_module_rebuilder(history_window_days=max(window_days, 1))
+        return {
+            "ok": True,
+            "range": {
+                "type": resolved_range.range_type,
+                "start_date": resolved_range.start_date,
+                "end_date": resolved_range.end_date,
+            },
+            "overview": self.build_overview_payload(),
+        }
 
     def build_overview_payload(self) -> dict[str, Any]:
         """构建股票市场摘要，单项缺失时保留其余可用数据。
@@ -572,12 +616,12 @@ class StockMarketService:
         start: date,
         end: date,
     ) -> list[str]:
-        """刷新单只标的的行情、概况和财务数据，单项失败不阻断后续标的。
+        """刷新单只标的的行情和概况数据，单项失败不阻断后续标的。
 
         Args:
             instrument: 当前股票或 ETF 标的。
-            start: 近六月窗口起始日期。
-            end: 近六月窗口结束日期。
+            start: 近一年窗口起始日期。
+            end: 近一年窗口结束日期。
 
         Returns:
             本标的刷新过程中产生的短错误信息。
@@ -613,15 +657,15 @@ class StockMarketService:
             logger.warning("stock all refresh profile failed for %s: %s", instrument.symbol, warning)
             self._repository.record_sync_warning(instrument.symbol, warning)
             errors.append(warning)
-        if instrument.instrument_type == "stock":
-            try:
-                self._sync_service.sync_financials(instrument)
-            except Exception as error:
-                warning = f"{instrument.symbol} 财务刷新失败：{_compact_error_message(error)}"
-                logger.warning("stock all refresh financial failed for %s: %s", instrument.symbol, warning)
-                self._repository.record_sync_warning(instrument.symbol, warning)
-                errors.append(warning)
         return errors
+
+    def _is_scheduled_trading_day(self, trade_day: date) -> bool:
+        """判断定时全标的刷新当天是否为 A 股交易日。"""
+
+        cache_key = trade_day.isoformat()
+        if cache_key not in self._trading_day_cache:
+            self._trading_day_cache[cache_key] = bool(self._trading_day_checker(trade_day))
+        return self._trading_day_cache[cache_key]
 
     def _update_all_refresh_progress(
         self,
@@ -886,7 +930,16 @@ class StockMarketService:
             end = self._parse_date(end_date)
         else:
             end = today
-            months_by_range = {"1m": 1, "3m": 3, "6m": 6, "1y": 12, "3y": 36, "5y": 60}
+            months_by_range = {
+                "1m": 1,
+                "3m": 3,
+                "6m": 6,
+                "1y": 12,
+                "3y": 36,
+                "5y": 60,
+                "10y": 120,
+                "20y": 240,
+            }
             start = _shift_months(end, -months_by_range[range_type])
         if start > end:
             raise StockMarketValidationError("start date must be before end date")
@@ -930,6 +983,36 @@ def _utc_now() -> str:
     from datetime import UTC, datetime
 
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _default_cn_market_trading_day(trade_day: date) -> bool:
+    """读取 AkShare 交易日历判断 A 股是否开盘，失败时退回工作日判断。
+
+    Args:
+        trade_day: 需要判断的本地日期。
+
+    Returns:
+        交易日返回 True，周末或交易日历确认的休市日返回 False。
+    """
+
+    try:
+        import akshare as ak
+
+        frame = ak.tool_trade_date_hist_sina()
+        for _, row in frame.iterrows():
+            raw_value = row.get("trade_date") or row.get("日期") or row.get("date")
+            if raw_value is None:
+                continue
+            if hasattr(raw_value, "date"):
+                candidate = raw_value.date()
+            else:
+                candidate = date.fromisoformat(str(raw_value)[:10])
+            if candidate == trade_day:
+                return True
+        return False
+    except Exception as error:
+        logger.warning("stock trading day calendar unavailable: %s", _compact_error_message(error))
+        return trade_day.weekday() < 5
 
 
 def _shift_months(value: date, months: int) -> date:

@@ -285,6 +285,8 @@ cmd /c npm run build
    - GDP 年度与季度一致性：同一年四个 `quarterly` 点位之和应等于对应 `yearly` 点位；事实表主键应为 `(period_end, frequency)`
    - `POST /api/frontend/modules/market-data/sync/wti_crude_oil` 仅刷新 WTI，不应被布伦特上游失败拖累
    - 全球期货历史解析使用收盘列；东方财富异常时布伦特、黄金、白银、铜可回退新浪外盘日线
+   - 股票全标的刷新仅补近 1 年日线与概况，不触发财务批量刷新；15:30 自动任务需在交易日历确认开盘日后才启动
+   - 股票与宽基 K 线应包含近 10 年、近 20 年范围；宽基手动刷新应调用 `/api/frontend/modules/market-data/stocks/overview/indices/refresh`
    - `/api/frontend/modules/push`
    - `POST /api/push/preview` 使用 `refresh_data=false` 时按所选 `market_chart_range` 从本地历史重绘
    - `POST /api/push/market-chart-refresh` 按当前范围拉取并保留 SQLite 中更早历史

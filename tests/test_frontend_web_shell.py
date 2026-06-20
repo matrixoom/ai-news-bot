@@ -129,6 +129,44 @@ class FastAPIWebShellTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"error": "frontend_stock_market_overview_unavailable"})
 
+    def test_stock_market_overview_index_refresh_endpoint_passes_range(self):
+        """校验宽基 K 线刷新接口把当前时间范围传给 Service。"""
+        stock_service = Mock()
+        stock_service.refresh_overview_indices.return_value = {
+            "ok": True,
+            "range": {
+                "type": "20y",
+                "start_date": "2006-06-20",
+                "end_date": "2026-06-20",
+            },
+            "overview": {
+                "generated_at": "2026-06-20T06:20:00Z",
+                "indices": [],
+                "breadth": {
+                    "trade_date": None,
+                    "advanced": 0,
+                    "declined": 0,
+                    "unchanged": 0,
+                    "total": 0,
+                    "status": "unavailable",
+                },
+            },
+        }
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        response = client.post(
+            "/api/frontend/modules/market-data/stocks/overview/indices/refresh",
+            json={"range": "20y"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["range"]["type"], "20y")
+        stock_service.refresh_overview_indices.assert_called_once_with(
+            range_type="20y",
+            start_date=None,
+            end_date=None,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

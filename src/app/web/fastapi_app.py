@@ -125,7 +125,10 @@ def create_fastapi_app(
     )
     macro_service = macro_data_service or MacroDataService()
     market_service = market_data_service or MarketDataService()
-    stock_service = stock_market_service or StockMarketService(enable_scheduler=True)
+    stock_service = stock_market_service or StockMarketService(
+        enable_scheduler=True,
+        market_module_rebuilder=getattr(service, "rebuild_market_module", None),
+    )
     event_service = event_outlook_service or EventsOutlookService(
         research_provider=_resolve_event_outlook_research_provider(service)
     )
@@ -364,13 +367,32 @@ def create_fastapi_app(
 
     @app.post("/api/frontend/modules/market-data/stocks/refresh-all")
     def frontend_stock_market_refresh_all() -> JSONResponse:
-        """启动全标的近六月行情、概况和财务后台刷新。"""
+        """启动全标的近一年行情和概况后台刷新。"""
 
         try:
             return JSONResponse(stock_service.start_all_instrument_refresh(trigger="manual"), status_code=202)
         except Exception:
             logger.exception("frontend stock all refresh start failed")
             return JSONResponse({"error": "frontend_stock_all_refresh_start_failed"}, status_code=503)
+
+    @app.post("/api/frontend/modules/market-data/stocks/overview/indices/refresh")
+    def frontend_stock_market_overview_indices_refresh(payload: dict | None = None) -> JSONResponse:
+        """按当前宽基 K 线范围刷新指数历史。"""
+
+        body = payload or {}
+        try:
+            return JSONResponse(
+                stock_service.refresh_overview_indices(
+                    range_type=str(body.get("range", "1y")),
+                    start_date=str(body["start_date"]) if body.get("start_date") else None,
+                    end_date=str(body["end_date"]) if body.get("end_date") else None,
+                )
+            )
+        except StockMarketValidationError:
+            return JSONResponse({"error": "invalid_stock_index_range"}, status_code=400)
+        except Exception:
+            logger.exception("frontend stock index overview refresh failed")
+            return JSONResponse({"error": "frontend_stock_index_overview_refresh_failed"}, status_code=503)
 
     @app.get("/api/frontend/modules/market-data/stocks/refresh-all/latest")
     def frontend_stock_market_refresh_all_latest() -> JSONResponse:
