@@ -5,6 +5,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon,
+  QuestionMarkCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-query";
@@ -79,6 +80,16 @@ const FINANCIAL_ORDER = [
   "debt_asset_ratio",
 ];
 const DEFAULT_INSTRUMENT_PAGE_SIZE = 18;
+const TURTLE_HELP_TEXT = {
+  trueRange:
+    "TR = max(当日最高价 - 当日最低价, |当日最高价 - 前一日收盘价|, |当日最低价 - 前一日收盘价|)。",
+  n: "初始 N 为最近 20 日 TR 简单平均；后续 N = (19 × 前一日 N + 当日 TR) / 20。",
+  systemOneEntry: "当日高点突破前 20 日高点时触发入场。",
+  systemOneExit: "多头持仓跌破前 10 日低点时触发离场。",
+  systemTwoEntry: "当日高点突破前 55 日高点时触发入场。",
+  systemTwoExit: "多头持仓跌破前 20 日低点时触发离场。",
+  addOn: "入场后每上涨 0.5N 触发一次加仓观察信号。",
+} as const;
 type StockDetailTab = "overview" | "financial";
 type StockPriceAdjustment = "none" | "forward" | "backward";
 type TurtleThresholdSignal = {
@@ -567,34 +578,41 @@ function ResearchSummaryPanel(props: {
           value={rangeChangeRate === null ? "--" : `${formatSigned(rangeChangeRate, 2)}%`}
         />
         <SummaryRow
+          helpText={TURTLE_HELP_TEXT.trueRange}
           label="当日真实波动 TR"
           value={turtleMetrics.trueRange === null ? "--" : formatNumber(turtleMetrics.trueRange, 2)}
         />
         <SummaryRow
+          helpText={TURTLE_HELP_TEXT.n}
           label="20日平滑N"
           value={turtleMetrics.n === null ? "--" : formatNumber(turtleMetrics.n, 2)}
         />
         <SummaryRow
+          helpText={TURTLE_HELP_TEXT.systemOneEntry}
           label="系统一入场"
           tone={turtleMetrics.systemOneEntry.triggered ? "text-positive" : undefined}
           value={formatTurtleEntrySignal(turtleMetrics.systemOneEntry)}
         />
         <SummaryRow
+          helpText={TURTLE_HELP_TEXT.systemOneExit}
           label="系统一离场"
           tone={turtleMetrics.systemOneExit.triggered ? "text-negative" : undefined}
           value={formatTurtleExitSignal(turtleMetrics.systemOneExit, "10日低点")}
         />
         <SummaryRow
+          helpText={TURTLE_HELP_TEXT.systemTwoEntry}
           label="系统二入场"
           tone={turtleMetrics.systemTwoEntry.triggered ? "text-positive" : undefined}
           value={formatTurtleEntrySignal(turtleMetrics.systemTwoEntry)}
         />
         <SummaryRow
+          helpText={TURTLE_HELP_TEXT.systemTwoExit}
           label="系统二离场"
           tone={turtleMetrics.systemTwoExit.triggered ? "text-negative" : undefined}
           value={formatTurtleExitSignal(turtleMetrics.systemTwoExit, "20日低点")}
         />
         <SummaryRow
+          helpText={TURTLE_HELP_TEXT.addOn}
           label="加仓信号"
           tone={turtleMetrics.addOnTriggered ? "text-positive" : undefined}
           value={formatTurtleAddOnSignal(turtleMetrics)}
@@ -608,10 +626,23 @@ function ResearchSummaryPanel(props: {
 }
 
 /** 渲染研究摘要中的单项键值。 */
-function SummaryRow(props: { label: string; value: string; tone?: string }) {
+function SummaryRow(props: { label: string; value: string; tone?: string; helpText?: string }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 text-xs">
-      <dt className="text-muted">{props.label}</dt>
+      <dt className="flex min-w-0 items-center gap-1.5 text-muted">
+        <span className="truncate">{props.label}</span>
+        {props.helpText ? (
+          <span
+            aria-label={`${props.label} 计算方法`}
+            className="inline-flex shrink-0 cursor-help text-muted"
+            role="img"
+            tabIndex={0}
+            title={props.helpText}
+          >
+            <QuestionMarkCircleIcon aria-hidden="true" className="h-3.5 w-3.5" />
+          </span>
+        ) : null}
+      </dt>
       <dd className={`text-right font-semibold ${props.tone ?? "text-ink"}`}>{props.value}</dd>
     </div>
   );

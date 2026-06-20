@@ -745,6 +745,19 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByText("未触发（20日低点 99.00）")).toBeInTheDocument();
     expect(screen.getByText("加仓信号")).toBeInTheDocument();
     expect(screen.getByText("触发；间隔 1.25")).toBeInTheDocument();
+    expect(screen.getByLabelText("当日真实波动 TR 计算方法")).toHaveAttribute(
+      "title",
+      "TR = max(当日最高价 - 当日最低价, |当日最高价 - 前一日收盘价|, |当日最低价 - 前一日收盘价|)。",
+    );
+    expect(screen.getByLabelText("20日平滑N 计算方法")).toHaveAttribute(
+      "title",
+      "初始 N 为最近 20 日 TR 简单平均；后续 N = (19 × 前一日 N + 当日 TR) / 20。",
+    );
+    expect(screen.getByLabelText("系统一入场 计算方法")).toHaveAttribute("title", "当日高点突破前 20 日高点时触发入场。");
+    expect(screen.getByLabelText("系统一离场 计算方法")).toHaveAttribute("title", "多头持仓跌破前 10 日低点时触发离场。");
+    expect(screen.getByLabelText("系统二入场 计算方法")).toHaveAttribute("title", "当日高点突破前 55 日高点时触发入场。");
+    expect(screen.getByLabelText("系统二离场 计算方法")).toHaveAttribute("title", "多头持仓跌破前 20 日低点时触发离场。");
+    expect(screen.getByLabelText("加仓信号 计算方法")).toHaveAttribute("title", "入场后每上涨 0.5N 触发一次加仓观察信号。");
   });
 
   it("shows financial metrics as secondary tabs with an independent overview-compatible range", async () => {
