@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getStockMarketAllRefresh } from "../api/get-stock-market-all-refresh";
 import { startStockMarketAllRefresh } from "../api/start-stock-market-all-refresh";
-import type { StockMarketAllRefreshJob } from "../model/market-data.types";
+import type { StockMarketAllRefreshJob, StockMarketAllRefreshMode } from "../model/market-data.types";
 
 const TERMINAL_STATUSES = new Set(["completed", "completed_with_warnings", "failed", "skipped"]);
 
@@ -31,7 +31,7 @@ export function useStockMarketAllRefresh() {
     errorMessage: mutation.error ? normalizeRefreshError(mutation.error) : "",
     isStarting: mutation.isPending,
     job: mutation.data?.job ?? latestQuery.data?.job ?? null,
-    start: () => mutation.mutate(),
+    start: (mode: StockMarketAllRefreshMode) => mutation.mutate(mode),
   };
 }
 

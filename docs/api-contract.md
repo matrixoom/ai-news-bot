@@ -474,7 +474,19 @@ uv run python main.py macro-sync
 
 ### 4.4.6 `POST /api/frontend/modules/market-data/stocks/refresh-all`
 
-用途：启动“全部标的”后台刷新任务。服务会逐只检查当前本地上市和 ST 状态股票、ETF、LOF 的近 20 年日线行情；若本地日线窗口已覆盖近 20 年，则该标的直接跳过外部请求；缺失窗口时仅刷新日线行情和公司概况，不足 20 年的标的由上游数据源返回有史以来可取数据，不再批量刷新股票财务指标。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态；若已有任务正在运行，重复点击会返回正在运行的任务。
+用途：启动“全部标的”后台刷新任务。服务会逐只检查当前本地上市和 ST 状态股票、ETF、LOF 的日线行情；若本地日线窗口已覆盖目标范围，则该标的直接跳过外部请求；缺失窗口时仅刷新基础 OHLCV 日线行情并计算均线，不刷新公司概况、日频估值、分红或财务指标。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态；若已有任务正在运行，重复点击会返回正在运行的任务。
+
+请求：
+
+```json
+{
+  "mode": "history"
+}
+```
+
+- `mode=history`：刷新近 20 年日线；不足 20 年的标的由上游数据源返回有史以来可取数据。
+- `mode=today`：只刷新当天日线窗口。
+- 不传 `mode` 时默认 `history`。
 
 成功：`202`
 
@@ -484,6 +496,7 @@ uv run python main.py macro-sync
     "id": "f89f...",
     "status": "running",
     "trigger": "manual",
+    "refresh_mode": "history",
     "completed": 128,
     "total": 6931,
     "percentage": 2,
@@ -497,7 +510,10 @@ uv run python main.py macro-sync
 }
 ```
 
-失败：`503 frontend_stock_all_refresh_start_failed`
+失败：
+
+- `400 invalid_stock_all_refresh_mode`
+- `503 frontend_stock_all_refresh_start_failed`
 
 ### 4.4.7 `GET /api/frontend/modules/market-data/stocks/refresh-all/latest`
 
@@ -527,7 +543,7 @@ uv run python main.py macro-sync
 
 ### 4.4.9 后台定时刷新
 
-股票市场服务启动后会在后台检查上海时间 `15:30` 槽位，并先通过 A 股交易日历判断当天是否开盘；周末和节假日休市日不会触发 `scheduled` 全标的刷新。自动任务和手动任务共用最近一次完成状态文件 `.data/stock_market_refresh_state.json`，不再按自然日限制启动；每次任务都会按标的检查近 20 年日线窗口，已覆盖窗口的标的会跳过外部请求。
+股票市场服务启动后会在后台检查上海时间 `15:30` 槽位，并先通过 A 股交易日历判断当天是否开盘；周末和节假日休市日不会触发 `scheduled` 全标的刷新。自动任务和手动任务共用最近一次完成状态文件 `.data/stock_market_refresh_state.json`，不再按自然日限制启动；定时任务使用 `mode=today`，只检查并刷新当天基础 OHLCV 日线行情，不触发公司概况、估值、分红或财务指标接口。
 
 ### 4.4.10 `GET /api/frontend/modules/market-data/stocks/{symbol}`
 
@@ -643,6 +659,36 @@ ETF 的 `refresh_result` 仅包含 `daily_bars`。
 
 - `400`：`invalid_stock_symbol_or_range`
 - `503`：`frontend_stock_detail_sync_failed`
+
+### 4.4.12 `POST /api/frontend/modules/market-data/stocks/{symbol}/financials/sync`
+
+用途：刷新选中股票当前财务页时间范围对应的财务指标，不触发行情日线同步。底层上游财务接口不支持严格按日期增量请求时，服务会补采并 upsert 可返回的财务指标，前端继续按请求范围展示。
+
+请求：
+
+```json
+{
+  "range": "custom",
+  "start_date": "2021-01-01",
+  "end_date": "2026-06-30",
+  "financial_report_type": "quarterly"
+}
+```
+
+成功：`200`，响应同详情接口，并额外包含 `refresh_result`：
+
+```json
+{
+  "refresh_result": {
+    "financial_metrics": 4
+  }
+}
+```
+
+失败：
+
+- `400 invalid_stock_symbol_or_financial_range`
+- `503 frontend_stock_financial_sync_failed`
 
 ### 4.5 Outlook 时间轴接口
 

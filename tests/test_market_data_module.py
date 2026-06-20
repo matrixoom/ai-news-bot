@@ -1014,6 +1014,62 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertIsNone(points[0].pe_ttm)
         self.assertIn("估值", repository.get_sync_state("000001.SZ").warning_message)
 
+    def test_symbol_window_can_skip_valuation_and_dividend_sources(self) -> None:
+        """校验基础行情刷新可跳过估值和分红源，避免批量任务触发易失败接口。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        instrument = repository.get_instrument("000001.SZ")
+        valuation_loader = Mock(side_effect=AssertionError("valuation should be skipped"))
+        dividend_loader = Mock(side_effect=AssertionError("dividend should be skipped"))
+        syncer = StockMarketSyncService(
+            repository=repository,
+            stock_daily_loader=lambda **_: pd.DataFrame(
+                [
+                    {
+                        "日期": "2026-06-05",
+                        "开盘": 10,
+                        "收盘": 11,
+                        "最高": 12,
+                        "最低": 9,
+                        "成交量": 100,
+                    }
+                ]
+            ),
+            valuation_loader=valuation_loader,
+            dividend_loader=dividend_loader,
+        )
+
+        result = syncer.sync_symbol_window(
+            instrument,
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 7),
+            include_valuation=False,
+        )
+        points = repository.load_daily_bars(
+            symbol="000001.SZ",
+            start_date="2026-06-01",
+            end_date="2026-06-07",
+        )
+
+        self.assertEqual(result["daily_bars"], 1)
+        self.assertEqual(points[0].close_price, 11)
+        self.assertIsNone(points[0].dividend_yield_ttm)
+        valuation_loader.assert_not_called()
+        dividend_loader.assert_not_called()
+
     def test_financial_analysis_extracts_quarterly_quality_metrics(self) -> None:
         """校验东方财富主要财务指标会转换为统一季度百分比序列。"""
 
@@ -1318,8 +1374,45 @@ class StockMarketModuleTests(unittest.TestCase):
             {"daily_bars": 2, "financial_metrics": 4},
         )
 
+    def test_financial_refresh_only_syncs_financial_metrics_for_selected_range(self) -> None:
+        """校验财务页手动刷新只补采财务指标，不触发行情同步。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_financials.return_value = {"financial_metrics": 4}
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        payload = service.refresh_stock_financials(
+            "000001.SZ",
+            range_type="custom",
+            start_date="2021-01-01",
+            end_date="2026-06-30",
+            financial_report_type="quarterly",
+        )
+
+        instrument = repository.get_instrument("000001.SZ")
+        syncer.sync_symbol_window.assert_not_called()
+        syncer.sync_financials.assert_called_once_with(instrument)
+        self.assertEqual(payload["range"]["type"], "custom")
+        self.assertEqual(payload["range"]["start_date"], "2021-01-01")
+        self.assertEqual(payload["range"]["end_date"], "2026-06-30")
+        self.assertEqual(payload["refresh_result"], {"financial_metrics": 4})
+
     def test_all_instrument_refresh_can_run_multiple_times_per_local_day(self) -> None:
-        """校验全标的刷新同一天可重复启动，缺少近 20 年窗口时只补采行情和概况。"""
+        """校验全标的刷新同一天可重复启动，缺少近 20 年窗口时只补采基础行情。"""
         repository = self._repository()
         repository.upsert_instruments(
             [
@@ -1375,8 +1468,56 @@ class StockMarketModuleTests(unittest.TestCase):
         first_call = syncer.sync_symbol_window.call_args_list[0]
         self.assertEqual(first_call.kwargs["start_date"], date(2006, 6, 19))
         self.assertEqual(first_call.kwargs["end_date"], date(2026, 6, 19))
-        self.assertEqual(syncer.sync_profile.call_count, 4)
+        self.assertFalse(first_call.kwargs["include_valuation"])
+        syncer.sync_profile.assert_not_called()
         syncer.sync_financials.assert_not_called()
+
+    def test_all_instrument_refresh_today_mode_only_requests_today_window(self) -> None:
+        """校验全部标的当日刷新只请求当天行情窗口。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 1}
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+        )
+
+        class FixedDate(date):
+            """固定当前日期，确保当日窗口可断言。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的本地日期。"""
+
+                return cls(2026, 6, 19)
+
+        with patch("src.services.stock_market_service.date", FixedDate):
+            job = service.start_all_instrument_refresh(
+                trigger="manual",
+                refresh_mode="today",
+                run_inline=True,
+            )["job"]
+
+        sync_call = syncer.sync_symbol_window.call_args
+        self.assertEqual(job["refresh_mode"], "today")
+        self.assertEqual(sync_call.kwargs["start_date"], date(2026, 6, 19))
+        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
+        self.assertFalse(sync_call.kwargs["include_valuation"])
 
     def test_all_instrument_refresh_skips_symbols_with_complete_twenty_year_window(self) -> None:
         """校验全标的刷新每次可启动，但已有近 20 年日线窗口时不再调用外部 API。"""
@@ -1488,7 +1629,8 @@ class StockMarketModuleTests(unittest.TestCase):
         sync_call = syncer.sync_symbol_window.call_args
         self.assertEqual(sync_call.kwargs["start_date"], date(2006, 6, 19))
         self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
-        syncer.sync_profile.assert_called_once()
+        self.assertFalse(sync_call.kwargs["include_valuation"])
+        syncer.sync_profile.assert_not_called()
         syncer.sync_financials.assert_not_called()
 
     def test_scheduled_all_instrument_refresh_starts_at_1530_on_trading_day(self) -> None:

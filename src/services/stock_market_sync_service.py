@@ -120,13 +120,21 @@ class StockMarketSyncService:
             "warnings": warnings,
         }
 
-    def sync_symbol_window(self, instrument: StockInstrument, *, start_date: date, end_date: date) -> dict[str, int]:
+    def sync_symbol_window(
+        self,
+        instrument: StockInstrument,
+        *,
+        start_date: date,
+        end_date: date,
+        include_valuation: bool = True,
+    ) -> dict[str, int]:
         """同步单只股票指定窗口的日线数据，并补足均线计算前置窗口。
 
         Args:
             instrument: 已持久化的股票或 ETF 标的。
             start_date: 用户请求起始日期。
             end_date: 用户请求结束日期。
+            include_valuation: 是否为 A 股同步日频估值和分红数据；批量基础行情刷新会关闭该项以避开易失败扩展源。
 
         Returns:
             本次写入的日线点位数量。
@@ -152,7 +160,7 @@ class StockMarketSyncService:
             raise ValueError(f"stock daily history returned no data: {instrument.symbol}")
         rows = _with_moving_averages(bars)
         warnings: list[str] = []
-        if instrument.instrument_type == "stock":
+        if instrument.instrument_type == "stock" and include_valuation:
             valuation_frame: Any = None
             dividend_frame: Any = None
             try:
@@ -678,7 +686,6 @@ def _fallback_profile(instrument: StockInstrument) -> dict[str, Any]:
         "region": "",
         "listing_date": "",
         "attributes": _infer_stock_attributes(instrument, ""),
-        "summary": f"{instrument.name}，{instrument.market_board}标的。公司概况等待上游数据补充。",
         "provider_key": "fallback",
         "source_url": "",
     }

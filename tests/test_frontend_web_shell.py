@@ -167,6 +167,70 @@ class FastAPIWebShellTests(unittest.TestCase):
             end_date=None,
         )
 
+    def test_stock_market_refresh_all_endpoint_passes_refresh_mode(self):
+        """校验全部标的刷新接口把用户选择的刷新模式传给 Service。"""
+
+        stock_service = Mock()
+        stock_service.start_all_instrument_refresh.return_value = {
+            "job": {
+                "id": "job-1",
+                "status": "pending",
+                "trigger": "manual",
+                "refresh_mode": "today",
+                "completed": 0,
+                "total": 1,
+                "percentage": 0,
+                "current_symbol": "",
+                "current_label": "",
+                "message": "",
+                "errors": [],
+                "started_at": "",
+                "finished_at": "",
+            }
+        }
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        response = client.post(
+            "/api/frontend/modules/market-data/stocks/refresh-all",
+            json={"mode": "today"},
+        )
+
+        self.assertEqual(response.status_code, 202)
+        stock_service.start_all_instrument_refresh.assert_called_once_with(
+            trigger="manual",
+            refresh_mode="today",
+        )
+
+    def test_stock_market_financial_refresh_endpoint_passes_range(self):
+        """校验财务刷新接口把财务页当前时间范围传给 Service。"""
+
+        stock_service = Mock()
+        stock_service.refresh_stock_financials.return_value = {
+            "ok": True,
+            "range": {"type": "custom", "start_date": "2021-01-01", "end_date": "2026-06-30"},
+            "refresh_result": {"financial_metrics": 4},
+        }
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        response = client.post(
+            "/api/frontend/modules/market-data/stocks/000001.SZ/financials/sync",
+            json={
+                "range": "custom",
+                "start_date": "2021-01-01",
+                "end_date": "2026-06-30",
+                "financial_report_type": "quarterly",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        stock_service.refresh_stock_financials.assert_called_once_with(
+            "000001.SZ",
+            range_type="custom",
+            start_date="2021-01-01",
+            end_date="2026-06-30",
+            financial_report_type="quarterly",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

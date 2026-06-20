@@ -36,6 +36,7 @@ STOCK_REQUIRED_FINANCIAL_METRICS = {
 }
 STOCK_OVERVIEW_INDEX_REGISTRY = tuple(build_default_market_registry().values())
 STOCK_ALL_REFRESH_TERMINAL_STATUSES = {"completed", "completed_with_warnings", "failed", "skipped"}
+STOCK_ALL_REFRESH_MODES = {"history", "today"}
 STOCK_ALL_REFRESH_SCHEDULE_TIME = "15:30"
 STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
 STOCK_ALL_REFRESH_HISTORY_MONTHS = 240
@@ -163,29 +164,32 @@ class StockMarketService:
         if not self._is_scheduled_trading_day(local_time.date()):
             logger.info("stock market scheduled refresh skipped closed market day %s", local_time.date().isoformat())
             return []
-        return [self.start_all_instrument_refresh(trigger="scheduled", run_inline=run_inline)]
+        return [self.start_all_instrument_refresh(trigger="scheduled", refresh_mode="today", run_inline=run_inline)]
 
     def start_all_instrument_refresh(
         self,
         *,
         trigger: str = "manual",
+        refresh_mode: str = "history",
         run_inline: bool = False,
     ) -> dict[str, Any]:
-        """启动全标的近 20 年行情和概况刷新任务。
+        """启动全标的近 20 年基础行情刷新任务。
 
         Args:
             trigger: `manual` 或 `scheduled`，用于前端展示和状态追踪。
+            refresh_mode: `history` 刷新近 20 年窗口，`today` 仅刷新当日行情。
             run_inline: 测试模式下同步执行任务。
 
         Returns:
             可供前端轮询的任务状态。
         """
 
+        normalized_mode = self._validate_all_refresh_mode(refresh_mode)
         with self._all_refresh_lock:
             for existing_job in self._all_refresh_jobs.values():
                 if existing_job["status"] not in STOCK_ALL_REFRESH_TERMINAL_STATUSES:
                     return {"job": self._public_all_refresh_job(existing_job)}
-            job = self._new_all_refresh_job(trigger=trigger)
+            job = self._new_all_refresh_job(trigger=trigger, refresh_mode=normalized_mode)
             self._all_refresh_jobs[job["id"]] = job
             self._latest_all_refresh_job_id = job["id"]
 
@@ -234,13 +238,18 @@ class StockMarketService:
         """逐标的执行外部数据同步并持续更新进度。"""
 
         end = date.today()
-        start = _shift_months(end, -STOCK_ALL_REFRESH_HISTORY_MONTHS)
         instruments = self._load_all_refresh_instruments()
         with self._all_refresh_lock:
             job = self._all_refresh_jobs[job_id]
+            refresh_mode = str(job.get("refresh_mode") or "history")
+            start = end if refresh_mode == "today" else _shift_months(end, -STOCK_ALL_REFRESH_HISTORY_MONTHS)
             job["status"] = "running"
             job["total"] = len(instruments)
-            job["message"] = "正在刷新全部标的近 20 年行情和概况数据。"
+            job["message"] = (
+                "正在刷新全部标的当日基础行情数据。"
+                if refresh_mode == "today"
+                else "正在刷新全部标的近 20 年基础行情数据。"
+            )
             job["started_at"] = _utc_now()
         try:
             for index, instrument in enumerate(instruments, start=1):
@@ -274,12 +283,17 @@ class StockMarketService:
                     job["message"] = "全标的刷新完成，部分标的失败，已保留旧数据。"
                 else:
                     job["status"] = "completed"
-                    job["message"] = "全标的近 20 年行情和概况数据已刷新。"
+                    job["message"] = (
+                        "全标的当日基础行情数据已刷新。"
+                        if job.get("refresh_mode") == "today"
+                        else "全标的近 20 年基础行情数据已刷新。"
+                    )
                 self._save_refresh_state(
                     {
                         "last_refresh_date": self._local_today(),
                         "last_refresh_at": job["finished_at"],
                         "last_trigger": job["trigger"],
+                        "last_refresh_mode": job["refresh_mode"],
                     }
                 )
         except Exception as error:  # pragma: no cover - 后台任务兜底
@@ -586,6 +600,56 @@ class StockMarketService:
         payload["refresh_result"] = result
         return payload
 
+    def refresh_stock_financials(
+        self,
+        symbol: str,
+        *,
+        range_type: str = "5y",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        financial_report_type: str = "quarterly",
+    ) -> dict[str, Any]:
+        """手动刷新指定财务页时间范围内的财报数据并返回详情。
+
+        Args:
+            symbol: 带交易所后缀的股票代码。
+            range_type: 财务页当前时间范围。
+            start_date: 自定义范围起始日期。
+            end_date: 自定义范围结束日期。
+            financial_report_type: `quarterly` 或 `yearly`。
+
+        Returns:
+            刷新后的股票详情 payload，`refresh_result` 仅包含财务指标写入数。
+        """
+
+        instrument = self._require_instrument(symbol)
+        self._repository.record_instrument_access(instrument.symbol)
+        instrument = self._require_instrument(symbol)
+        resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
+        self._validate_filter(
+            financial_report_type,
+            STOCK_FINANCIAL_REPORT_TYPES,
+            "invalid stock financial report type",
+        )
+        warnings: list[str] = []
+        result = {"financial_metrics": 0}
+        if instrument.instrument_type == "stock":
+            try:
+                result = self._sync_service.sync_financials(instrument)
+            except Exception as error:
+                warning = f"财报刷新失败：{_compact_error_message(error)}"
+                warnings.append(warning)
+                logger.warning("stock financial refresh failed for %s: %s", instrument.symbol, warning)
+                self._repository.record_sync_warning(instrument.symbol, warning)
+        payload = self._build_detail_payload(
+            instrument,
+            resolved_range=resolved_range,
+            financial_report_type=financial_report_type,
+            warning_message="；".join(warnings),
+        )
+        payload["refresh_result"] = result
+        return payload
+
     def _load_all_refresh_instruments(self) -> list[StockInstrument]:
         """按分页读取全部可交易标的，避免一次性加载超大结果集。
 
@@ -620,7 +684,7 @@ class StockMarketService:
         start: date,
         end: date,
     ) -> list[str]:
-        """刷新单只标的的行情和概况数据，单项失败不阻断后续标的。
+        """刷新单只标的的基础行情数据，失败不阻断后续标的。
 
         Args:
             instrument: 当前股票或 ETF 标的。
@@ -648,17 +712,15 @@ class StockMarketService:
 
         errors: list[str] = []
         try:
-            self._sync_service.sync_symbol_window(instrument, start_date=start, end_date=end)
+            self._sync_service.sync_symbol_window(
+                instrument,
+                start_date=start,
+                end_date=end,
+                include_valuation=False,
+            )
         except Exception as error:
             warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
             logger.warning("stock all refresh daily failed for %s: %s", instrument.symbol, warning)
-            self._repository.record_sync_warning(instrument.symbol, warning)
-            errors.append(warning)
-        try:
-            self._sync_service.sync_profile(instrument)
-        except Exception as error:
-            warning = f"{instrument.symbol} 概况刷新失败：{_compact_error_message(error)}"
-            logger.warning("stock all refresh profile failed for %s: %s", instrument.symbol, warning)
             self._repository.record_sync_warning(instrument.symbol, warning)
             errors.append(warning)
         return errors
@@ -697,6 +759,7 @@ class StockMarketService:
         self,
         *,
         trigger: str,
+        refresh_mode: str,
         status: str = "pending",
         message: str = "刷新任务已创建，等待后台执行。",
     ) -> dict[str, Any]:
@@ -706,6 +769,7 @@ class StockMarketService:
             "id": uuid4().hex,
             "status": status,
             "trigger": trigger,
+            "refresh_mode": refresh_mode,
             "completed": 0,
             "total": self._repository.count_instruments(),
             "percentage": 0,
@@ -721,6 +785,14 @@ class StockMarketService:
         """复制任务字段，避免前端拿到内部可变对象。"""
 
         return deepcopy(job) if job is not None else None
+
+    def _validate_all_refresh_mode(self, value: str) -> str:
+        """校验全部标的刷新模式。"""
+
+        normalized = value.strip().lower() if isinstance(value, str) else ""
+        if normalized not in STOCK_ALL_REFRESH_MODES:
+            raise StockMarketValidationError("invalid stock all refresh mode")
+        return normalized
 
     def _local_today(self) -> str:
         """返回上海时区当天日期，作为最近刷新状态日期。"""

@@ -366,11 +366,20 @@ def create_fastapi_app(
             return JSONResponse({"error": "frontend_stock_market_overview_unavailable"}, status_code=503)
 
     @app.post("/api/frontend/modules/market-data/stocks/refresh-all")
-    def frontend_stock_market_refresh_all() -> JSONResponse:
-        """启动全标的近 20 年行情和概况后台刷新。"""
+    def frontend_stock_market_refresh_all(payload: dict | None = None) -> JSONResponse:
+        """启动全标的近 20 年基础行情后台刷新。"""
 
+        body = payload or {}
         try:
-            return JSONResponse(stock_service.start_all_instrument_refresh(trigger="manual"), status_code=202)
+            return JSONResponse(
+                stock_service.start_all_instrument_refresh(
+                    trigger="manual",
+                    refresh_mode=str(body.get("mode", "history")),
+                ),
+                status_code=202,
+            )
+        except StockMarketValidationError:
+            return JSONResponse({"error": "invalid_stock_all_refresh_mode"}, status_code=400)
         except Exception:
             logger.exception("frontend stock all refresh start failed")
             return JSONResponse({"error": "frontend_stock_all_refresh_start_failed"}, status_code=503)
@@ -460,6 +469,27 @@ def create_fastapi_app(
         except Exception:
             logger.exception("frontend stock detail sync failed", extra={"symbol": symbol})
             return JSONResponse({"error": "frontend_stock_detail_sync_failed"}, status_code=503)
+
+    @app.post("/api/frontend/modules/market-data/stocks/{symbol}/financials/sync")
+    def frontend_stock_market_sync_financials(symbol: str, payload: dict | None = None) -> JSONResponse:
+        """手动刷新选中股票指定财务范围的数据。"""
+
+        body = payload or {}
+        try:
+            return JSONResponse(
+                stock_service.refresh_stock_financials(
+                    symbol,
+                    range_type=str(body.get("range", "5y")),
+                    start_date=str(body["start_date"]) if body.get("start_date") else None,
+                    end_date=str(body["end_date"]) if body.get("end_date") else None,
+                    financial_report_type=str(body.get("financial_report_type", "quarterly")),
+                )
+            )
+        except StockMarketValidationError:
+            return JSONResponse({"error": "invalid_stock_symbol_or_financial_range"}, status_code=400)
+        except Exception:
+            logger.exception("frontend stock financial sync failed", extra={"symbol": symbol})
+            return JSONResponse({"error": "frontend_stock_financial_sync_failed"}, status_code=503)
 
     @app.get("/api/frontend/modules/event-outlook")
     def frontend_event_outlook_module(

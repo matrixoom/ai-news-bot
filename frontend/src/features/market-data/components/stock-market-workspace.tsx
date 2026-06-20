@@ -6,6 +6,7 @@ import {
   ChevronRightIcon,
   MagnifyingGlassIcon,
   QuestionMarkCircleIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-query";
@@ -13,6 +14,7 @@ import { useStockMarketAllRefresh } from "../hooks/use-stock-market-all-refresh"
 import { useStockMarketInstrumentsQuery } from "../hooks/use-stock-market-instruments-query";
 import { useStockMarketOverviewQuery } from "../hooks/use-stock-market-overview-query";
 import { useStockMarketOverviewRefreshMutation } from "../hooks/use-stock-market-overview-refresh-mutation";
+import { useStockMarketFinancialRefreshMutation } from "../hooks/use-stock-market-financial-refresh-mutation";
 import { useStockMarketRefreshMutation } from "../hooks/use-stock-market-refresh-mutation";
 import type {
   MarketDataRangeSelection,
@@ -20,6 +22,7 @@ import type {
   StockFinancialReportType,
   StockFinancialSeries,
   StockMarketAllRefreshJob,
+  StockMarketAllRefreshMode,
   StockInstrument,
   StockMarketOverviewPayload,
 } from "../model/market-data.types";
@@ -130,6 +133,7 @@ export function StockMarketWorkspace() {
   const [priceAdjustment, setPriceAdjustment] = useState<StockPriceAdjustment>("none");
   const [selectedIndexSymbol, setSelectedIndexSymbol] = useState<string | null>(null);
   const [indexRange, setIndexRange] = useState<MarketDataRangeSelection>({ type: "1m" });
+  const [isAllRefreshDialogOpen, setIsAllRefreshDialogOpen] = useState(false);
 
   const instrumentsQuery = useStockMarketInstrumentsQuery({
     query: searchText,
@@ -143,6 +147,11 @@ export function StockMarketWorkspace() {
   const overviewQuery = useStockMarketOverviewQuery();
   const overviewRefreshMutation = useStockMarketOverviewRefreshMutation();
   const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType);
+  const financialRefreshMutation = useStockMarketFinancialRefreshMutation(
+    selectedSymbol,
+    financialRange,
+    financialReportType,
+  );
   const allRefresh = useStockMarketAllRefresh();
   const instruments = instrumentsQuery.data?.items ?? [];
   const instrumentTotal = instrumentsQuery.data?.total ?? 0;
@@ -214,6 +223,12 @@ export function StockMarketWorkspace() {
     setSelectedIndexSymbol((current) => (current === symbol ? null : symbol));
   }
 
+  /** 启动全部标的刷新，并关闭模式选择弹窗。 */
+  function handleAllRefreshStart(mode: StockMarketAllRefreshMode) {
+    allRefresh.start(mode);
+    setIsAllRefreshDialogOpen(false);
+  }
+
   return (
     <div className="-m-4 flex h-[calc(100vh-4.5rem)] min-h-[42rem] w-full min-w-0 flex-col overflow-hidden bg-canvas text-ink md:-m-6">
       <MarketOverviewStrip
@@ -261,7 +276,7 @@ export function StockMarketWorkspace() {
               allRefreshError={allRefresh.errorMessage}
               allRefreshStarting={allRefresh.isStarting}
               onCollapseChange={setIsInstrumentListCollapsed}
-              onRefreshAll={allRefresh.start}
+              onRefreshAll={() => setIsAllRefreshDialogOpen(true)}
               onPageChange={setInstrumentPage}
               onPageSizeChange={handleInstrumentPageSizeChange}
               onSelect={setSelectedSymbol}
@@ -333,9 +348,11 @@ export function StockMarketWorkspace() {
                         activeMetric={activeFinancialMetric}
                         financialRange={financialRange}
                         isPending={detailQuery.isPending}
+                        onFinancialRefresh={() => financialRefreshMutation.mutate()}
                         onFinancialRangeChange={setFinancialRange}
                         onMetricChange={setActiveFinancialMetric}
                         onReportTypeChange={setFinancialReportType}
+                        refreshPending={financialRefreshMutation.isPending}
                         reportType={financialReportType}
                         series={detailQuery.data?.financials.series ?? []}
                       />
@@ -347,6 +364,12 @@ export function StockMarketWorkspace() {
               )}
             </section>
           </div>
+          {isAllRefreshDialogOpen ? (
+            <AllInstrumentRefreshDialog
+              onClose={() => setIsAllRefreshDialogOpen(false)}
+              onStart={handleAllRefreshStart}
+            />
+          ) : null}
         </>
       )}
     </div>
@@ -528,7 +551,6 @@ function ResearchSummaryPanel(props: {
   if (props.isCollapsed) {
     return (
       <aside
-        aria-label="研究摘要"
         className="flex min-h-0 items-start justify-center border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pt-3"
       >
         <button
@@ -786,7 +808,7 @@ function InstrumentListPanel(props: {
             className="workbench-icon-button h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={props.allRefreshStarting}
             onClick={props.onRefreshAll}
-            title="后台刷新全部标的近 20 年行情和公司概况；不足 20 年的标的刷新有史以来可取数据"
+            title="选择刷新全部标的历史行情或当日行情"
             type="button"
           >
             <ArrowPathIcon
@@ -894,6 +916,52 @@ function InstrumentListPanel(props: {
         <span className="ml-auto"> {formatNumber(props.total)} </span>
       </nav>
     </aside>
+  );
+}
+
+function AllInstrumentRefreshDialog(props: {
+  onClose: () => void;
+  onStart: (mode: StockMarketAllRefreshMode) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4">
+      <section
+        aria-label="选择全部标的刷新范围"
+        className="w-full max-w-sm rounded-panel border border-line bg-surface p-4 shadow-xl"
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">刷新全部标的</h3>
+            <p className="mt-1 text-xs leading-5 text-muted">历史数据会补近 20 年窗口；当日数据只补今天的行情。</p>
+          </div>
+          <button
+            aria-label="关闭全部标的刷新选择"
+            className="workbench-icon-button h-8 w-8 shrink-0"
+            onClick={props.onClose}
+            type="button"
+          >
+            <XMarkIcon aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-control bg-accent px-3 text-xs font-semibold text-white hover:opacity-90"
+            onClick={() => props.onStart("history")}
+            type="button"
+          >
+            刷新历史数据
+          </button>
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-control border border-line bg-surface px-3 text-xs font-semibold text-ink hover:bg-accent-soft"
+            onClick={() => props.onStart("today")}
+            type="button"
+          >
+            刷新当日数据
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1324,7 +1392,9 @@ function FinancialCards(props: {
   financialRange: MarketDataRangeSelection;
   isPending: boolean;
   reportType: StockFinancialReportType;
+  refreshPending: boolean;
   series: StockFinancialSeries[];
+  onFinancialRefresh: () => void;
   onFinancialRangeChange: (range: MarketDataRangeSelection) => void;
   onMetricChange: (metric: string) => void;
   onReportTypeChange: (type: StockFinancialReportType) => void;
@@ -1339,35 +1409,52 @@ function FinancialCards(props: {
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-3">
-      {!props.isPending && sortedSeries.some((item) => item.points.length > 0) ? (
-        <div
-          aria-label="财务指标"
-          className="flex h-10 shrink-0 items-end gap-7 border-b border-line"
-          role="tablist"
+      <div className="flex h-10 shrink-0 items-end gap-3 border-b border-line">
+        {!props.isPending && sortedSeries.some((item) => item.points.length > 0) ? (
+          <div
+            aria-label="财务指标"
+            className="flex min-w-0 flex-1 items-end gap-7 overflow-x-auto"
+            role="tablist"
+          >
+            {sortedSeries.map((item) => {
+              const isActive = item.metric === selectedSeries?.metric;
+              return (
+                <button
+                  aria-controls={`financial-metric-panel-${item.metric}`}
+                  aria-selected={isActive}
+                  className={`relative h-10 shrink-0 border-b-2 px-1 text-xs font-semibold ${
+                    isActive
+                      ? "border-accent text-accent"
+                      : "border-transparent text-muted hover:text-ink"
+                  }`}
+                  id={`financial-metric-tab-${item.metric}`}
+                  key={item.metric}
+                  onClick={() => props.onMetricChange(item.metric)}
+                  role="tab"
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1" />
+        )}
+        <button
+          aria-label="刷新财务数据"
+          className="workbench-icon-button mb-1 h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={props.refreshPending}
+          onClick={props.onFinancialRefresh}
+          title="刷新当前财务时间范围的数据"
+          type="button"
         >
-          {sortedSeries.map((item) => {
-            const isActive = item.metric === selectedSeries?.metric;
-            return (
-              <button
-                aria-controls={`financial-metric-panel-${item.metric}`}
-                aria-selected={isActive}
-                className={`relative h-10 border-b-2 px-1 text-xs font-semibold ${
-                  isActive
-                    ? "border-accent text-accent"
-                    : "border-transparent text-muted hover:text-ink"
-                }`}
-                id={`financial-metric-tab-${item.metric}`}
-                key={item.metric}
-                onClick={() => props.onMetricChange(item.metric)}
-                role="tab"
-                type="button"
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+          <ArrowPathIcon
+            aria-hidden="true"
+            className={`h-4 w-4 ${props.refreshPending ? "animate-spin" : ""}`}
+          />
+        </button>
+      </div>
       <div
         aria-label="财务筛选工具栏"
         className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line pb-3"

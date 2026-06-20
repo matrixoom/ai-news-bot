@@ -121,6 +121,8 @@ export type StockMarketAllRefreshJob = {
   finished_at: string;
 };
 
+export type StockMarketAllRefreshMode = "history" | "today";
+
 export type StockMarketAllRefreshPayload = {
   job: StockMarketAllRefreshJob | null;
   state?: {

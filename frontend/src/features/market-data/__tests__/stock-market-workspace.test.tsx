@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   detailRanges: [] as Array<Record<string, unknown>>,
   detailDailyBars: null as null | StockDailyBar[],
   echartOptions: [] as Array<Record<string, unknown>>,
+  financialRefresh: vi.fn(),
   indexRefresh: vi.fn(),
   instrumentFilters: [] as Array<Record<string, unknown>>,
   refresh: vi.fn(),
@@ -289,6 +290,17 @@ vi.mock("../hooks/use-stock-market-all-refresh", () => ({
   }),
 }));
 
+vi.mock("../hooks/use-stock-market-financial-refresh-mutation", () => ({
+  useStockMarketFinancialRefreshMutation: (
+    symbol: string | null,
+    range: Record<string, unknown>,
+    financialReportType: string,
+  ) => ({
+    isPending: false,
+    mutate: () => mocks.financialRefresh({ symbol, range, financialReportType }),
+  }),
+}));
+
 vi.mock("../hooks/use-stock-market-overview-refresh-mutation", () => ({
   useStockMarketOverviewRefreshMutation: () => ({
     isPending: false,
@@ -440,6 +452,7 @@ describe("StockMarketWorkspace", () => {
     mocks.detailRanges.length = 0;
     mocks.detailDailyBars = null;
     mocks.echartOptions.length = 0;
+    mocks.financialRefresh.mockClear();
     mocks.indexRefresh.mockClear();
     mocks.instrumentFilters.length = 0;
     mocks.refresh.mockClear();
@@ -597,8 +610,9 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByLabelText("全部标的刷新进度")).toHaveAttribute("aria-valuenow", "20");
     expect(screen.getByLabelText("全部标的刷新进度")).toHaveTextContent("3/15");
     await user.click(screen.getByRole("button", { name: "刷新全部标的数据" }));
+    await user.click(screen.getByRole("button", { name: "刷新历史数据" }));
 
-    expect(mocks.allRefresh).toHaveBeenCalledTimes(1);
+    expect(mocks.allRefresh).toHaveBeenCalledWith("history");
   });
 
   it("shows a visible error when all-instrument refresh cannot start", () => {
@@ -694,6 +708,20 @@ describe("StockMarketWorkspace", () => {
       range: { type: "1m" },
       financialReportType: "quarterly",
     });
+  });
+
+  it("asks whether all instruments should refresh history or today's data", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("button", { name: "刷新全部标的数据" }));
+
+    const dialog = screen.getByRole("dialog", { name: "选择全部标的刷新范围" });
+    expect(within(dialog).getByText("刷新全部标的")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "刷新当日数据" }));
+
+    expect(mocks.allRefresh).toHaveBeenCalledWith("today");
   });
 
   it("uses the latest month as the default stock range", () => {
@@ -824,6 +852,30 @@ describe("StockMarketWorkspace", () => {
     expect(within(toolbar).getByRole("button", { name: "季度" })).toHaveAttribute("aria-pressed", "true");
     expect(within(toolbar).getByRole("button", { name: "年度" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "财务数据" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes financial data for the selected financial range", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("tab", { name: "财务数据" }));
+    await user.click(screen.getByRole("button", { name: "自定义" }));
+    await user.clear(screen.getByLabelText("财务起始日期"));
+    await user.type(screen.getByLabelText("财务起始日期"), "2021-01-01");
+    await user.clear(screen.getByLabelText("财务结束日期"));
+    await user.type(screen.getByLabelText("财务结束日期"), "2026-06-30");
+    await user.click(screen.getByRole("button", { name: "刷新财务数据" }));
+
+    expect(mocks.financialRefresh).toHaveBeenCalledWith({
+      symbol: "000001.SZ",
+      range: {
+        type: "custom",
+        startDate: "2021-01-01",
+        endDate: "2026-06-30",
+      },
+      financialReportType: "quarterly",
+    });
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("keeps the paginator at the bottom of the viewport-height list panel", () => {
