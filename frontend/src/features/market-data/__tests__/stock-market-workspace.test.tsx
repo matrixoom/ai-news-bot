@@ -3,13 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StockMarketWorkspace } from "../components/stock-market-workspace";
-import type { StockInstrument } from "../model/market-data.types";
+import type { StockDailyBar, StockInstrument } from "../model/market-data.types";
 
 const mocks = vi.hoisted(() => ({
   allRefresh: vi.fn(),
   allRefreshError: "",
   allRefreshStatuses: [] as Array<Record<string, unknown> | null>,
   detailRanges: [] as Array<Record<string, unknown>>,
+  detailDailyBars: null as null | StockDailyBar[],
   echartOptions: [] as Array<Record<string, unknown>>,
   indexRefresh: vi.fn(),
   instrumentFilters: [] as Array<Record<string, unknown>>,
@@ -133,6 +134,51 @@ const dailyBars = [
   },
 ];
 
+/**
+ * 构造一段稳定 TR 后向上突破的日线，用于验证海龟交易法派生指标。
+ * @returns 覆盖 56 个交易日的测试日线序列，末日同时触发 20/55 日突破。
+ */
+function buildTurtleSignalBars(): StockDailyBar[] {
+  const flatBars = Array.from({ length: 55 }, (_, index) => ({
+    date: new Date(Date.UTC(2026, 3, index + 1)).toISOString().slice(0, 10),
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100,
+    volume: 1000 + index,
+    ma5: null,
+    ma10: null,
+    ma20: null,
+    ma60: null,
+    ma120: null,
+    pe_ttm: null,
+    pb_mrq: null,
+    dividend_yield_ttm: null,
+    total_market_cap: null,
+  }));
+
+  return [
+    ...flatBars,
+    {
+      date: "2026-06-19",
+      open: 100,
+      high: 112,
+      low: 110,
+      close: 111,
+      volume: 2000,
+      ma5: null,
+      ma10: null,
+      ma20: null,
+      ma60: null,
+      ma120: null,
+      pe_ttm: null,
+      pb_mrq: null,
+      dividend_yield_ttm: null,
+      total_market_cap: null,
+    },
+  ];
+}
+
 vi.mock("echarts", () => ({
   init: vi.fn(() => ({
     setOption: vi.fn((option: Record<string, unknown>) => mocks.echartOptions.push(option)),
@@ -205,7 +251,7 @@ vi.mock("../hooks/use-stock-market-detail-query", () => ({
       data: symbol
         ? {
             instrument: instruments.find((instrument) => instrument.symbol === symbol) ?? instruments[0],
-            daily_bars: dailyBars,
+            daily_bars: mocks.detailDailyBars ?? dailyBars,
             profile: {
               listing_date: "",
               sector: "",
@@ -392,6 +438,7 @@ describe("StockMarketWorkspace", () => {
     mocks.allRefreshError = "";
     mocks.allRefreshStatuses.length = 0;
     mocks.detailRanges.length = 0;
+    mocks.detailDailyBars = null;
     mocks.echartOptions.length = 0;
     mocks.indexRefresh.mockClear();
     mocks.instrumentFilters.length = 0;
@@ -678,6 +725,26 @@ describe("StockMarketWorkspace", () => {
       "h-full",
       "min-h-[22rem]",
     );
+  });
+
+  it("shows turtle trading TR, N, entry, exit, and add-on signals in the research summary", () => {
+    mocks.detailDailyBars = buildTurtleSignalBars();
+
+    render(<StockMarketWorkspace />);
+
+    expect(screen.getByText("当日真实波动 TR")).toBeInTheDocument();
+    expect(screen.getByText("12.00")).toBeInTheDocument();
+    expect(screen.getByText("20日平滑N")).toBeInTheDocument();
+    expect(screen.getByText("2.50")).toBeInTheDocument();
+    expect(screen.getByText("系统一入场")).toBeInTheDocument();
+    expect(screen.getAllByText("触发（突破 101.00）")).toHaveLength(2);
+    expect(screen.getByText("系统一离场")).toBeInTheDocument();
+    expect(screen.getByText("未触发（10日低点 99.00）")).toBeInTheDocument();
+    expect(screen.getByText("系统二入场")).toBeInTheDocument();
+    expect(screen.getByText("系统二离场")).toBeInTheDocument();
+    expect(screen.getByText("未触发（20日低点 99.00）")).toBeInTheDocument();
+    expect(screen.getByText("加仓信号")).toBeInTheDocument();
+    expect(screen.getByText("触发；间隔 1.25")).toBeInTheDocument();
   });
 
   it("shows financial metrics as secondary tabs with an independent overview-compatible range", async () => {

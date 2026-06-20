@@ -81,6 +81,21 @@ const FINANCIAL_ORDER = [
 const DEFAULT_INSTRUMENT_PAGE_SIZE = 18;
 type StockDetailTab = "overview" | "financial";
 type StockPriceAdjustment = "none" | "forward" | "backward";
+type TurtleThresholdSignal = {
+  isReady: boolean;
+  threshold: number | null;
+  triggered: boolean;
+};
+type TurtleTradingMetrics = {
+  trueRange: number | null;
+  n: number | null;
+  systemOneEntry: TurtleThresholdSignal;
+  systemOneExit: TurtleThresholdSignal;
+  systemTwoEntry: TurtleThresholdSignal;
+  systemTwoExit: TurtleThresholdSignal;
+  addOnInterval: number | null;
+  addOnTriggered: boolean | null;
+};
 
 /**
  * 渲染股票市场页，布局对齐截图中的交易终端式信息密度。
@@ -484,6 +499,7 @@ function ResearchSummaryPanel(props: {
       ? ((latest.close - previous.close) / previous.close) * 100
       : null;
   const rangeChangeRate = calculateRangeChangeRate(props.bars);
+  const turtleMetrics = calculateTurtleTradingMetrics(props.bars);
   const rangeChangeTone =
     rangeChangeRate === null || rangeChangeRate === 0
       ? "text-muted"
@@ -549,6 +565,39 @@ function ResearchSummaryPanel(props: {
           label="区间涨幅"
           tone={rangeChangeTone}
           value={rangeChangeRate === null ? "--" : `${formatSigned(rangeChangeRate, 2)}%`}
+        />
+        <SummaryRow
+          label="当日真实波动 TR"
+          value={turtleMetrics.trueRange === null ? "--" : formatNumber(turtleMetrics.trueRange, 2)}
+        />
+        <SummaryRow
+          label="20日平滑N"
+          value={turtleMetrics.n === null ? "--" : formatNumber(turtleMetrics.n, 2)}
+        />
+        <SummaryRow
+          label="系统一入场"
+          tone={turtleMetrics.systemOneEntry.triggered ? "text-positive" : undefined}
+          value={formatTurtleEntrySignal(turtleMetrics.systemOneEntry)}
+        />
+        <SummaryRow
+          label="系统一离场"
+          tone={turtleMetrics.systemOneExit.triggered ? "text-negative" : undefined}
+          value={formatTurtleExitSignal(turtleMetrics.systemOneExit, "10日低点")}
+        />
+        <SummaryRow
+          label="系统二入场"
+          tone={turtleMetrics.systemTwoEntry.triggered ? "text-positive" : undefined}
+          value={formatTurtleEntrySignal(turtleMetrics.systemTwoEntry)}
+        />
+        <SummaryRow
+          label="系统二离场"
+          tone={turtleMetrics.systemTwoExit.triggered ? "text-negative" : undefined}
+          value={formatTurtleExitSignal(turtleMetrics.systemTwoExit, "20日低点")}
+        />
+        <SummaryRow
+          label="加仓信号"
+          tone={turtleMetrics.addOnTriggered ? "text-positive" : undefined}
+          value={formatTurtleAddOnSignal(turtleMetrics)}
         />
       </dl>
       <p className="mt-3 text-[11px] leading-5 text-muted">
@@ -1413,6 +1462,150 @@ function calculateRangeChangeRate(bars: StockDailyBar[]): number | null {
   const latestBar = bars.at(-1);
   if (!firstBar || !latestBar || firstBar.close === 0) return null;
   return ((latestBar.close - firstBar.close) / Math.abs(firstBar.close)) * 100;
+}
+
+/**
+ * 计算海龟交易法所需的 TR、20 日平滑 N、入场、离场和加仓信号。
+ * @param bars 按交易日升序排列的日线序列。
+ * @returns 当前最新交易日对应的海龟交易法指标；数据不足时用 null 或未就绪状态表达。
+ */
+function calculateTurtleTradingMetrics(bars: StockDailyBar[]): TurtleTradingMetrics {
+  const latest = bars.at(-1);
+  const trueRanges = bars.map((bar, index) => calculateTrueRange(bar, bars[index - 1]));
+  const trueRange = trueRanges.at(-1) ?? null;
+  const n = calculateSmoothedTurtleN(trueRanges);
+  const systemOneEntry = calculateBreakoutEntrySignal(bars, 20);
+  const systemTwoEntry = calculateBreakoutEntrySignal(bars, 55);
+  const addOnInterval = n === null ? null : 0.5 * n;
+  const activeEntryThresholds = [systemOneEntry, systemTwoEntry]
+    .filter((signal) => signal.triggered && signal.threshold !== null)
+    .map((signal) => signal.threshold as number);
+  const baseEntryThreshold = activeEntryThresholds.length > 0 ? Math.min(...activeEntryThresholds) : null;
+
+  return {
+    trueRange,
+    n,
+    systemOneEntry,
+    systemOneExit: calculateLongExitSignal(bars, 10),
+    systemTwoEntry,
+    systemTwoExit: calculateLongExitSignal(bars, 20),
+    addOnInterval,
+    addOnTriggered:
+      latest && addOnInterval !== null
+        ? baseEntryThreshold !== null && latest.close >= baseEntryThreshold + addOnInterval
+        : null,
+  };
+}
+
+/**
+ * 按海龟交易法公式计算单日真实波动 TR。
+ * @param bar 当前交易日日线。
+ * @param previousBar 前一交易日日线，首日缺失时只使用当日高低差。
+ * @returns 当前交易日 TR。
+ */
+function calculateTrueRange(bar: StockDailyBar, previousBar: StockDailyBar | undefined): number {
+  const dailyRange = bar.high - bar.low;
+  if (!previousBar) return dailyRange;
+  return Math.max(
+    dailyRange,
+    Math.abs(bar.high - previousBar.close),
+    Math.abs(bar.low - previousBar.close),
+  );
+}
+
+/**
+ * 计算 20 日平滑平均 TR（N），第 20 个值使用简单平均，后续按海龟公式平滑。
+ * @param trueRanges 按交易日升序排列的 TR 序列。
+ * @returns 最新交易日 N；不足 20 个 TR 时返回 null。
+ */
+function calculateSmoothedTurtleN(trueRanges: number[]): number | null {
+  if (trueRanges.length < 20) return null;
+  let n = trueRanges.slice(0, 20).reduce((sum, value) => sum + value, 0) / 20;
+  for (let index = 20; index < trueRanges.length; index += 1) {
+    n = (19 * n + trueRanges[index]) / 20;
+  }
+  return n;
+}
+
+/**
+ * 计算向上突破入场信号，最新高点突破前 N 日高点则触发。
+ * @param bars 按交易日升序排列的日线序列。
+ * @param lookbackDays 入场突破观察天数。
+ * @returns 突破阈值和触发状态。
+ */
+function calculateBreakoutEntrySignal(
+  bars: StockDailyBar[],
+  lookbackDays: number,
+): TurtleThresholdSignal {
+  const latest = bars.at(-1);
+  const previousBars = bars.slice(-(lookbackDays + 1), -1);
+  if (!latest || previousBars.length < lookbackDays) {
+    return { isReady: false, threshold: null, triggered: false };
+  }
+  const threshold = Math.max(...previousBars.map((bar) => bar.high));
+  return {
+    isReady: true,
+    threshold,
+    triggered: latest.high > threshold,
+  };
+}
+
+/**
+ * 计算多头离场信号，最新低点跌破前 N 日低点则触发。
+ * @param bars 按交易日升序排列的日线序列。
+ * @param lookbackDays 离场低点观察天数。
+ * @returns 离场阈值和触发状态。
+ */
+function calculateLongExitSignal(
+  bars: StockDailyBar[],
+  lookbackDays: number,
+): TurtleThresholdSignal {
+  const latest = bars.at(-1);
+  const previousBars = bars.slice(-(lookbackDays + 1), -1);
+  if (!latest || previousBars.length < lookbackDays) {
+    return { isReady: false, threshold: null, triggered: false };
+  }
+  const threshold = Math.min(...previousBars.map((bar) => bar.low));
+  return {
+    isReady: true,
+    threshold,
+    triggered: latest.low < threshold,
+  };
+}
+
+/**
+ * 格式化海龟突破入场信号。
+ * @param signal 入场阈值信号。
+ * @returns 可直接展示的中文信号文案。
+ */
+function formatTurtleEntrySignal(signal: TurtleThresholdSignal): string {
+  if (!signal.isReady || signal.threshold === null) return "--";
+  return signal.triggered
+    ? `触发（突破 ${formatNumber(signal.threshold, 2)}）`
+    : `未触发（高点 ${formatNumber(signal.threshold, 2)}）`;
+}
+
+/**
+ * 格式化海龟多头离场信号。
+ * @param signal 离场阈值信号。
+ * @param thresholdLabel 离场阈值的展示名称。
+ * @returns 可直接展示的中文信号文案。
+ */
+function formatTurtleExitSignal(signal: TurtleThresholdSignal, thresholdLabel: string): string {
+  if (!signal.isReady || signal.threshold === null) return "--";
+  return signal.triggered
+    ? `触发（跌破 ${formatNumber(signal.threshold, 2)}）`
+    : `未触发（${thresholdLabel} ${formatNumber(signal.threshold, 2)}）`;
+}
+
+/**
+ * 格式化海龟 0.5N 加仓信号。
+ * @param metrics 最新海龟交易法指标。
+ * @returns 可直接展示的中文加仓文案。
+ */
+function formatTurtleAddOnSignal(metrics: TurtleTradingMetrics): string {
+  if (metrics.addOnInterval === null || metrics.addOnTriggered === null) return "--";
+  return `${metrics.addOnTriggered ? "触发" : "未触发"}；间隔 ${formatNumber(metrics.addOnInterval, 2)}`;
 }
 
 /**
