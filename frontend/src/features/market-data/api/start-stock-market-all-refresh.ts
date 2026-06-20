@@ -1,7 +1,7 @@
 import type { StockMarketAllRefreshPayload } from "../model/market-data.types";
 
 /**
- * 启动全部标的近一年行情和公司概况后台刷新，已覆盖窗口的标的由后端跳过外部请求。
+ * 启动全部标的近 20 年行情和公司概况后台刷新，已覆盖窗口的标的由后端跳过外部请求。
  * @returns 后端创建或复用的刷新任务状态。
  */
 export async function startStockMarketAllRefresh(): Promise<StockMarketAllRefreshPayload> {

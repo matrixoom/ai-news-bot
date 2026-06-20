@@ -38,7 +38,7 @@ STOCK_OVERVIEW_INDEX_REGISTRY = tuple(build_default_market_registry().values())
 STOCK_ALL_REFRESH_TERMINAL_STATUSES = {"completed", "completed_with_warnings", "failed", "skipped"}
 STOCK_ALL_REFRESH_SCHEDULE_TIME = "15:30"
 STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
-STOCK_ALL_REFRESH_HISTORY_MONTHS = 12
+STOCK_ALL_REFRESH_HISTORY_MONTHS = 240
 logger = logging.getLogger(__name__)
 
 
@@ -171,7 +171,7 @@ class StockMarketService:
         trigger: str = "manual",
         run_inline: bool = False,
     ) -> dict[str, Any]:
-        """启动全标的近一年行情和概况刷新任务。
+        """启动全标的近 20 年行情和概况刷新任务。
 
         Args:
             trigger: `manual` 或 `scheduled`，用于前端展示和状态追踪。
@@ -240,7 +240,7 @@ class StockMarketService:
             job = self._all_refresh_jobs[job_id]
             job["status"] = "running"
             job["total"] = len(instruments)
-            job["message"] = "正在刷新全部标的近 1 年行情和概况数据。"
+            job["message"] = "正在刷新全部标的近 20 年行情和概况数据。"
             job["started_at"] = _utc_now()
         try:
             for index, instrument in enumerate(instruments, start=1):
@@ -274,7 +274,7 @@ class StockMarketService:
                     job["message"] = "全标的刷新完成，部分标的失败，已保留旧数据。"
                 else:
                     job["status"] = "completed"
-                    job["message"] = "全标的近 1 年行情和概况数据已刷新。"
+                    job["message"] = "全标的近 20 年行情和概况数据已刷新。"
                 self._save_refresh_state(
                     {
                         "last_refresh_date": self._local_today(),
@@ -620,8 +620,8 @@ class StockMarketService:
 
         Args:
             instrument: 当前股票或 ETF 标的。
-            start: 近一年窗口起始日期。
-            end: 近一年窗口结束日期。
+            start: 近 20 年窗口起始日期，不足 20 年的标的由数据源返回有史以来可取数据。
+            end: 近 20 年窗口结束日期。
 
         Returns:
             本标的刷新过程中产生的短错误信息。

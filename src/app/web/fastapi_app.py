@@ -367,7 +367,7 @@ def create_fastapi_app(
 
     @app.post("/api/frontend/modules/market-data/stocks/refresh-all")
     def frontend_stock_market_refresh_all() -> JSONResponse:
-        """启动全标的近一年行情和概况后台刷新。"""
+        """启动全标的近 20 年行情和概况后台刷新。"""
 
         try:
             return JSONResponse(stock_service.start_all_instrument_refresh(trigger="manual"), status_code=202)

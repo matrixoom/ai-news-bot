@@ -426,7 +426,11 @@ describe("StockMarketWorkspace", () => {
     await user.click(screen.getByRole("button", { name: /展开沪深 300宽基指数K线/ }));
 
     expect(screen.getByRole("region", { name: "沪深 300 宽基指数K线" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "CSI300 日级别行情K线" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "CSI300 日级别行情K线" })).toHaveClass(
+      "min-h-[34rem]",
+      "w-full",
+      "min-w-0",
+    );
     expect(screen.getByLabelText("宽基指数时间范围")).toBeInTheDocument();
     expect(within(screen.getByLabelText("宽基指数时间范围")).getByRole("button", { name: "近10年" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("宽基指数时间范围")).getByRole("button", { name: "近20年" })).toBeInTheDocument();

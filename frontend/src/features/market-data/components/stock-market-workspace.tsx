@@ -189,7 +189,7 @@ export function StockMarketWorkspace() {
   }
 
   return (
-    <div className="-m-4 flex min-h-[calc(100vh-4.5rem)] flex-col overflow-hidden bg-canvas text-ink md:-m-6">
+    <div className="-m-4 flex h-[calc(100vh-4.5rem)] min-h-[42rem] w-full min-w-0 flex-col overflow-hidden bg-canvas text-ink md:-m-6">
       <MarketOverviewStrip
         data={overviewQuery.data}
         error={overviewQuery.isError}
@@ -345,10 +345,10 @@ function IndexKlineDisclosure(props: {
         : "text-negative";
 
   return (
-    <div className="min-h-[42rem] flex-1 overflow-hidden p-3">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 overflow-hidden p-3">
       <section
         aria-label={`${props.index.display_name} 宽基指数K线`}
-        className="workbench-panel flex h-full min-h-0 flex-col overflow-hidden p-4"
+        className="workbench-panel flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden p-4"
       >
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <div>
@@ -687,7 +687,7 @@ function InstrumentListPanel(props: {
             className="workbench-icon-button h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={props.allRefreshStarting}
             onClick={props.onRefreshAll}
-            title="后台刷新全部标的近 1 年行情和公司概况；本地已覆盖的标的会跳过外部请求"
+            title="后台刷新全部标的近 20 年行情和公司概况；不足 20 年的标的刷新有史以来可取数据"
             type="button"
           >
             <ArrowPathIcon
@@ -1079,7 +1079,7 @@ function KlinePanel(props: {
   if (props.isError) return <EmptySurface danger text="行情数据加载失败。" />;
   if (props.bars.length === 0) return <EmptySurface text={props.warning || "当前时间范围暂无行情数据。"} />;
   return (
-    <section className="flex min-h-0 flex-1 border-b border-line bg-surface pb-2">
+    <section className="flex min-h-0 w-full min-w-0 flex-1 border-b border-line bg-surface pb-2">
       <KlineChart bars={props.bars} mode={props.chartMode ?? "stock"} symbol={props.symbol} />
     </section>
   );
@@ -1089,6 +1089,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
   const chartRef = useRef<HTMLDivElement | null>(null);
   const workbenchTheme = useWorkbenchChartTheme();
   const chartTheme = useMemo(() => buildCartesianTheme(workbenchTheme), [workbenchTheme]);
+  const chartHeightClass = props.mode === "index" ? "min-h-[34rem]" : "min-h-[22rem]";
   const option = useMemo((): echarts.EChartsOption => {
     const labels = props.bars.map((bar) => bar.date);
     const legendData = ["K线", "MA5", "MA10", "MA20", "MA60", "MA120"];
@@ -1189,6 +1190,10 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
     if (!chartRef.current) return;
     const instance = echarts.init(chartRef.current, undefined, { renderer: "svg" });
     instance.setOption(option);
+    const resizeFrame =
+      typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame(() => instance.resize())
+        : null;
     const isTestRuntime =
       typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom");
     const observer =
@@ -1197,6 +1202,9 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         : null;
     observer?.observe(chartRef.current);
     return () => {
+      if (resizeFrame !== null && typeof window.cancelAnimationFrame === "function") {
+        window.cancelAnimationFrame(resizeFrame);
+      }
       observer?.disconnect();
       instance.dispose();
     };
@@ -1206,7 +1214,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
     <div
       ref={chartRef}
       aria-label={`${props.symbol} 日级别行情K线`}
-      className="h-full min-h-[22rem] w-full"
+      className={`h-full ${chartHeightClass} w-full min-w-0`}
       role="img"
     />
   );

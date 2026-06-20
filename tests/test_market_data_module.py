@@ -1275,7 +1275,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
     def test_all_instrument_refresh_can_run_multiple_times_per_local_day(self) -> None:
-        """校验全标的刷新同一天可重复启动，缺少近一年窗口时只补采行情和概况。"""
+        """校验全标的刷新同一天可重复启动，缺少近 20 年窗口时只补采行情和概况。"""
         repository = self._repository()
         repository.upsert_instruments(
             [
@@ -1310,7 +1310,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         class FixedDate(date):
-            """固定当前日期，确保近一年窗口可断言。"""
+            """固定当前日期，确保近 20 年窗口可断言。"""
 
             @classmethod
             def today(cls) -> date:
@@ -1329,13 +1329,13 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(second["status"], "completed")
         self.assertEqual(syncer.sync_symbol_window.call_count, 4)
         first_call = syncer.sync_symbol_window.call_args_list[0]
-        self.assertEqual(first_call.kwargs["start_date"], date(2025, 6, 19))
+        self.assertEqual(first_call.kwargs["start_date"], date(2006, 6, 19))
         self.assertEqual(first_call.kwargs["end_date"], date(2026, 6, 19))
         self.assertEqual(syncer.sync_profile.call_count, 4)
         syncer.sync_financials.assert_not_called()
 
-    def test_all_instrument_refresh_skips_symbols_with_complete_one_year_window(self) -> None:
-        """校验全标的刷新每次可启动，但已有近一年日线窗口时不再调用外部 API。"""
+    def test_all_instrument_refresh_skips_symbols_with_complete_twenty_year_window(self) -> None:
+        """校验全标的刷新每次可启动，但已有近 20 年日线窗口时不再调用外部 API。"""
 
         repository = self._repository()
         repository.upsert_instruments(
@@ -1364,7 +1364,7 @@ class StockMarketModuleTests(unittest.TestCase):
             repository.upsert_daily_bars(
                 symbol,
                 [
-                    _stock_daily_bar("2025-06-19", close_price=10),
+                    _stock_daily_bar("2006-06-19", close_price=10),
                     _stock_daily_bar("2026-06-19", close_price=11),
                 ],
             )
@@ -1376,7 +1376,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         class FixedDate(date):
-            """固定当前日期，确保近一年窗口可断言。"""
+            """固定当前日期，确保近 20 年窗口可断言。"""
 
             @classmethod
             def today(cls) -> date:
@@ -1396,8 +1396,8 @@ class StockMarketModuleTests(unittest.TestCase):
         syncer.sync_profile.assert_not_called()
         syncer.sync_financials.assert_not_called()
 
-    def test_all_instrument_refresh_fetches_symbols_without_complete_one_year_window(self) -> None:
-        """校验近一年窗口缺失时，刷新任务仍会调用外部 API 补齐该标的。"""
+    def test_all_instrument_refresh_fetches_symbols_without_complete_twenty_year_window(self) -> None:
+        """校验近 20 年窗口缺失时，刷新任务仍会调用外部 API 补齐该标的。"""
 
         repository = self._repository()
         repository.upsert_instruments(
@@ -1428,7 +1428,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         class FixedDate(date):
-            """固定当前日期，确保近一年窗口可断言。"""
+            """固定当前日期，确保近 20 年窗口可断言。"""
 
             @classmethod
             def today(cls) -> date:
@@ -1442,7 +1442,7 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(job["status"], "completed")
         syncer.sync_symbol_window.assert_called_once()
         sync_call = syncer.sync_symbol_window.call_args
-        self.assertEqual(sync_call.kwargs["start_date"], date(2025, 6, 19))
+        self.assertEqual(sync_call.kwargs["start_date"], date(2006, 6, 19))
         self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
         syncer.sync_profile.assert_called_once()
         syncer.sync_financials.assert_not_called()
