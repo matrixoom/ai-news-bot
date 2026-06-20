@@ -682,6 +682,20 @@ describe("StockMarketWorkspace", () => {
     expect(refreshButton.compareDocumentPosition(unadjustedButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("refreshes latest data from the research summary header", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    const summaryPanel = screen.getByRole("complementary", { name: "研究摘要" });
+    await user.click(within(summaryPanel).getByRole("button", { name: "刷新基础行情观察" }));
+
+    expect(mocks.refresh).toHaveBeenCalledWith({
+      symbol: "000001.SZ",
+      range: { type: "1m" },
+      financialReportType: "quarterly",
+    });
+  });
+
   it("uses the latest month as the default stock range", () => {
     render(<StockMarketWorkspace />);
 

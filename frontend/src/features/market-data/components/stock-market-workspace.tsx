@@ -317,6 +317,8 @@ export function StockMarketWorkspace() {
                         industry={detailQuery.data?.profile.industry ?? ""}
                         isCollapsed={isResearchSummaryCollapsed}
                         onCollapseChange={setIsResearchSummaryCollapsed}
+                        onRefresh={() => refreshMutation.mutate()}
+                        refreshPending={refreshMutation.isPending}
                         syncedAt={detailQuery.data?.sync_state.synced_at ?? ""}
                       />
                     </div>
@@ -501,6 +503,8 @@ function ResearchSummaryPanel(props: {
   industry: string;
   isCollapsed: boolean;
   onCollapseChange: (collapsed: boolean) => void;
+  onRefresh: () => void;
+  refreshPending: boolean;
   syncedAt: string;
 }) {
   const latest = props.bars.at(-1);
@@ -544,15 +548,30 @@ function ResearchSummaryPanel(props: {
     <aside aria-label="研究摘要" className="min-h-0 overflow-y-auto border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
       <div className="flex items-center justify-between gap-2">
         <p className="workbench-kicker">研究摘要</p>
-        <button
-          aria-expanded="true"
-          aria-label="折叠研究摘要"
-          className="workbench-icon-button h-8 w-8 border-transparent"
-          onClick={() => props.onCollapseChange(true)}
-          type="button"
-        >
-          <ChevronRightIcon aria-hidden="true" className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            aria-label="刷新基础行情观察"
+            className="workbench-icon-button h-8 w-8 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={props.refreshPending}
+            onClick={props.onRefresh}
+            title="刷新最新行情数据并重新计算海龟指标"
+            type="button"
+          >
+            <ArrowPathIcon
+              aria-hidden="true"
+              className={`h-4 w-4 ${props.refreshPending ? "animate-spin" : ""}`}
+            />
+          </button>
+          <button
+            aria-expanded="true"
+            aria-label="折叠研究摘要"
+            className="workbench-icon-button h-8 w-8 border-transparent"
+            onClick={() => props.onCollapseChange(true)}
+            type="button"
+          >
+            <ChevronRightIcon aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       <h3 className="mt-2 text-base font-semibold text-ink">{props.industry || "基础行情观察"}</h3>
       <p className="mt-2 text-sm leading-6 text-muted">
