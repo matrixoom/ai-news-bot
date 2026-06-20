@@ -37,6 +37,7 @@ class StockInstrument:
     listing_status: str
     updated_at: str
     latest_price: float | None = None
+    access_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -338,10 +339,11 @@ class StockMarketRepository:
             rows = connection.execute(
                 f"""
                 SELECT i.symbol, i.code, i.exchange, i.name, i.instrument_type,
-                       i.market_board, i.listing_status, i.updated_at
+                       i.market_board, i.listing_status, i.updated_at, i.access_count
                 FROM market_stock_instrument AS i
                 {where_clause}
                 ORDER BY
+                    access_count DESC,
                     CASE instrument_type WHEN 'stock' THEN 0 ELSE 1 END,
                     code ASC
                 LIMIT ? OFFSET ?
@@ -360,13 +362,34 @@ class StockMarketRepository:
         with self._session() as connection:
             row = connection.execute(
                 """
-                SELECT symbol, code, exchange, name, instrument_type, market_board, listing_status, updated_at
+                SELECT symbol, code, exchange, name, instrument_type, market_board,
+                       listing_status, updated_at, access_count
                 FROM market_stock_instrument
                 WHERE symbol = ?
                 """,
                 (symbol,),
             ).fetchone()
         return self._build_instrument(row) if row else None
+
+    def record_instrument_access(self, symbol: str) -> None:
+        """记录股票详情访问次数，用于全部标的列表排序。
+
+        Args:
+            symbol: 带交易所后缀的股票、ETF 或 LOF 代码。
+
+        Returns:
+            无返回值；不存在的标的不会创建新行。
+        """
+
+        with self._session() as connection:
+            connection.execute(
+                """
+                UPDATE market_stock_instrument
+                SET access_count = access_count + 1
+                WHERE symbol = ?
+                """,
+                (symbol,),
+            )
 
     def upsert_daily_bars(self, symbol: str, bars: Sequence[Mapping[str, Any]]) -> int:
         """幂等写入单只股票日线行情。
@@ -726,16 +749,24 @@ class StockMarketRepository:
                     market_board TEXT NOT NULL,
                     listing_status TEXT NOT NULL,
                     source_url TEXT NOT NULL DEFAULT '',
+                    access_count INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
                 """
             )
             self._migrate_stock_instrument_type_check(connection)
+            self._migrate_stock_instrument_access_count(connection)
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_market_stock_instrument_search
                 ON market_stock_instrument(code, name, instrument_type, market_board, listing_status)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_market_stock_instrument_access_order
+                ON market_stock_instrument(access_count DESC, instrument_type, code)
                 """
             )
             connection.execute(
@@ -828,6 +859,7 @@ class StockMarketRepository:
                 market_board TEXT NOT NULL,
                 listing_status TEXT NOT NULL,
                 source_url TEXT NOT NULL DEFAULT '',
+                access_count INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -845,6 +877,26 @@ class StockMarketRepository:
             """
         )
         connection.execute("DROP TABLE market_stock_instrument_legacy")
+
+    def _migrate_stock_instrument_access_count(self, connection: sqlite3.Connection) -> None:
+        """为旧版标的表补充访问次数字段。
+
+        Args:
+            connection: 主库事务连接。
+
+        Returns:
+            无返回值；字段已存在时保持幂等。
+        """
+
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(market_stock_instrument)").fetchall()
+        }
+        if "access_count" in columns:
+            return
+        connection.execute(
+            "ALTER TABLE market_stock_instrument ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0"
+        )
 
     def _migrate_legacy_daily_bars(self) -> None:
         """将主库旧日线表幂等迁移到分片，校验完成后移除旧表。"""
@@ -1085,6 +1137,7 @@ class StockMarketRepository:
             listing_status=str(row["listing_status"]),
             updated_at=str(row["updated_at"]),
             latest_price=latest_price,
+            access_count=int(row["access_count"]) if "access_count" in row.keys() else 0,
         )
 
     def _build_daily_bar(self, row: sqlite3.Row) -> StockDailyBar:

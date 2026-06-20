@@ -516,6 +516,8 @@ class StockMarketService:
         """返回选中股票详情，并在首次无日线数据时懒加载近 1 个月。"""
 
         instrument = self._require_instrument(symbol)
+        self._repository.record_instrument_access(instrument.symbol)
+        instrument = self._require_instrument(symbol)
         resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
         warning = ""
         if not self._repository.has_daily_bars(instrument.symbol):
@@ -549,6 +551,8 @@ class StockMarketService:
     ) -> dict[str, Any]:
         """手动刷新选中日期范围内的日线与财务数据并返回详情。"""
 
+        instrument = self._require_instrument(symbol)
+        self._repository.record_instrument_access(instrument.symbol)
         instrument = self._require_instrument(symbol)
         resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
         warnings: list[str] = []

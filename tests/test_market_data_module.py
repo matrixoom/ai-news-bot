@@ -415,6 +415,49 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(repository.get_instrument("160216.SZ").instrument_type, "lof")
         self.assertEqual(repository.get_instrument("160216.SZ").market_board, "深市")
 
+    def test_stock_search_prioritizes_most_accessed_instruments(self) -> None:
+        """校验全部标的列表优先展示访问次数最多的标的。"""
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                },
+                {
+                    "symbol": "000002.SZ",
+                    "code": "000002",
+                    "exchange": "SZ",
+                    "name": "万科A",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                },
+                {
+                    "symbol": "000003.SZ",
+                    "code": "000003",
+                    "exchange": "SZ",
+                    "name": "高频访问",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                },
+            ]
+        )
+        repository.record_instrument_access("000002.SZ")
+        repository.record_instrument_access("000003.SZ")
+        repository.record_instrument_access("000003.SZ")
+
+        items, _ = repository.search_instruments(limit=10, offset=0)
+
+        self.assertEqual([item.symbol for item in items[:3]], ["000003.SZ", "000002.SZ", "000001.SZ"])
+        self.assertEqual(items[0].access_count, 2)
+
     def test_lof_universe_loader_falls_back_to_sina_category(self) -> None:
         """校验东方财富 LOF 源不可用时，会回退新浪 LOF 分类源。"""
         expected = pd.DataFrame([{"代码": "sz160216", "名称": "国泰商品LOF"}])
@@ -1160,6 +1203,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["instrument"]["name"], "平安银行")
+        self.assertEqual(repository.get_instrument("000001.SZ").access_count, 1)
         self.assertEqual(len(payload["daily_bars"]), 7)
         self.assertEqual(payload["daily_bars"][4]["ma5"], 14.0)
         self.assertEqual(payload["daily_bars"][0]["pe_ttm"], 5.1)
