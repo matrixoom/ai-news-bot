@@ -127,6 +127,7 @@ class StockMarketSyncService:
         start_date: date,
         end_date: date,
         include_valuation: bool = True,
+        include_history_padding: bool = True,
     ) -> dict[str, int]:
         """同步单只股票指定窗口的日线数据，并补足均线计算前置窗口。
 
@@ -135,6 +136,7 @@ class StockMarketSyncService:
             start_date: 用户请求起始日期。
             end_date: 用户请求结束日期。
             include_valuation: 是否为 A 股同步日频估值和分红数据；批量基础行情刷新会关闭该项以避开易失败扩展源。
+            include_history_padding: 是否向前扩展下载窗口以补足均线前置数据；缺口补采关闭该项以避免重复下载已缓存区间。
 
         Returns:
             本次写入的日线点位数量。
@@ -143,7 +145,7 @@ class StockMarketSyncService:
         if start_date > end_date:
             raise ValueError("start_date must be before end_date")
         # 为 MA120 留出足够的历史缓冲，避免窗口开始处均线断裂。
-        padded_start = start_date - timedelta(days=220)
+        padded_start = start_date - timedelta(days=220) if include_history_padding else start_date
         if instrument.instrument_type == "lof":
             loader = self._lof_daily_loader
         elif instrument.instrument_type == "etf":

@@ -5,11 +5,11 @@ from __future__ import annotations
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 import json
 from pathlib import Path
 import sqlite3
-from typing import Any, Collection, Iterator, Mapping, Sequence
+from typing import Any, Callable, Collection, Iterator, Mapping, Sequence
 
 from src.services.stock_market_sharding import (
     initialize_all_market_stock_shards,
@@ -501,6 +501,94 @@ class StockMarketRepository:
         if row is None or row["earliest_trade_date"] is None or row["latest_trade_date"] is None:
             return False
         return str(row["earliest_trade_date"]) <= start_date and str(row["latest_trade_date"]) >= end_date
+
+    def has_daily_bar_date(self, *, symbol: str, trade_date: str) -> bool:
+        """判断某只标的是否已有指定交易日的本地日线。
+
+        Args:
+            symbol: 带交易所后缀的标的代码。
+            trade_date: 需要检查的交易日期，格式为 `YYYY-MM-DD`。
+
+        Returns:
+            指定日期已有日线记录时返回 `True`。
+        """
+
+        with self._daily_bar_session(symbol) as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM market_stock_daily_bar
+                WHERE symbol = ? AND trade_date = ?
+                LIMIT 1
+                """,
+                (symbol, trade_date),
+            ).fetchone()
+        return row is not None
+
+    def find_daily_bar_missing_windows(
+        self,
+        *,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        max_gap_days: int = 10,
+        trading_day_checker: Callable[[date], bool] | None = None,
+    ) -> list[tuple[str, str]]:
+        """查找指定窗口内需要补采的本地日线日期段。
+
+        Args:
+            symbol: 带交易所后缀的标的代码。
+            start_date: 需要覆盖的窗口起始日期，格式为 `YYYY-MM-DD`。
+            end_date: 需要覆盖的窗口结束日期，格式为 `YYYY-MM-DD`。
+            max_gap_days: 未提供交易日历时可接受的最大自然日间隔，用于兼容旧逻辑。
+            trading_day_checker: 可选交易日判断函数；提供后仅补采包含交易日的缺口。
+
+        Returns:
+            需要补采的日期段列表，每项为闭区间 `(start_date, end_date)`。
+        """
+
+        required_start = date.fromisoformat(start_date)
+        required_end = date.fromisoformat(end_date)
+        if required_start > required_end:
+            raise ValueError("start_date must be before end_date")
+
+        with self._daily_bar_session(symbol) as connection:
+            rows = connection.execute(
+                """
+                SELECT trade_date
+                FROM market_stock_daily_bar
+                WHERE symbol = ? AND trade_date >= ? AND trade_date <= ?
+                ORDER BY trade_date ASC
+                """,
+                (symbol, start_date, end_date),
+            ).fetchall()
+
+        existing_dates = [date.fromisoformat(str(row["trade_date"])) for row in rows]
+        if trading_day_checker is not None:
+            return _find_trading_day_missing_windows(
+                required_start=required_start,
+                required_end=required_end,
+                existing_dates=existing_dates,
+                trading_day_checker=trading_day_checker,
+            )
+        if not existing_dates:
+            return [(start_date, end_date)]
+
+        missing_windows: list[tuple[str, str]] = []
+        first_date = existing_dates[0]
+        if (first_date - required_start).days > max_gap_days:
+            missing_windows.append((required_start.isoformat(), (first_date - timedelta(days=1)).isoformat()))
+
+        for previous_date, next_date in zip(existing_dates, existing_dates[1:]):
+            if (next_date - previous_date).days > max_gap_days:
+                missing_windows.append(
+                    ((previous_date + timedelta(days=1)).isoformat(), (next_date - timedelta(days=1)).isoformat())
+                )
+
+        last_date = existing_dates[-1]
+        if (required_end - last_date).days > max_gap_days:
+            missing_windows.append(((last_date + timedelta(days=1)).isoformat(), required_end.isoformat()))
+        return missing_windows
 
     def load_daily_bars(self, *, symbol: str, start_date: str, end_date: str) -> list[StockDailyBar]:
         """读取指定日期窗口内的日线行情。"""
@@ -1219,3 +1307,81 @@ def _optional_float(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _find_trading_day_missing_windows(
+    *,
+    required_start: date,
+    required_end: date,
+    existing_dates: Sequence[date],
+    trading_day_checker: Callable[[date], bool],
+) -> list[tuple[str, str]]:
+    """按交易日历过滤自然日期缺口，避免休市日触发无效补采。
+
+    Args:
+        required_start: 查询窗口起始日期。
+        required_end: 查询窗口结束日期。
+        existing_dates: 本地已存在的交易日期，需按升序传入。
+        trading_day_checker: A 股交易日判断函数。
+
+    Returns:
+        仅包含实际交易日的补采闭区间列表。
+    """
+
+    if not existing_dates:
+        trimmed_window = _trim_window_to_trading_days(
+            required_start,
+            required_end,
+            trading_day_checker=trading_day_checker,
+        )
+        return [trimmed_window] if trimmed_window is not None else []
+
+    candidate_windows: list[tuple[date, date]] = []
+    first_date = existing_dates[0]
+    if required_start < first_date:
+        candidate_windows.append((required_start, first_date - timedelta(days=1)))
+
+    for previous_date, next_date in zip(existing_dates, existing_dates[1:]):
+        gap_start = previous_date + timedelta(days=1)
+        gap_end = next_date - timedelta(days=1)
+        if gap_start <= gap_end:
+            candidate_windows.append((gap_start, gap_end))
+
+    last_date = existing_dates[-1]
+    if last_date < required_end:
+        candidate_windows.append((last_date + timedelta(days=1), required_end))
+
+    missing_windows: list[tuple[str, str]] = []
+    for window_start, window_end in candidate_windows:
+        trimmed_window = _trim_window_to_trading_days(
+            window_start,
+            window_end,
+            trading_day_checker=trading_day_checker,
+        )
+        if trimmed_window is not None:
+            missing_windows.append(trimmed_window)
+    return missing_windows
+
+
+def _trim_window_to_trading_days(
+    start_date: date,
+    end_date: date,
+    *,
+    trading_day_checker: Callable[[date], bool],
+) -> tuple[str, str] | None:
+    """将自然日期窗口收缩到首尾交易日，不含交易日时返回空。"""
+
+    first_trading_day: date | None = None
+    cursor = start_date
+    while cursor <= end_date:
+        if trading_day_checker(cursor):
+            first_trading_day = cursor
+            break
+        cursor += timedelta(days=1)
+    if first_trading_day is None:
+        return None
+
+    last_trading_day = end_date
+    while last_trading_day > first_trading_day and not trading_day_checker(last_trading_day):
+        last_trading_day -= timedelta(days=1)
+    return first_trading_day.isoformat(), last_trading_day.isoformat()

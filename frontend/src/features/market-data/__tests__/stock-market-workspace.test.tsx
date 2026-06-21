@@ -801,7 +801,8 @@ describe("StockMarketWorkspace", () => {
     render(<StockMarketWorkspace />);
 
     expect(screen.queryByText(/公司概况/)).not.toBeInTheDocument();
-    expect(screen.getByText("海康威视，深市主板标的。等待上游数据补充。")).toBeInTheDocument();
+    expect(screen.queryByText("海康威视，深市主板标的。等待上游数据补充。")).not.toBeInTheDocument();
+    expect(screen.queryByText("基于当前选择窗口展示价格趋势、成交量与估值指标，供进一步研究核验。")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入自选" })).not.toBeInTheDocument();
     expect(screen.getByText("市盈率 TTM")).toBeInTheDocument();
     expect(screen.getByText("市净率 MRQ")).toBeInTheDocument();

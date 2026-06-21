@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from copy import deepcopy
-from datetime import UTC, datetime, date
+from datetime import UTC, datetime, date, timedelta
 import json
 import logging
 import os
@@ -40,7 +41,13 @@ STOCK_ALL_REFRESH_MODES = {"history", "today"}
 STOCK_ALL_REFRESH_SCHEDULE_TIME = "15:30"
 STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
 STOCK_ALL_REFRESH_HISTORY_MONTHS = 240
+STOCK_ALL_REFRESH_MAX_CACHED_GAP_DAYS = 10
+STOCK_ALL_REFRESH_TRADING_DAY_LOOKBACK_DAYS = 31
+STOCK_ALL_REFRESH_MAX_WORKERS = 3
 logger = logging.getLogger(__name__)
+_CN_MARKET_TRADING_DAYS: set[date] | None = None
+_CN_MARKET_TRADING_DAYS_UNAVAILABLE = False
+_CN_MARKET_TRADING_DAYS_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -89,6 +96,7 @@ class StockMarketService:
         self._market_module_rebuilder = market_module_rebuilder
         self._trading_day_checker = trading_day_checker or _default_cn_market_trading_day
         self._trading_day_cache: dict[str, bool] = {}
+        self._trading_day_cache_lock = threading.Lock()
         self._all_refresh_lock = threading.Lock()
         self._all_refresh_jobs: dict[str, dict[str, Any]] = {}
         self._latest_all_refresh_job_id: str | None = None
@@ -237,11 +245,12 @@ class StockMarketService:
     def _run_all_instrument_refresh(self, job_id: str) -> None:
         """逐标的执行外部数据同步并持续更新进度。"""
 
-        end = date.today()
+        today = date.today()
         instruments = self._load_all_refresh_instruments()
         with self._all_refresh_lock:
             job = self._all_refresh_jobs[job_id]
             refresh_mode = str(job.get("refresh_mode") or "history")
+            end = self._latest_trading_day_on_or_before(today)
             start = end if refresh_mode == "today" else _shift_months(end, -STOCK_ALL_REFRESH_HISTORY_MONTHS)
             job["status"] = "running"
             job["total"] = len(instruments)
@@ -252,27 +261,48 @@ class StockMarketService:
             )
             job["started_at"] = _utc_now()
         try:
-            for index, instrument in enumerate(instruments, start=1):
+            if instruments:
+                first_instrument = instruments[0]
                 self._update_all_refresh_progress(
                     job_id,
-                    completed=index - 1,
+                    completed=0,
                     total=len(instruments),
-                    instrument=instrument,
-                    message=f"正在刷新 {instrument.name}。",
+                    instrument=first_instrument,
+                    message="正在并发刷新全部标的基础行情。",
                 )
-                errors = self._refresh_single_instrument(instrument, start=start, end=end)
-                with self._all_refresh_lock:
-                    job = self._all_refresh_jobs[job_id]
-                    for error in errors:
-                        if error not in job["errors"]:
-                            job["errors"].append(error)
-                self._update_all_refresh_progress(
-                    job_id,
-                    completed=index,
-                    total=len(instruments),
-                    instrument=instrument,
-                    message=f"{instrument.name} 刷新完成。",
-                )
+            completed_count = 0
+            worker_count = _all_refresh_worker_count(len(instruments))
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                future_to_instrument = {
+                    executor.submit(self._refresh_single_instrument, instrument, start=start, end=end): instrument
+                    for instrument in instruments
+                }
+                for future in as_completed(future_to_instrument):
+                    instrument = future_to_instrument[future]
+                    try:
+                        errors = future.result()
+                    except Exception as error:
+                        warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
+                        logger.warning(
+                            "stock all refresh worker failed for %s: %s",
+                            instrument.symbol,
+                            warning,
+                        )
+                        self._repository.record_sync_warning(instrument.symbol, warning)
+                        errors = [warning]
+                    completed_count += 1
+                    with self._all_refresh_lock:
+                        job = self._all_refresh_jobs[job_id]
+                        for error in errors:
+                            if error not in job["errors"]:
+                                job["errors"].append(error)
+                    self._update_all_refresh_progress(
+                        job_id,
+                        completed=completed_count,
+                        total=len(instruments),
+                        instrument=instrument,
+                        message=f"{instrument.name} 刷新完成。",
+                    )
             with self._all_refresh_lock:
                 job = self._all_refresh_jobs[job_id]
                 job["completed"] = job["total"]
@@ -711,11 +741,14 @@ class StockMarketService:
 
         start_text = start.isoformat()
         end_text = end.isoformat()
-        if self._repository.has_daily_bar_window(
+        missing_windows = self._repository.find_daily_bar_missing_windows(
             symbol=instrument.symbol,
             start_date=start_text,
             end_date=end_text,
-        ):
+            max_gap_days=STOCK_ALL_REFRESH_MAX_CACHED_GAP_DAYS,
+            trading_day_checker=self._is_scheduled_trading_day,
+        )
+        if not missing_windows:
             logger.info(
                 "stock all refresh skipped cached symbol %s for %s to %s",
                 instrument.symbol,
@@ -725,27 +758,53 @@ class StockMarketService:
             return []
 
         errors: list[str] = []
-        try:
-            self._sync_service.sync_symbol_window(
-                instrument,
-                start_date=start,
-                end_date=end,
-                include_valuation=False,
-            )
-        except Exception as error:
-            warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
-            logger.warning("stock all refresh daily failed for %s: %s", instrument.symbol, warning)
-            self._repository.record_sync_warning(instrument.symbol, warning)
-            errors.append(warning)
+        for missing_start_text, missing_end_text in missing_windows:
+            try:
+                self._sync_service.sync_symbol_window(
+                    instrument,
+                    start_date=date.fromisoformat(missing_start_text),
+                    end_date=date.fromisoformat(missing_end_text),
+                    include_valuation=False,
+                    include_history_padding=False,
+                )
+            except Exception as error:
+                warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
+                logger.warning(
+                    "stock all refresh daily failed for %s %s to %s: %s",
+                    instrument.symbol,
+                    missing_start_text,
+                    missing_end_text,
+                    warning,
+                )
+                self._repository.record_sync_warning(instrument.symbol, warning)
+                errors.append(warning)
         return errors
 
+    def _latest_trading_day_on_or_before(self, anchor: date) -> date:
+        """从指定日期向前查找最近一个 A 股交易日。
+
+        Args:
+            anchor: 本地自然日，通常为今天。
+
+        Returns:
+            最近一个开盘交易日；交易日历不可用或连续查找失败时返回原日期。
+        """
+
+        for offset in range(STOCK_ALL_REFRESH_TRADING_DAY_LOOKBACK_DAYS + 1):
+            candidate = anchor - timedelta(days=offset)
+            if self._is_scheduled_trading_day(candidate):
+                return candidate
+        logger.warning("stock latest trading day lookup failed before %s", anchor.isoformat())
+        return anchor
+
     def _is_scheduled_trading_day(self, trade_day: date) -> bool:
-        """判断定时全标的刷新当天是否为 A 股交易日。"""
+        """判断指定日期是否为 A 股交易日，并缓存结果供并发刷新复用。"""
 
         cache_key = trade_day.isoformat()
-        if cache_key not in self._trading_day_cache:
-            self._trading_day_cache[cache_key] = bool(self._trading_day_checker(trade_day))
-        return self._trading_day_cache[cache_key]
+        with self._trading_day_cache_lock:
+            if cache_key not in self._trading_day_cache:
+                self._trading_day_cache[cache_key] = bool(self._trading_day_checker(trade_day))
+            return self._trading_day_cache[cache_key]
 
     def _update_all_refresh_progress(
         self,
@@ -1075,6 +1134,12 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _all_refresh_worker_count(total: int) -> int:
+    """计算全量刷新并发 worker 数，限制上游请求并发峰值。"""
+
+    return max(1, min(STOCK_ALL_REFRESH_MAX_WORKERS, total))
+
+
 def _default_cn_market_trading_day(trade_day: date) -> bool:
     """读取 AkShare 交易日历判断 A 股是否开盘，失败时退回工作日判断。
 
@@ -1085,24 +1150,43 @@ def _default_cn_market_trading_day(trade_day: date) -> bool:
         交易日返回 True，周末或交易日历确认的休市日返回 False。
     """
 
-    try:
-        import akshare as ak
-
-        frame = ak.tool_trade_date_hist_sina()
-        for _, row in frame.iterrows():
-            raw_value = row.get("trade_date") or row.get("日期") or row.get("date")
-            if raw_value is None:
-                continue
-            if hasattr(raw_value, "date"):
-                candidate = raw_value.date()
-            else:
-                candidate = date.fromisoformat(str(raw_value)[:10])
-            if candidate == trade_day:
-                return True
-        return False
-    except Exception as error:
-        logger.warning("stock trading day calendar unavailable: %s", _compact_error_message(error))
+    trading_days = _load_default_cn_market_trading_days()
+    if trading_days is None:
         return trade_day.weekday() < 5
+    return trade_day in trading_days
+
+
+def _load_default_cn_market_trading_days() -> set[date] | None:
+    """加载并缓存 AkShare A 股交易日历，避免逐日重复访问上游。"""
+
+    global _CN_MARKET_TRADING_DAYS
+    global _CN_MARKET_TRADING_DAYS_UNAVAILABLE
+
+    with _CN_MARKET_TRADING_DAYS_LOCK:
+        if _CN_MARKET_TRADING_DAYS is not None:
+            return _CN_MARKET_TRADING_DAYS
+        if _CN_MARKET_TRADING_DAYS_UNAVAILABLE:
+            return None
+        trading_days: set[date] = set()
+        try:
+            import akshare as ak
+
+            frame = ak.tool_trade_date_hist_sina()
+            for _, row in frame.iterrows():
+                raw_value = row.get("trade_date") or row.get("日期") or row.get("date")
+                if raw_value is None:
+                    continue
+                if hasattr(raw_value, "date"):
+                    candidate = raw_value.date()
+                else:
+                    candidate = date.fromisoformat(str(raw_value)[:10])
+                trading_days.add(candidate)
+            _CN_MARKET_TRADING_DAYS = trading_days
+            return _CN_MARKET_TRADING_DAYS
+        except Exception as error:
+            _CN_MARKET_TRADING_DAYS_UNAVAILABLE = True
+            logger.warning("stock trading day calendar unavailable: %s", _compact_error_message(error))
+            return None
 
 
 def _shift_months(value: date, months: int) -> date:

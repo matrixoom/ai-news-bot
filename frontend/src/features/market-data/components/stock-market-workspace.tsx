@@ -113,13 +113,17 @@ type TurtleTradingMetrics = {
 };
 
 /**
- * 清理公司摘要中的旧兜底标签。
+ * 清理公司摘要中的旧兜底标签和历史占位文案。
  *
  * @param summary 后端返回或历史库中保存的公司摘要。
- * @returns 去掉内部字段标签后的展示文案。
+ * @returns 可展示的真实摘要；占位摘要返回空字符串。
  */
 function normalizeCompanySummary(summary: string) {
-  return summary.replace(/公司概况/g, "").trim();
+  const normalizedSummary = summary.replace(/公司概况/g, "").trim();
+  if (/等待上游数据补充/.test(normalizedSummary)) {
+    return "";
+  }
+  return normalizedSummary;
 }
 
 /**
@@ -656,9 +660,7 @@ function ResearchSummaryPanel(props: {
         </div>
       </div>
       <h3 className="mt-2 text-base font-semibold text-ink">{props.industry || "基础行情观察"}</h3>
-      <p className="mt-2 text-sm leading-6 text-muted">
-        {companySummary || "基于当前选择窗口展示价格趋势、成交量与估值指标，供进一步研究核验。"}
-      </p>
+      {companySummary ? <p className="mt-2 text-sm leading-6 text-muted">{companySummary}</p> : null}
       <dl className="mt-4 divide-y divide-line border-y border-line">
         <SummaryRow label="最新收盘" value={latest ? formatNumber(latest.close, 2) : "--"} />
         <SummaryRow
