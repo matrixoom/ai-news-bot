@@ -7,6 +7,7 @@ import type { StockDailyBar, StockInstrument } from "../model/market-data.types"
 
 const mocks = vi.hoisted(() => ({
   allRefresh: vi.fn(),
+  allRefreshCancel: vi.fn(),
   allRefreshError: "",
   allRefreshStatuses: [] as Array<Record<string, unknown> | null>,
   detailRanges: [] as Array<Record<string, unknown>>,
@@ -296,6 +297,7 @@ vi.mock("../hooks/use-stock-market-refresh-mutation", () => ({
 
 vi.mock("../hooks/use-stock-market-all-refresh", () => ({
   useStockMarketAllRefresh: () => ({
+    cancel: mocks.allRefreshCancel,
     errorMessage: mocks.allRefreshError,
     isStarting: false,
     job: mocks.allRefreshStatuses.at(-1) ?? null,
@@ -460,6 +462,7 @@ vi.mock("../hooks/use-stock-market-overview-query", () => ({
 describe("StockMarketWorkspace", () => {
   beforeEach(() => {
     mocks.allRefresh.mockClear();
+    mocks.allRefreshCancel.mockClear();
     mocks.allRefreshError = "";
     mocks.allRefreshStatuses.length = 0;
     mocks.detailRanges.length = 0;
@@ -640,7 +643,7 @@ describe("StockMarketWorkspace", () => {
     const user = userEvent.setup();
     mocks.allRefreshStatuses.push({
       id: "job-1",
-      status: "running",
+      status: "completed",
       completed: 3,
       total: 15,
       percentage: 20,
@@ -767,6 +770,36 @@ describe("StockMarketWorkspace", () => {
     await user.click(within(dialog).getByRole("button", { name: "刷新当日数据" }));
 
     expect(mocks.allRefresh).toHaveBeenCalledWith("today");
+  });
+
+  it("asks for confirmation and cancels when refreshing all instruments is running", async () => {
+    const user = userEvent.setup();
+    mocks.allRefreshStatuses.push({
+      id: "job-running",
+      status: "running",
+      trigger: "manual",
+      refresh_mode: "history",
+      completed: 2,
+      total: 25,
+      percentage: 8,
+      current_symbol: "000002.SZ",
+      current_label: "测试股票2",
+      message: "正在并发刷新全部标的基础行情。",
+      errors: [],
+      started_at: "2026-06-19T07:30:00Z",
+      finished_at: "",
+    });
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("button", { name: "刷新全部标的数据" }));
+
+    const dialog = screen.getByRole("dialog", { name: "取消全部标的刷新确认" });
+    expect(within(dialog).getByText("取消全部标的刷新")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "确认取消" }));
+
+    expect(mocks.allRefreshCancel).toHaveBeenCalledWith("job-running");
+    expect(mocks.allRefresh).not.toHaveBeenCalled();
   });
 
   it("uses the latest month as the default stock range", () => {

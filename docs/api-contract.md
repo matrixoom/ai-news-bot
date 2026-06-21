@@ -474,7 +474,7 @@ uv run python main.py macro-sync
 
 ### 4.4.6 `POST /api/frontend/modules/market-data/stocks/refresh-all`
 
-用途：启动“全部标的”后台刷新任务。服务会逐只检查当前本地上市和 ST 状态股票、ETF、LOF 的日线行情；若本地日线窗口已覆盖目标范围，则该标的直接跳过外部请求；缺失窗口时仅刷新基础 OHLCV 日线行情并计算均线，不刷新公司概况、日频估值、分红或财务指标。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态；若已有任务正在运行，重复点击会返回正在运行的任务。
+用途：启动“全部标的”后台刷新任务。服务会逐只检查当前本地上市和 ST 状态股票、ETF、LOF 的日线行情；若本地日线窗口已覆盖目标范围，则该标的直接跳过外部请求；缺失窗口时仅刷新基础 OHLCV 日线行情并计算均线，不刷新公司概况、日频估值、分红或财务指标。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态；若已有任务正在运行，重复启动会返回正在运行的任务，前端刷新按钮会改为取消确认入口。
 
 请求：
 
@@ -534,18 +534,49 @@ uv run python main.py macro-sync
 
 ### 4.4.8 `GET /api/frontend/modules/market-data/stocks/refresh-all/{job_id}`
 
-用途：读取指定全部标的刷新任务状态。任务状态为 `completed_with_warnings` 时表示部分标的外部数据源失败，服务保留旧数据并在 `errors` 中返回短错误摘要。
+用途：读取指定全部标的刷新任务状态。任务状态为 `completed_with_warnings` 时表示部分标的外部数据源失败，服务保留旧数据并在 `errors` 中返回短错误摘要；`canceling` 表示已收到取消请求且正在等待已开始的标的写入完成；`canceled` 表示任务已取消，已写入的数据保留。
 
 失败：
 
 - `404`：任务不存在
 - `503`：`frontend_stock_all_refresh_status_failed`
 
-### 4.4.9 后台定时刷新
+### 4.4.9 `POST /api/frontend/modules/market-data/stocks/refresh-all/{job_id}/cancel`
+
+用途：取消指定全部标的刷新任务。服务采用协作式取消：已开始执行的少量并发标的会先完成当前写入，尚未开始的补采会停止；已写入日线不会回滚。已完成、失败、跳过或已取消的任务再次调用时会保持原状态返回。
+
+成功：`200`
+
+```json
+{
+  "job": {
+    "id": "f89f...",
+    "status": "canceling",
+    "trigger": "manual",
+    "refresh_mode": "history",
+    "completed": 128,
+    "total": 6931,
+    "percentage": 2,
+    "current_symbol": "000001.SZ",
+    "current_label": "平安银行",
+    "message": "正在取消全部标的刷新，已开始的标的会先完成写入。",
+    "errors": [],
+    "started_at": "2026-06-19T07:30:00Z",
+    "finished_at": ""
+  }
+}
+```
+
+失败：
+
+- `404`：任务不存在
+- `503`：`frontend_stock_all_refresh_cancel_failed`
+
+### 4.4.10 后台定时刷新
 
 股票市场服务启动后会在后台检查上海时间 `15:30` 槽位，并先通过 A 股交易日历判断当天是否开盘；周末和节假日休市日不会触发 `scheduled` 全标的刷新。自动任务和手动任务共用最近一次完成状态文件 `.data/stock_market_refresh_state.json`，不再按自然日限制启动；定时任务使用 `mode=today`，只检查并刷新当天基础 OHLCV 日线行情，不触发公司概况、估值、分红或财务指标接口。
 
-### 4.4.10 `GET /api/frontend/modules/market-data/stocks/{symbol}`
+### 4.4.11 `GET /api/frontend/modules/market-data/stocks/{symbol}`
 
 用途：返回选中股票/ETF/LOF 的日级别 K 线数据、公司概况、所属板块、股票属性和财报图表数据。若该标的本地没有任何日线数据，服务会先懒加载近 1 个月日线；只要已有任意日线数据，后续打开不会自动重复拉取，需用户手动刷新。
 
@@ -626,7 +657,7 @@ OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短�
 - `400`：`invalid_stock_symbol_or_range`
 - `503`：`frontend_stock_detail_unavailable`
 
-### 4.4.11 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
+### 4.4.12 `POST /api/frontend/modules/market-data/stocks/{symbol}/sync`
 
 用途：手动刷新选中股票/ETF/LOF 在当前时间跨度内的日线数据，并返回刷新后的详情 payload。股票会同时
 强制刷新财务指标，确保 ROE、营收同比、净利润同比和资产负债率可以补采最新季度数据；ETF/LOF 不执行
@@ -661,7 +692,7 @@ ETF 的 `refresh_result` 仅包含 `daily_bars`。
 - `400`：`invalid_stock_symbol_or_range`
 - `503`：`frontend_stock_detail_sync_failed`
 
-### 4.4.12 `POST /api/frontend/modules/market-data/stocks/{symbol}/financials/sync`
+### 4.4.13 `POST /api/frontend/modules/market-data/stocks/{symbol}/financials/sync`
 
 用途：刷新选中股票当前财务页时间范围对应的财务指标，不触发行情日线同步。底层上游财务接口不支持严格按日期增量请求时，服务会补采并 upsert 可返回的财务指标，前端继续按请求范围展示。
 

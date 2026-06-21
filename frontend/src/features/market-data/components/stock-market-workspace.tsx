@@ -150,6 +150,7 @@ export function StockMarketWorkspace() {
   const [selectedIndexSymbol, setSelectedIndexSymbol] = useState<string | null>(null);
   const [indexRange, setIndexRange] = useState<MarketDataRangeSelection>({ type: "1m" });
   const [isAllRefreshDialogOpen, setIsAllRefreshDialogOpen] = useState(false);
+  const [isAllRefreshCancelDialogOpen, setIsAllRefreshCancelDialogOpen] = useState(false);
   const pendingSearchSelectionRef = useRef(false);
 
   const instrumentsQuery = useStockMarketInstrumentsQuery({
@@ -265,10 +266,26 @@ export function StockMarketWorkspace() {
     setSelectedIndexSymbol((current) => (current === symbol ? null : symbol));
   }
 
+  /** 根据当前任务状态打开全部标的刷新或取消确认弹窗。 */
+  function handleAllRefreshButtonClick() {
+    if (isAllRefreshCancelable(allRefresh.job)) {
+      setIsAllRefreshCancelDialogOpen(true);
+      return;
+    }
+    setIsAllRefreshDialogOpen(true);
+  }
+
   /** 启动全部标的刷新，并关闭模式选择弹窗。 */
   function handleAllRefreshStart(mode: StockMarketAllRefreshMode) {
     allRefresh.start(mode);
     setIsAllRefreshDialogOpen(false);
+  }
+
+  /** 确认取消正在执行的全部标的刷新。 */
+  function handleAllRefreshCancel() {
+    if (!allRefresh.job?.id) return;
+    allRefresh.cancel(allRefresh.job.id);
+    setIsAllRefreshCancelDialogOpen(false);
   }
 
   return (
@@ -316,9 +333,10 @@ export function StockMarketWorkspace() {
               isPending={instrumentsQuery.isPending}
               allRefreshJob={allRefresh.job}
               allRefreshError={allRefresh.errorMessage}
+              allRefreshCanceling={allRefresh.isCanceling}
               allRefreshStarting={allRefresh.isStarting}
               onCollapseChange={setIsInstrumentListCollapsed}
-              onRefreshAll={() => setIsAllRefreshDialogOpen(true)}
+              onRefreshAll={handleAllRefreshButtonClick}
               onPageChange={setInstrumentPage}
               onPageSizeChange={handleInstrumentPageSizeChange}
               onSelect={handleInstrumentSelect}
@@ -410,6 +428,13 @@ export function StockMarketWorkspace() {
             <AllInstrumentRefreshDialog
               onClose={() => setIsAllRefreshDialogOpen(false)}
               onStart={handleAllRefreshStart}
+            />
+          ) : null}
+          {isAllRefreshCancelDialogOpen ? (
+            <AllInstrumentRefreshCancelDialog
+              job={allRefresh.job}
+              onCancel={handleAllRefreshCancel}
+              onClose={() => setIsAllRefreshCancelDialogOpen(false)}
             />
           ) : null}
         </>
@@ -817,6 +842,7 @@ function InstrumentListPanel(props: {
   isError: boolean;
   allRefreshJob: StockMarketAllRefreshJob | null;
   allRefreshError: string;
+  allRefreshCanceling: boolean;
   allRefreshStarting: boolean;
   warning: string;
   onSelect: (symbol: string) => void;
@@ -859,6 +885,8 @@ function InstrumentListPanel(props: {
 
   const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize));
   const paginationItems = buildPaginationItems(props.currentPage, totalPages);
+  const isRefreshCancelable = isAllRefreshCancelable(props.allRefreshJob);
+  const isRefreshActive = isAllRefreshRunning(props.allRefreshJob);
 
   return (
     <aside
@@ -870,14 +898,14 @@ function InstrumentListPanel(props: {
           <button
             aria-label="刷新全部标的数据"
             className="workbench-icon-button h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={props.allRefreshStarting}
+            disabled={props.allRefreshStarting || props.allRefreshCanceling || props.allRefreshJob?.status === "canceling"}
             onClick={props.onRefreshAll}
-            title="选择刷新全部标的历史行情或当日行情"
+            title={isRefreshCancelable ? "取消当前全部标的刷新" : "选择刷新全部标的历史行情或当日行情"}
             type="button"
           >
             <ArrowPathIcon
               aria-hidden="true"
-              className={`h-4 w-4 ${props.allRefreshStarting || isAllRefreshRunning(props.allRefreshJob) ? "animate-spin" : ""}`}
+              className={`h-4 w-4 ${props.allRefreshStarting || props.allRefreshCanceling || isRefreshActive ? "animate-spin" : ""}`}
             />
           </button>
           <div className="min-w-0 text-sm font-semibold text-ink">
@@ -1029,6 +1057,55 @@ function AllInstrumentRefreshDialog(props: {
   );
 }
 
+function AllInstrumentRefreshCancelDialog(props: {
+  job: StockMarketAllRefreshJob | null;
+  onClose: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4">
+      <section
+        aria-label="取消全部标的刷新确认"
+        className="w-full max-w-sm rounded-panel border border-line bg-surface p-4 shadow-xl"
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">取消全部标的刷新</h3>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              当前进度 {formatNumber(props.job?.completed ?? 0)}/{formatNumber(props.job?.total ?? 0)}，已写入的数据会保留。
+            </p>
+          </div>
+          <button
+            aria-label="关闭全部标的刷新取消确认"
+            className="workbench-icon-button h-8 w-8 shrink-0"
+            onClick={props.onClose}
+            type="button"
+          >
+            <XMarkIcon aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-control bg-negative px-3 text-xs font-semibold text-white hover:opacity-90"
+            onClick={props.onCancel}
+            type="button"
+          >
+            确认取消
+          </button>
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-control border border-line bg-surface px-3 text-xs font-semibold text-ink hover:bg-accent-soft"
+            onClick={props.onClose}
+            type="button"
+          >
+            继续刷新
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 /**
  * 渲染全部标的刷新启动失败提示。
  * @param props.message 失败原因，用于悬停定位具体 HTTP 或网络错误。
@@ -1088,7 +1165,16 @@ function AllInstrumentRefreshProgress(props: { job: StockMarketAllRefreshJob | n
  * @returns pending/running 时返回 true。
  */
 function isAllRefreshRunning(job: StockMarketAllRefreshJob | null): boolean {
-  return job?.status === "pending" || job?.status === "running";
+  return job?.status === "pending" || job?.status === "running" || job?.status === "canceling";
+}
+
+/**
+ * 判断当前刷新任务是否可由用户提交取消请求。
+ * @param job 后端刷新任务状态。
+ * @returns pending/running 且存在任务 ID 时返回 true。
+ */
+function isAllRefreshCancelable(job: StockMarketAllRefreshJob | null): boolean {
+  return Boolean(job?.id) && (job?.status === "pending" || job?.status === "running");
 }
 
 /**

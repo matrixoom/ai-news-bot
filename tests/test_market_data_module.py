@@ -1602,6 +1602,79 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(syncer.sync_symbol_window.call_count, 3)
         self.assertGreaterEqual(max_active_count, 2)
 
+    def test_all_instrument_refresh_can_be_canceled_while_running(self) -> None:
+        """校验运行中的全标的刷新可被取消，并停止等待中的后续标的。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": f"00000{index}.SZ",
+                    "code": f"00000{index}",
+                    "exchange": "SZ",
+                    "name": f"测试股票{index}",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+                for index in (1, 2, 3, 4, 5)
+            ]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        first_worker_started = threading.Event()
+        allow_first_worker_finish = threading.Event()
+        call_lock = threading.Lock()
+        called_symbols: list[str] = []
+
+        def sync_symbol_window(instrument, **kwargs: object) -> dict[str, int]:
+            """阻塞已开始的标的，给测试线程留出取消任务的时机。"""
+
+            _ = kwargs
+            with call_lock:
+                called_symbols.append(instrument.symbol)
+                first_worker_started.set()
+            allow_first_worker_finish.wait(timeout=2)
+            return {"daily_bars": 1}
+
+        syncer.sync_symbol_window.side_effect = sync_symbol_window
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+            trading_day_checker=lambda trade_day: trade_day.weekday() < 5,
+        )
+
+        class FixedDate(date):
+            """固定当前日期，确保近 20 年窗口可断言。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的本地日期。"""
+
+                return cls(2026, 6, 19)
+
+        with patch("src.services.stock_market_service.date", FixedDate):
+            started = service.start_all_instrument_refresh(trigger="manual", run_inline=False)["job"]
+            try:
+                self.assertTrue(first_worker_started.wait(timeout=2))
+                canceled = service.cancel_all_instrument_refresh(started["id"])["job"]
+                allow_first_worker_finish.set()
+                deadline = time.time() + 3
+                while time.time() < deadline:
+                    latest = service.get_all_instrument_refresh(started["id"])["job"]
+                    if latest["status"] == "canceled":
+                        break
+                    time.sleep(0.02)
+                final_job = service.get_all_instrument_refresh(started["id"])["job"]
+            finally:
+                allow_first_worker_finish.set()
+                service.stop_scheduler()
+
+        self.assertEqual(canceled["status"], "canceling")
+        self.assertEqual(final_job["status"], "canceled")
+        self.assertLess(syncer.sync_symbol_window.call_count, 5)
+        self.assertEqual(final_job["message"], "全标的刷新已取消。")
+
     def test_all_instrument_refresh_today_mode_only_requests_today_window(self) -> None:
         """校验全部标的当日刷新只请求当天行情窗口。"""
 

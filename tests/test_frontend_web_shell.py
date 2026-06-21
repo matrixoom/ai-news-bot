@@ -223,6 +223,35 @@ class FastAPIWebShellTests(unittest.TestCase):
             refresh_mode="today",
         )
 
+    def test_stock_market_refresh_all_cancel_endpoint_passes_job_id(self):
+        """校验全部标的刷新取消接口把任务 ID 传给 Service。"""
+
+        stock_service = Mock()
+        stock_service.cancel_all_instrument_refresh.return_value = {
+            "job": {
+                "id": "job-1",
+                "status": "canceling",
+                "trigger": "manual",
+                "refresh_mode": "history",
+                "completed": 2,
+                "total": 10,
+                "percentage": 20,
+                "current_symbol": "000001.SZ",
+                "current_label": "平安银行",
+                "message": "正在取消全部标的刷新，已开始的标的会先完成写入。",
+                "errors": [],
+                "started_at": "2026-06-19T07:30:00Z",
+                "finished_at": "",
+            }
+        }
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        response = client.post("/api/frontend/modules/market-data/stocks/refresh-all/job-1/cancel")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["job"]["status"], "canceling")
+        stock_service.cancel_all_instrument_refresh.assert_called_once_with("job-1")
+
     def test_stock_market_financial_refresh_endpoint_passes_range(self):
         """校验财务刷新接口把财务页当前时间范围传给 Service。"""
 

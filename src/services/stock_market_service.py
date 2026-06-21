@@ -36,7 +36,7 @@ STOCK_REQUIRED_FINANCIAL_METRICS = {
     "debt_asset_ratio",
 }
 STOCK_OVERVIEW_INDEX_REGISTRY = tuple(build_default_market_registry().values())
-STOCK_ALL_REFRESH_TERMINAL_STATUSES = {"completed", "completed_with_warnings", "failed", "skipped"}
+STOCK_ALL_REFRESH_TERMINAL_STATUSES = {"completed", "completed_with_warnings", "failed", "skipped", "canceled"}
 STOCK_ALL_REFRESH_MODES = {"history", "today"}
 STOCK_ALL_REFRESH_SCHEDULE_TIME = "15:30"
 STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
@@ -242,6 +242,29 @@ class StockMarketService:
                 "state": deepcopy(self._load_refresh_state()),
             }
 
+    def cancel_all_instrument_refresh(self, job_id: str) -> dict[str, Any]:
+        """请求取消正在执行的全标的刷新任务。
+
+        Args:
+            job_id: 启动接口返回的任务 ID。
+
+        Returns:
+            已更新的任务状态；已结束任务保持原状态返回。
+
+        Raises:
+            KeyError: 任务不存在。
+        """
+
+        with self._all_refresh_lock:
+            job = self._all_refresh_jobs.get(job_id)
+            if job is None:
+                raise KeyError(job_id)
+            if job["status"] in STOCK_ALL_REFRESH_TERMINAL_STATUSES:
+                return {"job": self._public_all_refresh_job(job)}
+            job["status"] = "canceling"
+            job["message"] = "正在取消全部标的刷新，已开始的标的会先完成写入。"
+            return {"job": self._public_all_refresh_job(job)}
+
     def _run_all_instrument_refresh(self, job_id: str) -> None:
         """逐标的执行外部数据同步并持续更新进度。"""
 
@@ -249,6 +272,9 @@ class StockMarketService:
         instruments = self._load_all_refresh_instruments()
         with self._all_refresh_lock:
             job = self._all_refresh_jobs[job_id]
+            if job["status"] == "canceling":
+                self._mark_all_refresh_canceled_locked(job)
+                return
             refresh_mode = str(job.get("refresh_mode") or "history")
             end = self._latest_trading_day_on_or_before(today)
             start = end if refresh_mode == "today" else _shift_months(end, -STOCK_ALL_REFRESH_HISTORY_MONTHS)
@@ -272,12 +298,17 @@ class StockMarketService:
                 )
             completed_count = 0
             worker_count = _all_refresh_worker_count(len(instruments))
-            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            executor = ThreadPoolExecutor(max_workers=worker_count)
+            try:
                 future_to_instrument = {
                     executor.submit(self._refresh_single_instrument, instrument, start=start, end=end): instrument
                     for instrument in instruments
                 }
                 for future in as_completed(future_to_instrument):
+                    if self._is_all_refresh_cancel_requested(job_id):
+                        for pending_future in future_to_instrument:
+                            pending_future.cancel()
+                        break
                     instrument = future_to_instrument[future]
                     try:
                         errors = future.result()
@@ -303,8 +334,17 @@ class StockMarketService:
                         instrument=instrument,
                         message=f"{instrument.name} 刷新完成。",
                     )
+                    if self._is_all_refresh_cancel_requested(job_id):
+                        for pending_future in future_to_instrument:
+                            pending_future.cancel()
+                        break
+            finally:
+                executor.shutdown(wait=True, cancel_futures=True)
             with self._all_refresh_lock:
                 job = self._all_refresh_jobs[job_id]
+                if job["status"] == "canceling":
+                    self._mark_all_refresh_canceled_locked(job)
+                    return
                 job["completed"] = job["total"]
                 job["percentage"] = 100
                 job["finished_at"] = _utc_now()
@@ -334,6 +374,20 @@ class StockMarketService:
                 job["finished_at"] = _utc_now()
                 job["message"] = f"全标的刷新失败：{_compact_error_message(error)}"
                 job["errors"].append(str(error))
+
+    def _is_all_refresh_cancel_requested(self, job_id: str) -> bool:
+        """判断任务是否已收到取消请求。"""
+
+        with self._all_refresh_lock:
+            job = self._all_refresh_jobs.get(job_id)
+            return bool(job and job["status"] == "canceling")
+
+    def _mark_all_refresh_canceled_locked(self, job: dict[str, Any]) -> None:
+        """在持有刷新锁时将任务收敛为已取消状态。"""
+
+        job["status"] = "canceled"
+        job["finished_at"] = _utc_now()
+        job["message"] = "全标的刷新已取消。"
 
     def refresh_overview_indices(
         self,
@@ -820,6 +874,8 @@ class StockMarketService:
         safe_total = max(1, total)
         with self._all_refresh_lock:
             job = self._all_refresh_jobs[job_id]
+            if job["status"] == "canceling":
+                return
             job["status"] = "running"
             job["completed"] = min(max(0, completed), safe_total)
             job["total"] = total

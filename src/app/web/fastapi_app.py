@@ -425,6 +425,18 @@ def create_fastapi_app(
             logger.exception("frontend stock all refresh status failed", extra={"job_id": job_id})
             return JSONResponse({"error": "frontend_stock_all_refresh_status_failed"}, status_code=503)
 
+    @app.post("/api/frontend/modules/market-data/stocks/refresh-all/{job_id}/cancel")
+    def frontend_stock_market_refresh_all_cancel(job_id: str) -> JSONResponse:
+        """取消指定全标的刷新任务。"""
+
+        try:
+            return JSONResponse(stock_service.cancel_all_instrument_refresh(job_id))
+        except KeyError:
+            return JSONResponse({"error": "frontend_stock_all_refresh_not_found"}, status_code=404)
+        except Exception:
+            logger.exception("frontend stock all refresh cancel failed", extra={"job_id": job_id})
+            return JSONResponse({"error": "frontend_stock_all_refresh_cancel_failed"}, status_code=503)
+
     @app.get("/api/frontend/modules/market-data/stocks/{symbol}")
     def frontend_stock_market_detail(
         symbol: str,

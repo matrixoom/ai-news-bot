@@ -108,8 +108,9 @@ export type StockInstrumentListPayload = {
 
 export type StockMarketAllRefreshJob = {
   id: string;
-  status: "pending" | "running" | "completed" | "completed_with_warnings" | "failed" | "skipped";
+  status: "pending" | "running" | "canceling" | "completed" | "completed_with_warnings" | "failed" | "skipped" | "canceled";
   trigger: "manual" | "scheduled" | string;
+  refresh_mode: StockMarketAllRefreshMode;
   completed: number;
   total: number;
   percentage: number;
