@@ -1724,7 +1724,7 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertFalse(sync_call.kwargs["include_valuation"])
 
     def test_all_instrument_refresh_skips_symbols_with_complete_twenty_year_window(self) -> None:
-        """校验全标的刷新每次可启动，但已有近 20 年日线窗口时不再调用外部 API。"""
+        """校验已有近 20 年首尾数据时按粗粒度覆盖判断跳过外部 API。"""
 
         repository = self._repository()
         repository.upsert_instruments(
@@ -1752,7 +1752,10 @@ class StockMarketModuleTests(unittest.TestCase):
         for symbol in ("000001.SZ", "159915.SZ"):
             repository.upsert_daily_bars(
                 symbol,
-                _stock_weekday_bars(date(2006, 6, 19), date(2026, 6, 19)),
+                [
+                    _stock_daily_bar("2006-06-19", close_price=1),
+                    _stock_daily_bar("2026-06-19", close_price=2),
+                ],
             )
         syncer = Mock(spec=StockMarketSyncService)
         service = StockMarketService(
@@ -1783,8 +1786,8 @@ class StockMarketModuleTests(unittest.TestCase):
         syncer.sync_profile.assert_not_called()
         syncer.sync_financials.assert_not_called()
 
-    def test_all_instrument_refresh_fetches_only_missing_twenty_year_head_window(self) -> None:
-        """校验近 20 年头部窗口缺失时，只请求缺失日期段补齐该标的。"""
+    def test_all_instrument_refresh_fetches_whole_twenty_year_window_when_not_covered(self) -> None:
+        """校验近 20 年窗口首尾未覆盖时，一次性请求整个目标窗口。"""
 
         repository = self._repository()
         repository.upsert_instruments(
@@ -1831,13 +1834,13 @@ class StockMarketModuleTests(unittest.TestCase):
         syncer.sync_symbol_window.assert_called_once()
         sync_call = syncer.sync_symbol_window.call_args
         self.assertEqual(sync_call.kwargs["start_date"], date(2006, 6, 19))
-        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 18))
+        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
         self.assertFalse(sync_call.kwargs["include_valuation"])
         syncer.sync_profile.assert_not_called()
         syncer.sync_financials.assert_not_called()
 
-    def test_all_instrument_refresh_fetches_only_obvious_missing_middle_window(self) -> None:
-        """校验近 20 年窗口中间存在明显断档时，只请求断档日期段。"""
+    def test_all_instrument_refresh_ignores_middle_gaps_when_window_is_covered(self) -> None:
+        """校验近 20 年窗口中间断档不再触发小缺口补采。"""
 
         repository = self._repository()
         repository.upsert_instruments(
@@ -1877,10 +1880,64 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         self.assertEqual(errors, [])
-        syncer.sync_symbol_window.assert_called_once()
+        syncer.sync_symbol_window.assert_not_called()
+
+    def test_all_instrument_refresh_uses_listing_date_for_shorter_listed_stock(self) -> None:
+        """校验未满 20 年且已有上市日期的标的按上市日至最近交易日刷新。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "300750.SZ",
+                    "code": "300750",
+                    "exchange": "SZ",
+                    "name": "宁德时代",
+                    "instrument_type": "stock",
+                    "market_board": "创业板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_profile(
+            {
+                "symbol": "300750.SZ",
+                "company_name": "宁德时代",
+                "industry": "电池",
+                "sector": "创业板",
+                "region": "福建",
+                "listing_date": "2018-06-11",
+                "attributes": [],
+                "summary": "",
+                "provider_key": "unit-test",
+                "source_url": "https://example.com",
+            }
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 3}
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+            trading_day_checker=lambda trade_day: trade_day.weekday() < 5,
+        )
+
+        class FixedDate(date):
+            """固定当前日期，确保近 20 年窗口可断言。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的本地日期。"""
+
+                return cls(2026, 6, 19)
+
+        with patch("src.services.stock_market_service.date", FixedDate):
+            job = service.start_all_instrument_refresh(trigger="manual", run_inline=True)["job"]
+
+        self.assertEqual(job["status"], "completed")
         sync_call = syncer.sync_symbol_window.call_args
-        self.assertEqual(sync_call.kwargs["start_date"], date(2026, 6, 8))
-        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 24))
+        self.assertEqual(sync_call.kwargs["start_date"], date(2018, 6, 11))
+        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
         self.assertFalse(sync_call.kwargs["include_valuation"])
 
     def test_all_instrument_refresh_skips_missing_window_without_trading_days(self) -> None:
@@ -1937,8 +1994,8 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(errors, [])
         syncer.sync_symbol_window.assert_not_called()
 
-    def test_all_instrument_refresh_trims_missing_window_to_trading_days(self) -> None:
-        """校验缺口补采会跳过两端休市日，只请求真实交易日区间。"""
+    def test_all_instrument_refresh_skips_middle_rest_day_gap_when_window_is_covered(self) -> None:
+        """校验整体窗口已有首尾数据时不再扫描中间休市或缺口。"""
 
         repository = self._repository()
         repository.upsert_instruments(
@@ -1980,11 +2037,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         self.assertEqual(errors, [])
-        syncer.sync_symbol_window.assert_called_once()
-        sync_call = syncer.sync_symbol_window.call_args
-        self.assertEqual(sync_call.kwargs["start_date"], date(2020, 2, 3))
-        self.assertEqual(sync_call.kwargs["end_date"], date(2020, 2, 4))
-        self.assertFalse(sync_call.kwargs["include_valuation"])
+        syncer.sync_symbol_window.assert_not_called()
 
     def test_all_instrument_refresh_today_mode_skips_recent_close_on_weekend(self) -> None:
         """校验周末当日刷新发现最近收盘交易日已有数据时不调用外部 API。"""

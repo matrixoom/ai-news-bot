@@ -41,7 +41,6 @@ STOCK_ALL_REFRESH_MODES = {"history", "today"}
 STOCK_ALL_REFRESH_SCHEDULE_TIME = "15:30"
 STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
 STOCK_ALL_REFRESH_HISTORY_MONTHS = 240
-STOCK_ALL_REFRESH_MAX_CACHED_GAP_DAYS = 10
 STOCK_ALL_REFRESH_TRADING_DAY_LOOKBACK_DAYS = 31
 STOCK_ALL_REFRESH_MAX_WORKERS = 3
 logger = logging.getLogger(__name__)
@@ -786,23 +785,23 @@ class StockMarketService:
 
         Args:
             instrument: 当前股票或 ETF 标的。
-            start: 近 20 年窗口起始日期，不足 20 年的标的由数据源返回有史以来可取数据。
+            start: 近 20 年窗口起始日期，未满 20 年且有上市日期的标的会改用上市日期。
             end: 近 20 年窗口结束日期。
 
         Returns:
             本标的刷新过程中产生的短错误信息。
         """
 
-        start_text = start.isoformat()
+        effective_start = self._resolve_all_refresh_start(instrument, start=start, end=end)
+        if effective_start > end:
+            return []
+        start_text = effective_start.isoformat()
         end_text = end.isoformat()
-        missing_windows = self._repository.find_daily_bar_missing_windows(
+        if self._repository.has_daily_bar_window(
             symbol=instrument.symbol,
             start_date=start_text,
             end_date=end_text,
-            max_gap_days=STOCK_ALL_REFRESH_MAX_CACHED_GAP_DAYS,
-            trading_day_checker=self._is_scheduled_trading_day,
-        )
-        if not missing_windows:
+        ):
             logger.info(
                 "stock all refresh skipped cached symbol %s for %s to %s",
                 instrument.symbol,
@@ -812,27 +811,44 @@ class StockMarketService:
             return []
 
         errors: list[str] = []
-        for missing_start_text, missing_end_text in missing_windows:
-            try:
-                self._sync_service.sync_symbol_window(
-                    instrument,
-                    start_date=date.fromisoformat(missing_start_text),
-                    end_date=date.fromisoformat(missing_end_text),
-                    include_valuation=False,
-                    include_history_padding=False,
-                )
-            except Exception as error:
-                warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
-                logger.warning(
-                    "stock all refresh daily failed for %s %s to %s: %s",
-                    instrument.symbol,
-                    missing_start_text,
-                    missing_end_text,
-                    warning,
-                )
-                self._repository.record_sync_warning(instrument.symbol, warning)
-                errors.append(warning)
+        try:
+            self._sync_service.sync_symbol_window(
+                instrument,
+                start_date=effective_start,
+                end_date=end,
+                include_valuation=False,
+                include_history_padding=False,
+            )
+        except Exception as error:
+            warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
+            logger.warning(
+                "stock all refresh daily failed for %s %s to %s: %s",
+                instrument.symbol,
+                start_text,
+                end_text,
+                warning,
+            )
+            self._repository.record_sync_warning(instrument.symbol, warning)
+            errors.append(warning)
         return errors
+
+    def _resolve_all_refresh_start(self, instrument: StockInstrument, *, start: date, end: date) -> date:
+        """解析全标的刷新起始日，未满 20 年标的从上市日开始。
+
+        Args:
+            instrument: 当前股票、ETF 或 LOF 标的。
+            start: 近 20 年窗口起始日。
+            end: 最近交易日窗口结束日。
+
+        Returns:
+            实际用于覆盖判断和同步请求的起始日。
+        """
+
+        profile = self._repository.get_profile(instrument.symbol)
+        listing_date = _parse_iso_date(getattr(profile, "listing_date", "") if profile else "")
+        if listing_date is None or listing_date <= start or listing_date > end:
+            return start
+        return listing_date
 
     def _latest_trading_day_on_or_before(self, anchor: date) -> date:
         """从指定日期向前查找最近一个 A 股交易日。
@@ -1253,6 +1269,22 @@ def _shift_months(value: date, months: int) -> date:
     month = month_index % 12 + 1
     days_in_month = [31, 29 if _is_leap_year(year) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     return date(year, month, min(value.day, days_in_month[month - 1]))
+
+
+def _parse_iso_date(raw_value: str) -> date | None:
+    """解析 ISO 日期字符串。
+
+    Args:
+        raw_value: 待解析的日期文本，兼容带时间后缀的 ISO 字符串。
+
+    Returns:
+        解析成功的日期；空值或非法日期返回 None。
+    """
+
+    try:
+        return date.fromisoformat(str(raw_value)[:10])
+    except ValueError:
+        return None
 
 
 def _is_leap_year(year: int) -> bool:
