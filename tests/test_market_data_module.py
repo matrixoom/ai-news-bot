@@ -1710,7 +1710,19 @@ class StockMarketModuleTests(unittest.TestCase):
 
                 return cls(2026, 6, 19)
 
-        with patch("src.services.stock_market_service.date", FixedDate):
+        class FixedDatetime(datetime):
+            """固定当前上海时间为收盘刷新后。"""
+
+            @classmethod
+            def now(cls, tz: object = None) -> datetime:
+                """返回测试使用的当前时间。"""
+
+                return cls(2026, 6, 19, 16, 0, tzinfo=tz)
+
+        with (
+            patch("src.services.stock_market_service.date", FixedDate),
+            patch("src.services.stock_market_service.datetime", FixedDatetime),
+        ):
             job = service.start_all_instrument_refresh(
                 trigger="manual",
                 refresh_mode="today",
@@ -2130,6 +2142,67 @@ class StockMarketModuleTests(unittest.TestCase):
         sync_call = syncer.sync_symbol_window.call_args
         self.assertEqual(sync_call.kwargs["start_date"], date(2026, 6, 19))
         self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
+        self.assertFalse(sync_call.kwargs["include_valuation"])
+
+    def test_all_instrument_refresh_today_mode_uses_previous_trading_day_before_close_time(self) -> None:
+        """校验收盘刷新时间前的当日刷新回退到上一交易日，避免请求尚未发布的当天历史日线。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 1}
+        trading_days = {date(2026, 6, 24), date(2026, 6, 25)}
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+            trading_day_checker=lambda trade_day: trade_day in trading_days,
+        )
+
+        class FixedDate(date):
+            """固定当前日期为开盘日，确保当日模式可断言。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的本地日期。"""
+
+                return cls(2026, 6, 25)
+
+        class FixedDatetime(datetime):
+            """固定当前上海时间为收盘刷新前。"""
+
+            @classmethod
+            def now(cls, tz: object = None) -> datetime:
+                """返回测试使用的当前时间。"""
+
+                return cls(2026, 6, 25, 1, 0, tzinfo=tz)
+
+        with (
+            patch("src.services.stock_market_service.date", FixedDate),
+            patch("src.services.stock_market_service.datetime", FixedDatetime),
+        ):
+            service.start_all_instrument_refresh(
+                trigger="manual",
+                refresh_mode="today",
+                run_inline=True,
+            )
+
+        syncer.sync_symbol_window.assert_called_once()
+        sync_call = syncer.sync_symbol_window.call_args
+        self.assertEqual(sync_call.kwargs["start_date"], date(2026, 6, 24))
+        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 24))
         self.assertFalse(sync_call.kwargs["include_valuation"])
 
     def test_scheduled_all_instrument_refresh_starts_at_1530_on_trading_day(self) -> None:

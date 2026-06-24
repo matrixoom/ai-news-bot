@@ -275,7 +275,7 @@ class StockMarketService:
                 self._mark_all_refresh_canceled_locked(job)
                 return
             refresh_mode = str(job.get("refresh_mode") or "history")
-            end = self._latest_trading_day_on_or_before(today)
+            end = self._resolve_all_refresh_end(today=today, refresh_mode=refresh_mode)
             start = end if refresh_mode == "today" else _shift_months(end, -STOCK_ALL_REFRESH_HISTORY_MONTHS)
             job["status"] = "running"
             job["total"] = len(instruments)
@@ -867,6 +867,27 @@ class StockMarketService:
         logger.warning("stock latest trading day lookup failed before %s", anchor.isoformat())
         return anchor
 
+    def _resolve_all_refresh_end(self, *, today: date, refresh_mode: str) -> date:
+        """解析全标的刷新结束日，避免过早请求尚未发布的当日日线。
+
+        Args:
+            today: 本地自然日，测试可通过 patch `date.today()` 固定。
+            refresh_mode: 全标的刷新模式，`today` 表示只补最近收盘交易日。
+
+        Returns:
+            可用于 AkShare 历史日线查询的最近交易日。
+        """
+
+        local_now = datetime.now(ZoneInfo(STOCK_ALL_REFRESH_TIMEZONE))
+        anchor = today
+        if (
+            refresh_mode == "today"
+            and local_now.date() == today
+            and _is_before_all_refresh_publish_time(local_now)
+        ):
+            anchor = today - timedelta(days=1)
+        return self._latest_trading_day_on_or_before(anchor)
+
     def _is_scheduled_trading_day(self, trade_day: date) -> bool:
         """判断指定日期是否为 A 股交易日，并缓存结果供并发刷新复用。"""
 
@@ -1210,6 +1231,20 @@ def _all_refresh_worker_count(total: int) -> int:
     """计算全量刷新并发 worker 数，限制上游请求并发峰值。"""
 
     return max(1, min(STOCK_ALL_REFRESH_MAX_WORKERS, total))
+
+
+def _is_before_all_refresh_publish_time(local_time: datetime) -> bool:
+    """判断当前上海时间是否早于当日历史日线刷新保护时间。
+
+    Args:
+        local_time: 上海时区当前时间。
+
+    Returns:
+        早于 `STOCK_ALL_REFRESH_SCHEDULE_TIME` 返回 True，否则返回 False。
+    """
+
+    schedule_hour, schedule_minute = (int(part) for part in STOCK_ALL_REFRESH_SCHEDULE_TIME.split(":", 1))
+    return (local_time.hour, local_time.minute) < (schedule_hour, schedule_minute)
 
 
 def _default_cn_market_trading_day(trade_day: date) -> bool:
