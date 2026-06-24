@@ -43,6 +43,7 @@ STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
 STOCK_ALL_REFRESH_HISTORY_MONTHS = 240
 STOCK_ALL_REFRESH_TRADING_DAY_LOOKBACK_DAYS = 31
 STOCK_ALL_REFRESH_MAX_WORKERS = 3
+STOCK_ALL_REFRESH_WORKERS_BY_TYPE = {"stock": 3, "etf": 2, "lof": 1}
 logger = logging.getLogger(__name__)
 _CN_MARKET_TRADING_DAYS: set[date] | None = None
 _CN_MARKET_TRADING_DAYS_UNAVAILABLE = False
@@ -268,7 +269,6 @@ class StockMarketService:
         """逐标的执行外部数据同步并持续更新进度。"""
 
         today = date.today()
-        instruments = self._load_all_refresh_instruments()
         with self._all_refresh_lock:
             job = self._all_refresh_jobs[job_id]
             if job["status"] == "canceling":
@@ -278,7 +278,6 @@ class StockMarketService:
             end = self._resolve_all_refresh_end(today=today, refresh_mode=refresh_mode)
             start = end if refresh_mode == "today" else _shift_months(end, -STOCK_ALL_REFRESH_HISTORY_MONTHS)
             job["status"] = "running"
-            job["total"] = len(instruments)
             job["message"] = (
                 "正在刷新全部标的当日基础行情数据。"
                 if refresh_mode == "today"
@@ -286,6 +285,15 @@ class StockMarketService:
             )
             job["started_at"] = _utc_now()
         try:
+            if refresh_mode == "history":
+                self._repository.refresh_history_coverage_flags(
+                    start_date=start.isoformat(),
+                    end_date=end.isoformat(),
+                )
+            instruments = self._load_all_refresh_instruments()
+            with self._all_refresh_lock:
+                job = self._all_refresh_jobs[job_id]
+                job["total"] = len(instruments)
             if instruments:
                 first_instrument = instruments[0]
                 self._update_all_refresh_progress(
@@ -296,13 +304,23 @@ class StockMarketService:
                     message="正在并发刷新全部标的基础行情。",
                 )
             completed_count = 0
-            worker_count = _all_refresh_worker_count(len(instruments))
-            executor = ThreadPoolExecutor(max_workers=worker_count)
+            executors: list[ThreadPoolExecutor] = []
             try:
-                future_to_instrument = {
-                    executor.submit(self._refresh_single_instrument, instrument, start=start, end=end): instrument
-                    for instrument in instruments
-                }
+                future_to_instrument = {}
+                for instrument_type, grouped_instruments in _group_all_refresh_instruments(instruments).items():
+                    worker_count = _all_refresh_worker_count_for_type(instrument_type, len(grouped_instruments))
+                    executor = ThreadPoolExecutor(max_workers=worker_count)
+                    executors.append(executor)
+                    for instrument in grouped_instruments:
+                        future_to_instrument[
+                            executor.submit(
+                                self._refresh_single_instrument,
+                                instrument,
+                                start=start,
+                                end=end,
+                                refresh_mode=refresh_mode,
+                            )
+                        ] = instrument
                 for future in as_completed(future_to_instrument):
                     if self._is_all_refresh_cancel_requested(job_id):
                         for pending_future in future_to_instrument:
@@ -338,7 +356,8 @@ class StockMarketService:
                             pending_future.cancel()
                         break
             finally:
-                executor.shutdown(wait=True, cancel_futures=True)
+                for executor in executors:
+                    executor.shutdown(wait=True, cancel_futures=True)
             with self._all_refresh_lock:
                 job = self._all_refresh_jobs[job_id]
                 if job["status"] == "canceling":
@@ -780,6 +799,7 @@ class StockMarketService:
         *,
         start: date,
         end: date,
+        refresh_mode: str = "history",
     ) -> list[str]:
         """刷新单只标的的基础行情数据，失败不阻断后续标的。
 
@@ -787,12 +807,21 @@ class StockMarketService:
             instrument: 当前股票或 ETF 标的。
             start: 近 20 年窗口起始日期，未满 20 年且有上市日期的标的会改用上市日期。
             end: 近 20 年窗口结束日期。
+            refresh_mode: `history` 走近 20 年补齐，`today` 只从已有最新日线补到最近交易日。
 
         Returns:
             本标的刷新过程中产生的短错误信息。
         """
 
+        if refresh_mode == "history" and instrument.history_coverage_status == "covered":
+            return []
         effective_start = self._resolve_all_refresh_start(instrument, start=start, end=end)
+        if refresh_mode == "today":
+            sync_state = self._repository.get_sync_state(instrument.symbol)
+            latest_trade_date = _parse_iso_date(sync_state.latest_trade_date if sync_state else "")
+            if latest_trade_date is None:
+                return []
+            effective_start = latest_trade_date
         if effective_start > end:
             return []
         start_text = effective_start.isoformat()
@@ -819,6 +848,16 @@ class StockMarketService:
                 include_valuation=False,
                 include_history_padding=False,
             )
+            if refresh_mode == "history" and self._repository.has_daily_bar_window(
+                symbol=instrument.symbol,
+                start_date=start_text,
+                end_date=end_text,
+            ):
+                self._repository.mark_history_covered(
+                    symbol=instrument.symbol,
+                    start_date=start_text,
+                    end_date=end_text,
+                )
         except Exception as error:
             warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
             logger.warning(
@@ -1216,6 +1255,10 @@ class StockMarketService:
             "listing_status": instrument.listing_status,
             "updated_at": instrument.updated_at,
             "latest_price": instrument.latest_price,
+            "history_coverage_status": instrument.history_coverage_status,
+            "history_coverage_at": instrument.history_coverage_at,
+            "history_coverage_start_date": instrument.history_coverage_start_date,
+            "history_coverage_end_date": instrument.history_coverage_end_date,
         }
 
 
@@ -1231,6 +1274,22 @@ def _all_refresh_worker_count(total: int) -> int:
     """计算全量刷新并发 worker 数，限制上游请求并发峰值。"""
 
     return max(1, min(STOCK_ALL_REFRESH_MAX_WORKERS, total))
+
+
+def _all_refresh_worker_count_for_type(instrument_type: str, total: int) -> int:
+    """按标的类型计算刷新 worker 数，让不同上游接口可并行但各自限速。"""
+
+    max_workers = STOCK_ALL_REFRESH_WORKERS_BY_TYPE.get(instrument_type, 1)
+    return max(1, min(max_workers, total))
+
+
+def _group_all_refresh_instruments(instruments: list[StockInstrument]) -> dict[str, list[StockInstrument]]:
+    """按标的类型分组，供全量刷新创建独立线程池。"""
+
+    groups: dict[str, list[StockInstrument]] = {}
+    for instrument in instruments:
+        groups.setdefault(instrument.instrument_type, []).append(instrument)
+    return groups
 
 
 def _is_before_all_refresh_publish_time(local_time: datetime) -> bool:

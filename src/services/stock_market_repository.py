@@ -38,6 +38,10 @@ class StockInstrument:
     updated_at: str
     latest_price: float | None = None
     access_count: int = 0
+    history_coverage_status: str = "unknown"
+    history_coverage_at: str = ""
+    history_coverage_start_date: str = ""
+    history_coverage_end_date: str = ""
 
 
 @dataclass(frozen=True)
@@ -339,7 +343,9 @@ class StockMarketRepository:
             rows = connection.execute(
                 f"""
                 SELECT i.symbol, i.code, i.exchange, i.name, i.instrument_type,
-                       i.market_board, i.listing_status, i.updated_at, i.access_count
+                       i.market_board, i.listing_status, i.updated_at, i.access_count,
+                       i.history_coverage_status, i.history_coverage_at,
+                       i.history_coverage_start_date, i.history_coverage_end_date
                 FROM market_stock_instrument AS i
                 {where_clause}
                 ORDER BY
@@ -363,7 +369,9 @@ class StockMarketRepository:
             row = connection.execute(
                 """
                 SELECT symbol, code, exchange, name, instrument_type, market_board,
-                       listing_status, updated_at, access_count
+                       listing_status, updated_at, access_count,
+                       history_coverage_status, history_coverage_at,
+                       history_coverage_start_date, history_coverage_end_date
                 FROM market_stock_instrument
                 WHERE symbol = ?
                 """,
@@ -501,6 +509,79 @@ class StockMarketRepository:
         if row is None or row["earliest_trade_date"] is None or row["latest_trade_date"] is None:
             return False
         return str(row["earliest_trade_date"]) <= start_date and str(row["latest_trade_date"]) >= end_date
+
+    def refresh_history_coverage_flags(self, *, start_date: str, end_date: str) -> int:
+        """扫描既有日线并为已覆盖目标历史窗口的标的补覆盖标记。
+
+        Args:
+            start_date: 近 20 年窗口起始日，格式为 `YYYY-MM-DD`。
+            end_date: 近 20 年窗口结束日，格式为 `YYYY-MM-DD`。
+
+        Returns:
+            本次新标记为 `covered` 的标的数量。
+        """
+
+        timestamp = _utc_now()
+        marked_rows: list[tuple[str, str, str, str, str]] = []
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT i.symbol, i.history_coverage_status, p.listing_date
+                FROM market_stock_instrument AS i
+                LEFT JOIN market_stock_profile AS p ON p.symbol = i.symbol
+                WHERE i.listing_status IN ('listed', 'st')
+                """
+            ).fetchall()
+        for row in rows:
+            if str(row["history_coverage_status"]) == "covered":
+                continue
+            target_start = _max_iso_date(start_date, str(row["listing_date"] or ""))
+            if self.has_daily_bar_window(
+                symbol=str(row["symbol"]),
+                start_date=target_start,
+                end_date=end_date,
+            ):
+                marked_rows.append((timestamp, target_start, end_date, timestamp, str(row["symbol"])))
+        if not marked_rows:
+            return 0
+        with self._session() as connection:
+            connection.executemany(
+                """
+                UPDATE market_stock_instrument
+                SET history_coverage_status = 'covered',
+                    history_coverage_at = ?,
+                    history_coverage_start_date = ?,
+                    history_coverage_end_date = ?,
+                    updated_at = ?
+                WHERE symbol = ?
+                """,
+                marked_rows,
+            )
+        return len(marked_rows)
+
+    def mark_history_covered(self, *, symbol: str, start_date: str, end_date: str) -> None:
+        """标记单只标的已完成近 20 年或上市以来历史补齐。
+
+        Args:
+            symbol: 带交易所后缀的标的代码。
+            start_date: 实际覆盖起始日。
+            end_date: 实际覆盖结束日。
+        """
+
+        timestamp = _utc_now()
+        with self._session() as connection:
+            connection.execute(
+                """
+                UPDATE market_stock_instrument
+                SET history_coverage_status = 'covered',
+                    history_coverage_at = ?,
+                    history_coverage_start_date = ?,
+                    history_coverage_end_date = ?,
+                    updated_at = ?
+                WHERE symbol = ?
+                """,
+                (timestamp, start_date, end_date, timestamp, symbol),
+            )
 
     def has_daily_bar_date(self, *, symbol: str, trade_date: str) -> bool:
         """判断某只标的是否已有指定交易日的本地日线。
@@ -838,6 +919,10 @@ class StockMarketRepository:
                     listing_status TEXT NOT NULL,
                     source_url TEXT NOT NULL DEFAULT '',
                     access_count INTEGER NOT NULL DEFAULT 0,
+                    history_coverage_status TEXT NOT NULL DEFAULT 'unknown',
+                    history_coverage_at TEXT NOT NULL DEFAULT '',
+                    history_coverage_start_date TEXT NOT NULL DEFAULT '',
+                    history_coverage_end_date TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
@@ -845,6 +930,7 @@ class StockMarketRepository:
             )
             self._migrate_stock_instrument_type_check(connection)
             self._migrate_stock_instrument_access_count(connection)
+            self._migrate_stock_instrument_history_coverage(connection)
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_market_stock_instrument_search
@@ -948,6 +1034,10 @@ class StockMarketRepository:
                 listing_status TEXT NOT NULL,
                 source_url TEXT NOT NULL DEFAULT '',
                 access_count INTEGER NOT NULL DEFAULT 0,
+                history_coverage_status TEXT NOT NULL DEFAULT 'unknown',
+                history_coverage_at TEXT NOT NULL DEFAULT '',
+                history_coverage_start_date TEXT NOT NULL DEFAULT '',
+                history_coverage_end_date TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -985,6 +1075,23 @@ class StockMarketRepository:
         connection.execute(
             "ALTER TABLE market_stock_instrument ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0"
         )
+
+    def _migrate_stock_instrument_history_coverage(self, connection: sqlite3.Connection) -> None:
+        """为旧版标的表补充近 20 年历史覆盖标记字段。"""
+
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(market_stock_instrument)").fetchall()
+        }
+        migrations = [
+            ("history_coverage_status", "TEXT NOT NULL DEFAULT 'unknown'"),
+            ("history_coverage_at", "TEXT NOT NULL DEFAULT ''"),
+            ("history_coverage_start_date", "TEXT NOT NULL DEFAULT ''"),
+            ("history_coverage_end_date", "TEXT NOT NULL DEFAULT ''"),
+        ]
+        for column_name, definition in migrations:
+            if column_name not in columns:
+                connection.execute(f"ALTER TABLE market_stock_instrument ADD COLUMN {column_name} {definition}")
 
     def _migrate_legacy_daily_bars(self) -> None:
         """将主库旧日线表幂等迁移到分片，校验完成后移除旧表。"""
@@ -1226,6 +1333,16 @@ class StockMarketRepository:
             updated_at=str(row["updated_at"]),
             latest_price=latest_price,
             access_count=int(row["access_count"]) if "access_count" in row.keys() else 0,
+            history_coverage_status=(
+                str(row["history_coverage_status"]) if "history_coverage_status" in row.keys() else "unknown"
+            ),
+            history_coverage_at=str(row["history_coverage_at"]) if "history_coverage_at" in row.keys() else "",
+            history_coverage_start_date=(
+                str(row["history_coverage_start_date"]) if "history_coverage_start_date" in row.keys() else ""
+            ),
+            history_coverage_end_date=(
+                str(row["history_coverage_end_date"]) if "history_coverage_end_date" in row.keys() else ""
+            ),
         )
 
     def _build_daily_bar(self, row: sqlite3.Row) -> StockDailyBar:
@@ -1254,7 +1371,8 @@ class StockMarketRepository:
     def _session(self) -> Iterator[sqlite3.Connection]:
         """打开主库事务连接，并在成功时提交。"""
 
-        connection = sqlite3.connect(self._db_path)
+        connection = sqlite3.connect(self._db_path, timeout=15)
+        _configure_sqlite_connection(connection)
         connection.row_factory = sqlite3.Row
         try:
             yield connection
@@ -1289,7 +1407,8 @@ class StockMarketRepository:
             已启用行对象访问的 SQLite 连接。
         """
 
-        connection = sqlite3.connect(shard_path)
+        connection = sqlite3.connect(shard_path, timeout=15)
+        _configure_sqlite_connection(connection)
         connection.row_factory = sqlite3.Row
         try:
             yield connection
@@ -1307,6 +1426,24 @@ def _optional_float(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _max_iso_date(left: str, right: str) -> str:
+    """返回两个 ISO 日期文本中较晚的一个，空值或非法值会被忽略。"""
+
+    if not right:
+        return left
+    try:
+        return max(date.fromisoformat(left), date.fromisoformat(right)).isoformat()
+    except ValueError:
+        return left
+
+
+def _configure_sqlite_connection(connection: sqlite3.Connection) -> None:
+    """配置 SQLite 连接，降低后台刷新写入时前端读请求的等待概率。"""
+
+    connection.execute("PRAGMA busy_timeout = 15000")
+    connection.execute("PRAGMA journal_mode = WAL")
 
 
 def _find_trading_day_missing_windows(

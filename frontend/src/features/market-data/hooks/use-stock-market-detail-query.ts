@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getStockMarketDetail } from "../api/get-stock-market-detail";
 import type {
   MarketDataRangeSelection,
@@ -33,5 +33,7 @@ export function useStockMarketDetailQuery(
         recordAccess: options.recordAccess ?? true,
         signal,
       }),
+    // 后台全标的刷新写库时详情接口可能变慢，保留上一份数据避免页面卡成空态。
+    placeholderData: keepPreviousData,
   });
 }

@@ -17,21 +17,19 @@ export function useStockMarketAllRefresh() {
     queryFn: ({ signal }) => getStockMarketAllRefresh({ signal }),
     refetchInterval: (query) => {
       const job = query.state.data?.job;
-      return job && isStockMarketAllRefreshRunning(job) ? 1000 : 15000;
+      return job && isStockMarketAllRefreshRunning(job) ? 5000 : 15000;
     },
   });
   const mutation = useMutation({
     mutationFn: startStockMarketAllRefresh,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stock-market-all-refresh", "latest"] });
-      queryClient.invalidateQueries({ queryKey: ["stock-market-instruments"] });
     },
   });
   const cancelMutation = useMutation({
     mutationFn: cancelStockMarketAllRefresh,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stock-market-all-refresh", "latest"] });
-      queryClient.invalidateQueries({ queryKey: ["stock-market-instruments"] });
     },
   });
 

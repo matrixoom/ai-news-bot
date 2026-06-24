@@ -94,6 +94,10 @@ export type StockInstrument = {
   listing_status: string;
   updated_at: string;
   latest_price?: number | null;
+  history_coverage_status?: "unknown" | "covered" | string;
+  history_coverage_at?: string;
+  history_coverage_start_date?: string;
+  history_coverage_end_date?: string;
 };
 
 export type StockInstrumentListPayload = {

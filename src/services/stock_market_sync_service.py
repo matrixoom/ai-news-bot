@@ -12,6 +12,7 @@ from .stock_market_repository import StockInstrument, StockMarketRepository
 
 DataFrameLoader = Callable[..., Any]
 logger = logging.getLogger(__name__)
+AKSHARE_DAILY_TIMEOUT_SECONDS = 10
 
 
 class StockMarketSyncService:
@@ -290,6 +291,7 @@ def _ak_stock_daily(**kwargs: Any) -> Any:
                     start_date=start_date,
                     end_date=end_date,
                     adjust="",
+                    timeout=AKSHARE_DAILY_TIMEOUT_SECONDS,
                 ),
             ),
             (
@@ -300,6 +302,7 @@ def _ak_stock_daily(**kwargs: Any) -> Any:
                         start_date=start_date,
                         end_date=end_date,
                         adjust="",
+                        timeout=AKSHARE_DAILY_TIMEOUT_SECONDS,
                     )
                 ),
             ),
