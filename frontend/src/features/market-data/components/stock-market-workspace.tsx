@@ -93,6 +93,17 @@ const TURTLE_HELP_TEXT = {
   systemTwoExit: "多头持仓跌破前 20 日低点时触发离场。",
   addOn: "入场后每上涨 0.5N 触发一次加仓观察信号。",
 } as const;
+const KLINE_MA_VISIBLE_BY_DEFAULT: Record<string, boolean> = {
+  MA60: false,
+  MA120: false,
+};
+const KLINE_MA_STYLES = {
+  MA5: { color: "#f59e0b", lineType: [6, 4] },
+  MA10: { color: "#38bdf8", lineType: [3, 3] },
+  MA20: { color: "#e35151", lineType: "solid" },
+  MA60: { color: "#34d399", lineType: [10, 5, 2, 5] },
+  MA120: { color: "#fd9893", lineType: [6, 4] },
+} satisfies Record<string, { color: string; lineType: "solid" | number[] }>;
 type StockDetailTab = "overview" | "financial";
 type StockPriceAdjustment = "none" | "forward" | "backward";
 type TurtleTradingSystem = "systemOne" | "systemTwo";
@@ -1429,7 +1440,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         itemHeight: 8,
         textStyle: chartTheme.legendText,
         data: legendData,
-        selected: {},
+        selected: KLINE_MA_VISIBLE_BY_DEFAULT,
       },
       grid: [
         { left: 54, right: 42, top: 48, height: "56%" },
@@ -1481,11 +1492,31 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
             borderColor0: workbenchTheme.negative,
           },
         },
-        lineSeries("MA5", props.bars.map((bar) => bar.ma5), "#f59e0b"),
-        lineSeries("MA10", props.bars.map((bar) => bar.ma10), "#38bdf8"),
-        lineSeries("MA20", props.bars.map((bar) => bar.ma20), "#a78bfa"),
-        lineSeries("MA60", props.bars.map((bar) => bar.ma60), "#34d399"),
-        lineSeries("MA120", props.bars.map((bar) => bar.ma120), "#93c5fd"),
+        lineSeries(
+          "MA5",
+          props.bars.map((bar) => bar.ma5),
+          KLINE_MA_STYLES.MA5,
+        ),
+        lineSeries(
+          "MA10",
+          props.bars.map((bar) => bar.ma10),
+          KLINE_MA_STYLES.MA10,
+        ),
+        lineSeries(
+          "MA20",
+          props.bars.map((bar) => bar.ma20),
+          KLINE_MA_STYLES.MA20,
+        ),
+        lineSeries(
+          "MA60",
+          props.bars.map((bar) => bar.ma60),
+          KLINE_MA_STYLES.MA60,
+        ),
+        lineSeries(
+          "MA120",
+          props.bars.map((bar) => bar.ma120),
+          KLINE_MA_STYLES.MA120,
+        ),
         {
           name: "成交量",
           type: "bar",
@@ -2119,15 +2150,26 @@ function buildPaginationItems(currentPage: number, totalPages: number): Array<nu
   return [1, "ellipsis-left", currentPage - 1, currentPage, currentPage + 1, "ellipsis-right", totalPages];
 }
 
-function lineSeries(name: string, data: Array<number | null>, color: string) {
+/**
+ * 生成 K 线均线序列，统一股票和宽基指数的均线线型。
+ * @param name 均线名称，需与图例名称保持一致。
+ * @param data 与 K 线日期对齐的均线数值序列。
+ * @param style 均线颜色与虚实线配置。
+ * @returns ECharts 折线序列配置。
+ */
+function lineSeries(
+  name: string,
+  data: Array<number | null>,
+  style: { color: string; lineType: "solid" | number[] },
+) {
   return {
     name,
     type: "line" as const,
     smooth: true,
     symbol: "none",
     data,
-    lineStyle: { color, width: 1.4 },
-    itemStyle: { color },
+    lineStyle: { color: style.color, width: 1.4, type: style.lineType },
+    itemStyle: { color: style.color },
   };
 }
 

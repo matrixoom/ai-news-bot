@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from copy import deepcopy
 from datetime import UTC, datetime, date, timedelta
@@ -41,6 +42,7 @@ STOCK_ALL_REFRESH_MODES = {"history", "today"}
 STOCK_ALL_REFRESH_SCHEDULE_TIME = "15:30"
 STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
 STOCK_ALL_REFRESH_HISTORY_MONTHS = 240
+STOCK_ALL_REFRESH_RECENT_WEEK_DAYS = 7
 STOCK_ALL_REFRESH_TRADING_DAY_LOOKBACK_DAYS = 31
 STOCK_ALL_REFRESH_MAX_WORKERS = 3
 STOCK_ALL_REFRESH_WORKERS_BY_TYPE = {"stock": 3, "etf": 2, "lof": 1}
@@ -307,54 +309,70 @@ class StockMarketService:
             executors: list[ThreadPoolExecutor] = []
             try:
                 future_to_instrument = {}
+                queued_by_executor: dict[ThreadPoolExecutor, deque[StockInstrument]] = {}
+
+                def submit_next_instrument(executor: ThreadPoolExecutor) -> None:
+                    """为指定线程池补交下一只标的，避免取消时已预投递过多任务。"""
+
+                    queue = queued_by_executor[executor]
+                    if not queue:
+                        return
+                    next_instrument = queue.popleft()
+                    future_to_instrument[
+                        executor.submit(
+                            self._refresh_single_instrument,
+                            next_instrument,
+                            start=start,
+                            end=end,
+                            refresh_mode=refresh_mode,
+                        )
+                    ] = (next_instrument, executor)
+
                 for instrument_type, grouped_instruments in _group_all_refresh_instruments(instruments).items():
                     worker_count = _all_refresh_worker_count_for_type(instrument_type, len(grouped_instruments))
                     executor = ThreadPoolExecutor(max_workers=worker_count)
                     executors.append(executor)
-                    for instrument in grouped_instruments:
-                        future_to_instrument[
-                            executor.submit(
-                                self._refresh_single_instrument,
-                                instrument,
-                                start=start,
-                                end=end,
-                                refresh_mode=refresh_mode,
+                    queued_by_executor[executor] = deque(grouped_instruments)
+                    for _ in range(worker_count):
+                        submit_next_instrument(executor)
+                while future_to_instrument:
+                    if self._is_all_refresh_cancel_requested(job_id):
+                        for pending_future in future_to_instrument:
+                            pending_future.cancel()
+                        break
+                    done_futures, _ = wait(future_to_instrument, return_when=FIRST_COMPLETED)
+                    for future in done_futures:
+                        instrument, executor = future_to_instrument.pop(future)
+                        try:
+                            errors = future.result()
+                        except Exception as error:
+                            warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
+                            logger.warning(
+                                "stock all refresh worker failed for %s: %s",
+                                instrument.symbol,
+                                warning,
                             )
-                        ] = instrument
-                for future in as_completed(future_to_instrument):
-                    if self._is_all_refresh_cancel_requested(job_id):
-                        for pending_future in future_to_instrument:
-                            pending_future.cancel()
-                        break
-                    instrument = future_to_instrument[future]
-                    try:
-                        errors = future.result()
-                    except Exception as error:
-                        warning = f"{instrument.symbol} 行情刷新失败：{_compact_error_message(error)}"
-                        logger.warning(
-                            "stock all refresh worker failed for %s: %s",
-                            instrument.symbol,
-                            warning,
+                            self._repository.record_sync_warning(instrument.symbol, warning)
+                            errors = [warning]
+                        completed_count += 1
+                        with self._all_refresh_lock:
+                            job = self._all_refresh_jobs[job_id]
+                            for error in errors:
+                                if error not in job["errors"]:
+                                    job["errors"].append(error)
+                        self._update_all_refresh_progress(
+                            job_id,
+                            completed=completed_count,
+                            total=len(instruments),
+                            instrument=instrument,
+                            message=f"{instrument.name} 刷新完成。",
                         )
-                        self._repository.record_sync_warning(instrument.symbol, warning)
-                        errors = [warning]
-                    completed_count += 1
-                    with self._all_refresh_lock:
-                        job = self._all_refresh_jobs[job_id]
-                        for error in errors:
-                            if error not in job["errors"]:
-                                job["errors"].append(error)
-                    self._update_all_refresh_progress(
-                        job_id,
-                        completed=completed_count,
-                        total=len(instruments),
-                        instrument=instrument,
-                        message=f"{instrument.name} 刷新完成。",
-                    )
-                    if self._is_all_refresh_cancel_requested(job_id):
-                        for pending_future in future_to_instrument:
-                            pending_future.cancel()
-                        break
+                        if self._is_all_refresh_cancel_requested(job_id):
+                            for pending_future in future_to_instrument:
+                                pending_future.cancel()
+                            future_to_instrument.clear()
+                            break
+                        submit_next_instrument(executor)
             finally:
                 for executor in executors:
                     executor.shutdown(wait=True, cancel_futures=True)
@@ -816,17 +834,27 @@ class StockMarketService:
         if refresh_mode == "history" and instrument.history_coverage_status == "covered":
             return []
         effective_start = self._resolve_all_refresh_start(instrument, start=start, end=end)
+        latest_trade_date: date | None = None
         if refresh_mode == "today":
             sync_state = self._repository.get_sync_state(instrument.symbol)
             latest_trade_date = _parse_iso_date(sync_state.latest_trade_date if sync_state else "")
             if latest_trade_date is None:
                 return []
-            effective_start = latest_trade_date
+            effective_start = self._resolve_today_refresh_start(
+                instrument.symbol,
+                latest_trade_date=latest_trade_date,
+                end=end,
+            )
         if effective_start > end:
             return []
         start_text = effective_start.isoformat()
         end_text = end.isoformat()
-        if self._repository.has_daily_bar_window(
+        is_recent_week_refetch = (
+            refresh_mode == "today"
+            and latest_trade_date is not None
+            and effective_start < latest_trade_date
+        )
+        if not is_recent_week_refetch and self._repository.has_daily_bar_window(
             symbol=instrument.symbol,
             start_date=start_text,
             end_date=end_text,
@@ -871,6 +899,39 @@ class StockMarketService:
             errors.append(warning)
         return errors
 
+    def _resolve_today_refresh_start(self, symbol: str, *, latest_trade_date: date, end: date) -> date:
+        """解析每日刷新起始日，兼顾增量补齐和最近一周缺口修复。
+
+        Args:
+            symbol: 带交易所后缀的标的代码。
+            latest_trade_date: 本地最后一条有效日线日期。
+            end: 本次任务启动时固定的刷新结束日，通常为当天。
+
+        Returns:
+            默认返回最后有效日；若最后有效日前一周内缺少应有交易日，则返回最近一周起点。
+        """
+
+        latest_week_start = latest_trade_date - timedelta(days=STOCK_ALL_REFRESH_RECENT_WEEK_DAYS)
+        try:
+            missing_windows = self._repository.find_daily_bar_missing_windows(
+                symbol=symbol,
+                start_date=latest_week_start.isoformat(),
+                end_date=latest_trade_date.isoformat(),
+                trading_day_checker=self._is_scheduled_trading_day,
+            )
+        except Exception as error:  # pragma: no cover - 防御性日志，异常时保持增量刷新语义
+            logger.warning(
+                "stock today refresh recent-week continuity check failed for %s: %s",
+                symbol,
+                _compact_error_message(error),
+            )
+            return latest_trade_date
+        if not missing_windows:
+            return latest_trade_date
+
+        recent_week_start = end - timedelta(days=STOCK_ALL_REFRESH_RECENT_WEEK_DAYS)
+        return min(latest_trade_date, recent_week_start)
+
     def _resolve_all_refresh_start(self, instrument: StockInstrument, *, start: date, end: date) -> date:
         """解析全标的刷新起始日，未满 20 年标的从上市日开始。
 
@@ -907,25 +968,19 @@ class StockMarketService:
         return anchor
 
     def _resolve_all_refresh_end(self, *, today: date, refresh_mode: str) -> date:
-        """解析全标的刷新结束日，避免过早请求尚未发布的当日日线。
+        """解析全标的刷新结束日。
 
         Args:
             today: 本地自然日，测试可通过 patch `date.today()` 固定。
-            refresh_mode: 全标的刷新模式，`today` 表示只补最近收盘交易日。
+            refresh_mode: 全标的刷新模式，`today` 表示每日刷新。
 
         Returns:
-            可用于 AkShare 历史日线查询的最近交易日。
+            每日刷新固定返回当天；历史模式返回最近开盘交易日。
         """
 
-        local_now = datetime.now(ZoneInfo(STOCK_ALL_REFRESH_TIMEZONE))
-        anchor = today
-        if (
-            refresh_mode == "today"
-            and local_now.date() == today
-            and _is_before_all_refresh_publish_time(local_now)
-        ):
-            anchor = today - timedelta(days=1)
-        return self._latest_trading_day_on_or_before(anchor)
+        if refresh_mode == "today":
+            return today
+        return self._latest_trading_day_on_or_before(today)
 
     def _is_scheduled_trading_day(self, trade_day: date) -> bool:
         """判断指定日期是否为 A 股交易日，并缓存结果供并发刷新复用。"""

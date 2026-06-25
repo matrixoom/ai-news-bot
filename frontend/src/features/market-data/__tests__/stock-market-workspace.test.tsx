@@ -527,13 +527,18 @@ describe("StockMarketWorkspace", () => {
     await waitFor(() => {
       const indexOption = mocks.echartOptions.at(-1) as {
         legend?: { data?: string[]; left?: string; top?: number; orient?: string; selected?: Record<string, boolean> };
-        series?: Array<{ name?: string; data?: unknown[] }>;
+        series?: Array<{ name?: string; data?: unknown[]; lineStyle?: { type?: string | number[] } }>;
       };
       expect(indexOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
       expect(indexOption.legend?.top).toBe(10);
       expect(indexOption.legend?.left).toBe("center");
       expect(indexOption.legend?.orient).toBe("horizontal");
-      expect(indexOption.legend?.selected).toEqual({});
+      expect(indexOption.legend?.selected).toEqual({ MA60: false, MA120: false });
+      expect(indexOption.series?.find((series) => series.name === "MA5")?.lineStyle?.type).toEqual([6, 4]);
+      expect(indexOption.series?.find((series) => series.name === "MA10")?.lineStyle?.type).toEqual([3, 3]);
+      expect(indexOption.series?.find((series) => series.name === "MA20")?.lineStyle?.type).toBe("solid");
+      expect(indexOption.series?.find((series) => series.name === "MA60")?.lineStyle?.type).toEqual([10, 5, 2, 5]);
+      expect(indexOption.series?.find((series) => series.name === "MA120")?.lineStyle?.type).toEqual([1, 4]);
       expect(indexOption.series?.find((series) => series.name === "PE(TTM)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "PB(MRQ)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "K线")?.data).toHaveLength(2);
@@ -1048,7 +1053,7 @@ describe("StockMarketWorkspace", () => {
       tooltip?: { padding?: number[]; textStyle?: { fontSize?: number } };
       grid?: Array<{ height?: string | number }>;
       yAxis?: Array<{ axisLabel?: { show?: boolean; fontSize?: number } }>;
-      series?: Array<{ name?: string; data?: Array<number | null> }>;
+      series?: Array<{ name?: string; data?: Array<number | null>; lineStyle?: { type?: string | number[] } }>;
     };
     const seriesByName = Object.fromEntries(
       (klineOption.series ?? []).map((series) => [series.name, series]),
@@ -1058,10 +1063,15 @@ describe("StockMarketWorkspace", () => {
     expect(klineOption.legend?.left).toBe("center");
     expect(klineOption.legend?.orient).toBe("horizontal");
     expect(klineOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
-    expect(klineOption.legend?.selected).toEqual({});
+    expect(klineOption.legend?.selected).toEqual({ MA60: false, MA120: false });
     expect(seriesByName["PE(TTM)"]).toBeUndefined();
     expect(seriesByName["PB(MRQ)"]).toBeUndefined();
     expect(seriesByName["总市值"]).toBeUndefined();
+    expect(seriesByName["MA5"]?.lineStyle?.type).toEqual([6, 4]);
+    expect(seriesByName["MA10"]?.lineStyle?.type).toEqual([3, 3]);
+    expect(seriesByName["MA20"]?.lineStyle?.type).toBe("solid");
+    expect(seriesByName["MA60"]?.lineStyle?.type).toEqual([10, 5, 2, 5]);
+    expect(seriesByName["MA120"]?.lineStyle?.type).toEqual([1, 4]);
     expect(klineOption.tooltip?.textStyle?.fontSize).toBe(10);
     expect(klineOption.tooltip?.padding).toEqual([6, 8]);
     expect(klineOption.grid?.[0]?.height).toBe("56%");
