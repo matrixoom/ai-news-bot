@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -474,6 +474,7 @@ describe("StockMarketWorkspace", () => {
     mocks.instrumentFilters.length = 0;
     mocks.refresh.mockClear();
     resizeObserverCallbacks.length = 0;
+    window.localStorage.clear();
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
   });
 
@@ -642,6 +643,70 @@ describe("StockMarketWorkspace", () => {
         page: 1,
       });
     });
+  });
+
+  it("keeps all-instrument refresh in the filter band and shows grouped list tabs", () => {
+    render(<StockMarketWorkspace />);
+
+    const filterBand = screen.getByTestId("stock-filter-band");
+    expect(within(filterBand).getByRole("button", { name: "刷新全部标的数据" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "标的分组" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "全部标的" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "新增标的分组" })).toBeInTheDocument();
+    expect(screen.queryByText(/只$/)).not.toBeInTheDocument();
+  });
+
+  it("adds a custom instrument group from the detail star action", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("button", { name: "新增标的分组" }));
+    const dialog = screen.getByRole("dialog", { name: "新增标的分组" });
+    await user.type(within(dialog).getByLabelText("分组名称"), "观察池");
+    await user.click(within(dialog).getByRole("button", { name: "保存分组" }));
+
+    await user.click(screen.getByRole("button", { name: "管理当前标的分组" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "加入观察池" }));
+    await user.click(screen.getByRole("tab", { name: "观察池" }));
+
+    expect(within(screen.getByRole("table")).getByText("000001.SZ")).toBeInTheDocument();
+    expect(within(screen.getByRole("table")).queryByText("000002.SZ")).not.toBeInTheDocument();
+  });
+
+  it("supports dragging the splitter between instrument list and detail panel", () => {
+    render(<StockMarketWorkspace />);
+
+    const layout = screen.getByTestId("stock-workspace-split-layout");
+    const splitter = screen.getByRole("separator", { name: "调整标的列表和详情宽度" });
+
+    fireEvent.mouseDown(splitter, { clientX: 360 });
+    fireEvent.mouseMove(window, { clientX: 460 });
+    fireEvent.mouseUp(window);
+
+    expect(layout).toHaveStyle({ gridTemplateColumns: "460px 8px minmax(0, 1fr)" });
+  });
+
+  it("places latest price right after the instrument name column", () => {
+    render(<StockMarketWorkspace />);
+
+    const headers = within(screen.getByRole("table"))
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent);
+
+    expect(headers).toEqual(["代码", "名称", "最新价", "市场", "类型"]);
+  });
+
+  it("uses unified Shanghai and Shenzhen market filters without mainboard duplicates", () => {
+    render(<StockMarketWorkspace />);
+
+    const marketSelect = screen.getByRole("combobox", { name: "市场类型" });
+    const optionLabels = within(marketSelect)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+
+    expect(optionLabels).toEqual(["全部", "沪市", "深市", "科创板", "创业板", "北交所", "境外"]);
+    expect(optionLabels).not.toContain("沪市主板");
+    expect(optionLabels).not.toContain("深市主板");
   });
 
   it("starts all-instrument refresh from the stock list header and shows progress", async () => {

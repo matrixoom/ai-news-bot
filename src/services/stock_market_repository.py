@@ -179,7 +179,7 @@ class StockMarketRepository:
                 str(item["exchange"]),
                 str(item["name"]),
                 str(item["instrument_type"]),
-                str(item.get("market_board", "")),
+                _normalize_market_board(str(item.get("market_board", ""))),
                 str(item.get("listing_status", "listed")),
                 str(item.get("source_url", "")),
                 timestamp,
@@ -329,8 +329,14 @@ class StockMarketRepository:
             filters.append("instrument_type = ?")
             params.append(instrument_type)
         if market_board != "all":
-            filters.append("market_board = ?")
-            params.append(market_board)
+            normalized_board = _normalize_market_board(market_board)
+            legacy_board = _legacy_mainboard_market(normalized_board)
+            if legacy_board:
+                filters.append("market_board IN (?, ?)")
+                params.extend([normalized_board, legacy_board])
+            else:
+                filters.append("market_board = ?")
+                params.append(normalized_board)
         if listing_status != "all":
             filters.append("listing_status = ?")
             params.append(listing_status)
@@ -931,6 +937,7 @@ class StockMarketRepository:
             self._migrate_stock_instrument_type_check(connection)
             self._migrate_stock_instrument_access_count(connection)
             self._migrate_stock_instrument_history_coverage(connection)
+            self._migrate_stock_instrument_market_board(connection)
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_market_stock_instrument_search
@@ -1092,6 +1099,21 @@ class StockMarketRepository:
         for column_name, definition in migrations:
             if column_name not in columns:
                 connection.execute(f"ALTER TABLE market_stock_instrument ADD COLUMN {column_name} {definition}")
+
+    def _migrate_stock_instrument_market_board(self, connection: sqlite3.Connection) -> None:
+        """将旧版沪深主板分类归并到交易所级别市场类型。"""
+
+        connection.execute(
+            """
+            UPDATE market_stock_instrument
+            SET market_board = CASE market_board
+                WHEN '沪市主板' THEN '沪市'
+                WHEN '深市主板' THEN '深市'
+                ELSE market_board
+            END
+            WHERE market_board IN ('沪市主板', '深市主板')
+            """
+        )
 
     def _migrate_legacy_daily_bars(self) -> None:
         """将主库旧日线表幂等迁移到分片，校验完成后移除旧表。"""
@@ -1328,7 +1350,7 @@ class StockMarketRepository:
             exchange=str(row["exchange"]),
             name=str(row["name"]),
             instrument_type=str(row["instrument_type"]),
-            market_board=str(row["market_board"]),
+            market_board=_normalize_market_board(str(row["market_board"])),
             listing_status=str(row["listing_status"]),
             updated_at=str(row["updated_at"]),
             latest_price=latest_price,
@@ -1426,6 +1448,26 @@ def _optional_float(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_market_board(value: str) -> str:
+    """将旧版沪深主板分类统一归并为沪市和深市。"""
+
+    if value == "沪市主板":
+        return "沪市"
+    if value == "深市主板":
+        return "深市"
+    return value
+
+
+def _legacy_mainboard_market(value: str) -> str:
+    """返回交易所级市场对应的旧版主板分类，用于兼容未迁移库。"""
+
+    if value == "沪市":
+        return "沪市主板"
+    if value == "深市":
+        return "深市主板"
+    return ""
 
 
 def _max_iso_date(left: str, right: str) -> str:

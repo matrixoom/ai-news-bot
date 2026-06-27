@@ -247,7 +247,7 @@ uv run python main.py macro-sync
 
 - `query`：股票代码、带后缀代码或名称关键字。
 - `instrument_type`：`all | stock | etf | lof`，默认 `all`。
-- `market_board`：`all | 沪市 | 深市 | 沪市主板 | 深市主板 | 科创板 | 创业板 | 北交所 | 境外`，默认 `all`。ETF/LOF 不再使用 `ETF` 作为市场类型，境外 ETF 归入 `境外`。
+- `market_board`：`all | 沪市 | 深市 | 科创板 | 创业板 | 北交所 | 境外`，默认 `all`。沪深主板统一归并为 `沪市` / `深市`；旧库中的 `沪市主板`、`深市主板` 会在仓储初始化或执行 `python scripts/repair_stock_instrument_classification.py` 时归并。ETF/LOF 不再使用 `ETF` 作为市场类型，境外 ETF 归入 `境外`。
 - `listing_status`：`all | listed | st | delisted`，默认 `all`。
 - `limit` / `offset`：分页参数，`limit` 最大 200。
 
@@ -262,7 +262,7 @@ uv run python main.py macro-sync
       "exchange": "SZ",
       "name": "平安银行",
       "instrument_type": "stock",
-      "market_board": "深市主板",
+      "market_board": "深市",
       "listing_status": "listed",
       "history_coverage_status": "covered",
       "history_coverage_at": "2026-06-24T18:30:00Z",

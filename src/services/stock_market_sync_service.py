@@ -924,9 +924,9 @@ def _board_for_stock_code(code: str) -> str:
     if code.startswith(("8", "4", "920")):
         return "北交所"
     if code.startswith(("000", "001", "002", "003")):
-        return "深市主板"
+        return "深市"
     if code.startswith(("600", "601", "603", "605")):
-        return "沪市主板"
+        return "沪市"
     return "A股"
 
 

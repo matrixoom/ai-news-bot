@@ -437,6 +437,78 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(repository.get_instrument("160216.SZ").instrument_type, "lof")
         self.assertEqual(repository.get_instrument("160216.SZ").market_board, "深市")
 
+    def test_stock_mainboard_markets_are_normalized_to_exchange_level(self) -> None:
+        """校验沪深主板标的入库后统一归类为沪市或深市。"""
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市主板",
+                    "listing_status": "listed",
+                },
+                {
+                    "symbol": "600000.SH",
+                    "code": "600000",
+                    "exchange": "SH",
+                    "name": "浦发银行",
+                    "instrument_type": "stock",
+                    "market_board": "沪市主板",
+                    "listing_status": "listed",
+                },
+            ]
+        )
+
+        shanghai = repository.get_instrument("600000.SH")
+        shenzhen = repository.get_instrument("000001.SZ")
+        shenzhen_items, _ = repository.search_instruments(market_board="深市", limit=10, offset=0)
+
+        self.assertEqual(shanghai.market_board, "沪市")
+        self.assertEqual(shenzhen.market_board, "深市")
+        self.assertEqual([item.symbol for item in shenzhen_items], ["000001.SZ"])
+
+    def test_repair_script_normalizes_existing_mainboard_market_rows(self) -> None:
+        """校验存量主板分类数据可由修复脚本归并到沪市和深市。"""
+        from scripts.repair_stock_instrument_classification import repair_stock_instrument_classification
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                },
+                {
+                    "symbol": "600000.SH",
+                    "code": "600000",
+                    "exchange": "SH",
+                    "name": "浦发银行",
+                    "instrument_type": "stock",
+                    "market_board": "沪市",
+                    "listing_status": "listed",
+                },
+            ]
+        )
+        with closing(sqlite3.connect(repository.db_path)) as connection:
+            connection.execute("UPDATE market_stock_instrument SET market_board = '深市主板' WHERE symbol = '000001.SZ'")
+            connection.execute("UPDATE market_stock_instrument SET market_board = '沪市主板' WHERE symbol = '600000.SH'")
+            connection.commit()
+
+        counters = repair_stock_instrument_classification(repository.db_path)
+
+        self.assertEqual(counters["market_board"], 2)
+        self.assertEqual(repository.get_instrument("000001.SZ").market_board, "深市")
+        self.assertEqual(repository.get_instrument("600000.SH").market_board, "沪市")
+
     def test_stock_search_prioritizes_most_accessed_instruments(self) -> None:
         """校验全部标的列表优先展示访问次数最多的标的。"""
         repository = self._repository()

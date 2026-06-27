@@ -2,12 +2,16 @@ import * as echarts from "echarts";
 import {
   ArrowPathIcon,
   CalendarDaysIcon,
+  CheckIcon,
+  PlusIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon,
   QuestionMarkCircleIcon,
+  StarIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-query";
 import { useStockMarketAllRefresh } from "../hooks/use-stock-market-all-refresh";
@@ -49,8 +53,6 @@ const MARKET_BOARD_OPTIONS = [
   { value: "all", label: "全部" },
   { value: "沪市", label: "沪市" },
   { value: "深市", label: "深市" },
-  { value: "沪市主板", label: "沪市主板" },
-  { value: "深市主板", label: "深市主板" },
   { value: "科创板", label: "科创板" },
   { value: "创业板", label: "创业板" },
   { value: "北交所", label: "北交所" },
@@ -102,16 +104,26 @@ const KLINE_MA_STYLES = {
   MA10: { color: "#38bdf8", lineType: [3, 3] },
   MA20: { color: "#e35151", lineType: "solid" },
   MA60: { color: "#34d399", lineType: [10, 5, 2, 5] },
-  MA120: { color: "#fd9893", lineType: [6, 4] },
+  MA120: { color: "#fd9893", lineType: [1, 4] },
 } satisfies Record<string, { color: string; lineType: "solid" | number[] }>;
 type StockDetailTab = "overview" | "financial";
 type StockPriceAdjustment = "none" | "forward" | "backward";
 type TurtleTradingSystem = "systemOne" | "systemTwo";
+type StockInstrumentGroup = {
+  id: string;
+  name: string;
+  symbols: string[];
+};
 type TurtleThresholdSignal = {
   isReady: boolean;
   threshold: number | null;
   triggered: boolean;
 };
+const STOCK_GROUP_STORAGE_KEY = "stock-market-instrument-groups";
+const ALL_INSTRUMENT_GROUP_ID = "all";
+const DEFAULT_LIST_PANEL_WIDTH = 360;
+const MIN_LIST_PANEL_WIDTH = 260;
+const MAX_LIST_PANEL_WIDTH = 640;
 type TurtleTradingMetrics = {
   trueRange: number | null;
   n: number | null;
@@ -135,6 +147,44 @@ function normalizeCompanySummary(summary: string) {
     return "";
   }
   return normalizedSummary;
+}
+
+/**
+ * 从浏览器本地偏好读取自定义标的分组。
+ *
+ * @returns 可用于渲染的分组列表；存储损坏时返回空数组。
+ */
+function loadInstrumentGroups(): StockInstrumentGroup[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const payload = JSON.parse(window.localStorage.getItem(STOCK_GROUP_STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(payload)) return [];
+    return payload
+      .map((item): StockInstrumentGroup => {
+        const symbols: string[] = Array.isArray(item?.symbols)
+          ? Array.from(new Set(item.symbols.filter((symbol: unknown): symbol is string => typeof symbol === "string")))
+          : [];
+        return {
+          id: typeof item?.id === "string" ? item.id : "",
+          name: typeof item?.name === "string" ? item.name.trim() : "",
+          symbols,
+        };
+      })
+      .filter((item) => item.id && item.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 将自定义标的分组写入浏览器本地偏好。
+ *
+ * @param groups 需要持久化的分组列表。
+ * @returns 无返回值。
+ */
+function saveInstrumentGroups(groups: StockInstrumentGroup[]): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(STOCK_GROUP_STORAGE_KEY, JSON.stringify(groups));
 }
 
 /**
@@ -162,6 +212,13 @@ export function StockMarketWorkspace() {
   const [indexRange, setIndexRange] = useState<MarketDataRangeSelection>({ type: "1m" });
   const [isAllRefreshDialogOpen, setIsAllRefreshDialogOpen] = useState(false);
   const [isAllRefreshCancelDialogOpen, setIsAllRefreshCancelDialogOpen] = useState(false);
+  const [instrumentGroups, setInstrumentGroups] = useState<StockInstrumentGroup[]>(() => loadInstrumentGroups());
+  const [activeInstrumentGroupId, setActiveInstrumentGroupId] = useState(ALL_INSTRUMENT_GROUP_ID);
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
+  const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
+  const [knownInstruments, setKnownInstruments] = useState<Record<string, StockInstrument>>({});
+  const [listPanelWidth, setListPanelWidth] = useState(DEFAULT_LIST_PANEL_WIDTH);
+  const splitLayoutRef = useRef<HTMLDivElement | null>(null);
   const pendingSearchSelectionRef = useRef(false);
 
   const instrumentsQuery = useStockMarketInstrumentsQuery({
@@ -184,7 +241,16 @@ export function StockMarketWorkspace() {
   const allRefresh = useStockMarketAllRefresh();
   const instruments = instrumentsQuery.data?.items ?? [];
   const instrumentTotal = instrumentsQuery.data?.total ?? 0;
-  const instrumentPageCount = Math.max(1, Math.ceil(instrumentTotal / instrumentPageSize));
+  const activeInstrumentGroup = instrumentGroups.find((group) => group.id === activeInstrumentGroupId) ?? null;
+  const groupedInstruments = useMemo(() => {
+    if (!activeInstrumentGroup) return instruments;
+    return activeInstrumentGroup.symbols
+      .map((symbol) => knownInstruments[symbol] ?? instruments.find((item) => item.symbol === symbol))
+      .filter((instrument): instrument is StockInstrument => Boolean(instrument));
+  }, [activeInstrumentGroup, instruments, knownInstruments]);
+  const visibleInstruments = activeInstrumentGroup ? groupedInstruments : instruments;
+  const visibleInstrumentTotal = activeInstrumentGroup ? groupedInstruments.length : instrumentTotal;
+  const instrumentPageCount = Math.max(1, Math.ceil(visibleInstrumentTotal / instrumentPageSize));
   const selectedOverviewIndex = useMemo(
     () => overviewQuery.data?.indices.find((index) => index.symbol === selectedIndexSymbol) ?? null,
     [overviewQuery.data?.indices, selectedIndexSymbol],
@@ -200,17 +266,38 @@ export function StockMarketWorkspace() {
 
   useEffect(() => {
     if (instrumentsQuery.isPending) return;
-    if (instruments.length === 0) {
+    if (visibleInstruments.length === 0) {
       setSelectedSymbol(null);
       pendingSearchSelectionRef.current = false;
       return;
     }
-    if (!selectedSymbol || !instruments.some((instrument) => instrument.symbol === selectedSymbol)) {
+    if (!selectedSymbol || !visibleInstruments.some((instrument) => instrument.symbol === selectedSymbol)) {
       updateDetailAccessIntent(pendingSearchSelectionRef.current && searchText.trim().length > 0);
       pendingSearchSelectionRef.current = false;
-      setSelectedSymbol(instruments[0].symbol);
+      setSelectedSymbol(visibleInstruments[0].symbol);
     }
-  }, [instruments, instrumentsQuery.isPending, searchText, selectedSymbol, updateDetailAccessIntent]);
+  }, [instrumentsQuery.isPending, searchText, selectedSymbol, updateDetailAccessIntent, visibleInstruments]);
+
+  useEffect(() => {
+    if (instruments.length === 0 && !detailQuery.data?.instrument) return;
+    setKnownInstruments((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const instrument of instruments) {
+        if (current[instrument.symbol] !== instrument) {
+          changed = true;
+        }
+        next[instrument.symbol] = instrument;
+      }
+      if (detailQuery.data?.instrument) {
+        if (current[detailQuery.data.instrument.symbol] !== detailQuery.data.instrument) {
+          changed = true;
+        }
+        next[detailQuery.data.instrument.symbol] = detailQuery.data.instrument;
+      }
+      return changed ? next : current;
+    });
+  }, [detailQuery.data?.instrument, instruments]);
 
   useEffect(() => {
     if (!detailAccessIntent.recordAccess || detailQuery.isPending) return;
@@ -264,8 +351,12 @@ export function StockMarketWorkspace() {
   }, []);
 
   const selectedInstrument = useMemo(
-    () => instruments.find((item) => item.symbol === selectedSymbol) ?? detailQuery.data?.instrument ?? null,
-    [detailQuery.data?.instrument, instruments, selectedSymbol],
+    () =>
+      visibleInstruments.find((item) => item.symbol === selectedSymbol) ??
+      instruments.find((item) => item.symbol === selectedSymbol) ??
+      detailQuery.data?.instrument ??
+      null,
+    [detailQuery.data?.instrument, instruments, selectedSymbol, visibleInstruments],
   );
   const latestBar = detailQuery.data?.daily_bars.at(-1) ?? null;
   const previousBar = detailQuery.data?.daily_bars.at(-2) ?? null;
@@ -299,6 +390,61 @@ export function StockMarketWorkspace() {
     setIsAllRefreshCancelDialogOpen(false);
   }
 
+  /** 新增自定义标的分组，并切换到该分组。 */
+  function handleGroupCreate(name: string) {
+    const normalizedName = name.trim();
+    if (!normalizedName) return;
+    const nextGroup: StockInstrumentGroup = {
+      id: `group-${Date.now()}`,
+      name: normalizedName,
+      symbols: [],
+    };
+    setInstrumentGroups((current) => {
+      const next = [...current, nextGroup];
+      saveInstrumentGroups(next);
+      return next;
+    });
+    setIsGroupDialogOpen(false);
+  }
+
+  /** 将当前详情标的加入或移出指定自定义分组。 */
+  function handleSelectedInstrumentGroupToggle(groupId: string) {
+    if (!selectedInstrument) return;
+    setInstrumentGroups((current) => {
+      const next = current.map((group) => {
+        if (group.id !== groupId) return group;
+        const hasSymbol = group.symbols.includes(selectedInstrument.symbol);
+        return {
+          ...group,
+          symbols: hasSymbol
+            ? group.symbols.filter((symbol) => symbol !== selectedInstrument.symbol)
+            : [...group.symbols, selectedInstrument.symbol],
+        };
+      });
+      saveInstrumentGroups(next);
+      return next;
+    });
+  }
+
+  /** 开始拖动左右分隔条，按鼠标位置更新标的列表宽度。 */
+  function handleSplitResizeStart(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const containerLeft = splitLayoutRef.current?.getBoundingClientRect().left ?? 0;
+    const handleMove = (moveEvent: MouseEvent) => {
+      const nextWidth = Math.min(
+        MAX_LIST_PANEL_WIDTH,
+        Math.max(MIN_LIST_PANEL_WIDTH, moveEvent.clientX - containerLeft),
+      );
+      setListPanelWidth(nextWidth);
+    };
+    const handleEnd = () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleEnd);
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleEnd);
+  }
+
   return (
     <div className="-m-4 flex h-[calc(100vh-4.5rem)] min-h-[42rem] w-full min-w-0 flex-col overflow-hidden bg-canvas text-ink md:-m-6">
       <MarketOverviewStrip
@@ -319,52 +465,79 @@ export function StockMarketWorkspace() {
       ) : (
         <>
           <FilterBand
+            allRefreshCanceling={allRefresh.isCanceling}
+            allRefreshError={allRefresh.errorMessage}
+            allRefreshJob={allRefresh.job}
+            allRefreshStarting={allRefresh.isStarting}
             instrumentType={instrumentType}
             listingStatus={listingStatus}
             marketBoard={marketBoard}
             onInstrumentTypeChange={handleInstrumentTypeChange}
             onListingStatusChange={handleListingStatusChange}
             onMarketBoardChange={handleMarketBoardChange}
+            onRefreshAll={handleAllRefreshButtonClick}
             onSearchTextChange={handleSearchTextChange}
             searchText={searchText}
           />
 
           <div
-            className={`grid min-h-[42rem] flex-1 grid-cols-1 items-stretch gap-3 overflow-hidden p-3 ${
+            className={`grid min-h-[42rem] flex-1 grid-cols-1 items-stretch overflow-hidden p-3 ${
               isInstrumentListCollapsed
-                ? "xl:grid-cols-[48px_minmax(0,1fr)]"
-                : "xl:grid-cols-[360px_minmax(0,1fr)]"
+                ? "gap-3 xl:grid-cols-[48px_minmax(0,1fr)]"
+                : "gap-0"
             }`}
+            data-testid="stock-workspace-split-layout"
+            ref={splitLayoutRef}
+            style={
+              isInstrumentListCollapsed
+                ? undefined
+                : { gridTemplateColumns: `${listPanelWidth}px 8px minmax(0, 1fr)` }
+            }
           >
             <InstrumentListPanel
               currentPage={instrumentPage}
-              instruments={instruments}
+              groups={instrumentGroups}
+              activeGroupId={activeInstrumentGroupId}
+              instruments={visibleInstruments}
               isCollapsed={isInstrumentListCollapsed}
               isError={instrumentsQuery.isError}
               isPending={instrumentsQuery.isPending}
-              allRefreshJob={allRefresh.job}
-              allRefreshError={allRefresh.errorMessage}
-              allRefreshCanceling={allRefresh.isCanceling}
-              allRefreshStarting={allRefresh.isStarting}
               onCollapseChange={setIsInstrumentListCollapsed}
-              onRefreshAll={handleAllRefreshButtonClick}
+              onAddGroup={() => setIsGroupDialogOpen(true)}
+              onGroupChange={setActiveInstrumentGroupId}
               onPageChange={setInstrumentPage}
               onPageSizeChange={handleInstrumentPageSizeChange}
               onSelect={handleInstrumentSelect}
               pageSize={instrumentPageSize}
               selectedSymbol={selectedSymbol}
-              total={instrumentTotal}
+              total={visibleInstrumentTotal}
               warning={instrumentsQuery.data?.warning_message ?? ""}
             />
 
+            {!isInstrumentListCollapsed ? (
+              <div
+                aria-label="调整标的列表和详情宽度"
+                aria-orientation="vertical"
+                className="mx-1 h-full cursor-col-resize rounded-full bg-line/70 transition hover:bg-accent/50"
+                onMouseDown={handleSplitResizeStart}
+                role="separator"
+              />
+            ) : null}
+
             <section
-              className="workbench-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+              className={`workbench-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden ${
+                isInstrumentListCollapsed ? "" : "ml-2"
+              }`}
               data-testid="stock-detail-panel"
             >
               {selectedInstrument ? (
                 <>
                   <StockSummaryHeader
+                    groups={instrumentGroups}
                     instrument={selectedInstrument}
+                    isGroupMenuOpen={isGroupMenuOpen}
+                    onGroupMenuOpenChange={setIsGroupMenuOpen}
+                    onGroupToggle={handleSelectedInstrumentGroupToggle}
                   />
                   <StockDetailTabs activeTab={activeDetailTab} onTabChange={setActiveDetailTab} />
                   {activeDetailTab === "overview" ? (
@@ -446,6 +619,12 @@ export function StockMarketWorkspace() {
               job={allRefresh.job}
               onCancel={handleAllRefreshCancel}
               onClose={() => setIsAllRefreshCancelDialogOpen(false)}
+            />
+          ) : null}
+          {isGroupDialogOpen ? (
+            <InstrumentGroupDialog
+              onClose={() => setIsGroupDialogOpen(false)}
+              onSave={handleGroupCreate}
             />
           ) : null}
         </>
@@ -794,13 +973,24 @@ function FilterBand(props: {
   instrumentType: string;
   marketBoard: string;
   listingStatus: string;
+  allRefreshJob: StockMarketAllRefreshJob | null;
+  allRefreshError: string;
+  allRefreshCanceling: boolean;
+  allRefreshStarting: boolean;
   onSearchTextChange: (value: string) => void;
   onInstrumentTypeChange: (value: string) => void;
   onMarketBoardChange: (value: string) => void;
   onListingStatusChange: (value: string) => void;
+  onRefreshAll: () => void;
 }) {
+  const isRefreshCancelable = isAllRefreshCancelable(props.allRefreshJob);
+  const isRefreshActive = isAllRefreshRunning(props.allRefreshJob);
+
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3">
+    <div
+      className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3"
+      data-testid="stock-filter-band"
+    >
       <div className="flex h-10 w-full max-w-[320px] items-center gap-2 rounded-control border border-line bg-surface px-3 text-sm">
         <input
           className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-muted"
@@ -814,6 +1004,26 @@ function FilterBand(props: {
       <TopSelect label="证券类型" onChange={props.onInstrumentTypeChange} options={INSTRUMENT_TYPE_OPTIONS} value={props.instrumentType} />
       <TopSelect label="市场类型" onChange={props.onMarketBoardChange} options={MARKET_BOARD_OPTIONS} value={props.marketBoard} />
       <TopSelect label="上市状态" onChange={props.onListingStatusChange} options={LISTING_STATUS_OPTIONS} value={props.listingStatus} />
+      <div className="ml-auto flex min-w-0 items-center gap-2">
+        {props.allRefreshError ? (
+          <AllInstrumentRefreshError message={props.allRefreshError} />
+        ) : (
+          <AllInstrumentRefreshProgress job={props.allRefreshJob} />
+        )}
+        <button
+          aria-label="刷新全部标的数据"
+          className="workbench-icon-button h-10 w-10 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={props.allRefreshStarting || props.allRefreshCanceling || props.allRefreshJob?.status === "canceling"}
+          onClick={props.onRefreshAll}
+          title={isRefreshCancelable ? "取消当前全部标的刷新" : "选择刷新全部标的历史行情或当日行情"}
+          type="button"
+        >
+          <ArrowPathIcon
+            aria-hidden="true"
+            className={`h-5 w-5 ${props.allRefreshStarting || props.allRefreshCanceling || isRefreshActive ? "animate-spin" : ""}`}
+          />
+        </button>
+      </div>
     </div>
   );
 }
@@ -844,6 +1054,8 @@ function TopSelect(props: {
 
 function InstrumentListPanel(props: {
   instruments: StockInstrument[];
+  groups: StockInstrumentGroup[];
+  activeGroupId: string;
   total: number;
   currentPage: number;
   pageSize: number;
@@ -851,13 +1063,10 @@ function InstrumentListPanel(props: {
   isCollapsed: boolean;
   isPending: boolean;
   isError: boolean;
-  allRefreshJob: StockMarketAllRefreshJob | null;
-  allRefreshError: string;
-  allRefreshCanceling: boolean;
-  allRefreshStarting: boolean;
   warning: string;
   onSelect: (symbol: string) => void;
-  onRefreshAll: () => void;
+  onGroupChange: (groupId: string) => void;
+  onAddGroup: () => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onCollapseChange: (collapsed: boolean) => void;
@@ -896,8 +1105,6 @@ function InstrumentListPanel(props: {
 
   const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize));
   const paginationItems = buildPaginationItems(props.currentPage, totalPages);
-  const isRefreshCancelable = isAllRefreshCancelable(props.allRefreshJob);
-  const isRefreshActive = isAllRefreshRunning(props.allRefreshJob);
 
   return (
     <aside
@@ -905,29 +1112,33 @@ function InstrumentListPanel(props: {
       data-testid="instrument-list-panel"
     >
       <div className="flex h-12 items-center justify-between gap-2 border-b border-line px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div
+          aria-label="标的分组"
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+          role="tablist"
+        >
+          <InstrumentGroupTab
+            active={props.activeGroupId === ALL_INSTRUMENT_GROUP_ID}
+            label="全部标的"
+            onClick={() => props.onGroupChange(ALL_INSTRUMENT_GROUP_ID)}
+          />
+          {props.groups.map((group) => (
+            <InstrumentGroupTab
+              active={props.activeGroupId === group.id}
+              key={group.id}
+              label={group.name}
+              onClick={() => props.onGroupChange(group.id)}
+            />
+          ))}
           <button
-            aria-label="刷新全部标的数据"
-            className="workbench-icon-button h-8 w-8 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={props.allRefreshStarting || props.allRefreshCanceling || props.allRefreshJob?.status === "canceling"}
-            onClick={props.onRefreshAll}
-            title={isRefreshCancelable ? "取消当前全部标的刷新" : "选择刷新全部标的历史行情或当日行情"}
+            aria-label="新增标的分组"
+            className="workbench-icon-button h-8 w-8 shrink-0"
+            onClick={props.onAddGroup}
+            title="新增标的分组"
             type="button"
           >
-            <ArrowPathIcon
-              aria-hidden="true"
-              className={`h-4 w-4 ${props.allRefreshStarting || props.allRefreshCanceling || isRefreshActive ? "animate-spin" : ""}`}
-            />
+            <PlusIcon aria-hidden="true" className="h-4 w-4" />
           </button>
-          <div className="min-w-0 text-sm font-semibold text-ink">
-            全部标的
-            <span className="ml-3 text-xs font-medium text-muted">{formatNumber(props.total)} 只</span>
-          </div>
-          {props.allRefreshError ? (
-            <AllInstrumentRefreshError message={props.allRefreshError} />
-          ) : (
-            <AllInstrumentRefreshProgress job={props.allRefreshJob} />
-          )}
         </div>
         <button
           aria-expanded="true"
@@ -956,9 +1167,9 @@ function InstrumentListPanel(props: {
               <tr className="border-b border-line">
                 <th className="w-[96px] px-4 py-2.5 font-semibold">代码</th>
                 <th className="px-3 py-2.5 font-semibold">名称</th>
+                <th className="w-[72px] px-3 py-2.5 text-right font-semibold">最新价</th>
                 <th className="w-[80px] px-3 py-2.5 font-semibold">市场</th>
                 <th className="w-[58px] px-3 py-2.5 font-semibold">类型</th>
-                <th className="w-[72px] px-4 py-2.5 text-right font-semibold">最新价</th>
               </tr>
             </thead>
             <tbody>
@@ -1219,16 +1430,93 @@ function InstrumentRow(props: {
     >
       <td className="px-4 py-1.5 font-semibold">{props.instrument.symbol}</td>
       <td className="truncate px-3 py-1.5 font-semibold text-ink">{props.instrument.name}</td>
-      <td className="px-3 py-1.5 text-muted">{marketLabel}</td>
-      <td className="px-3 py-1.5 text-muted">{typeLabel}</td>
-      <td className={`px-4 py-1.5 text-right font-semibold ${priceTone}`}>
+      <td className={`px-3 py-1.5 text-right font-semibold ${priceTone}`}>
         {latestPriceLabel}
       </td>
+      <td className="px-3 py-1.5 text-muted">{marketLabel}</td>
+      <td className="px-3 py-1.5 text-muted">{typeLabel}</td>
     </tr>
   );
 }
 
-function StockSummaryHeader(props: { instrument: StockInstrument }) {
+function InstrumentGroupTab(props: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      aria-selected={props.active}
+      className={`h-8 shrink-0 rounded-control px-3 text-sm font-semibold ${
+        props.active ? "bg-accent text-white" : "text-muted hover:bg-accent-soft hover:text-accent"
+      }`}
+      onClick={props.onClick}
+      role="tab"
+      type="button"
+    >
+      {props.label}
+    </button>
+  );
+}
+
+function InstrumentGroupDialog(props: {
+  onClose: () => void;
+  onSave: (name: string) => void;
+}) {
+  const [name, setName] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4">
+      <section
+        aria-label="新增标的分组"
+        className="w-full max-w-sm rounded-panel border border-line bg-surface p-4 shadow-xl"
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-semibold text-ink">新增标的分组</h3>
+          <button
+            aria-label="关闭新增标的分组"
+            className="workbench-icon-button h-8 w-8 shrink-0"
+            onClick={props.onClose}
+            type="button"
+          >
+            <XMarkIcon aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+        <label className="mt-4 block text-xs font-semibold text-muted">
+          分组名称
+          <input
+            autoFocus
+            className="workbench-input mt-2 w-full text-sm"
+            onChange={(event) => setName(event.target.value)}
+            value={name}
+          />
+        </label>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-control border border-line bg-surface px-3 text-xs font-semibold text-ink hover:bg-accent-soft"
+            onClick={props.onClose}
+            type="button"
+          >
+            取消
+          </button>
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-control bg-accent px-3 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!name.trim()}
+            onClick={() => props.onSave(name)}
+            type="button"
+          >
+            保存分组
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function StockSummaryHeader(props: {
+  instrument: StockInstrument;
+  groups: StockInstrumentGroup[];
+  isGroupMenuOpen: boolean;
+  onGroupMenuOpenChange: (open: boolean) => void;
+  onGroupToggle: (groupId: string) => void;
+}) {
   return (
     <header className="px-5 pb-3 pt-4">
       <div className="min-w-[320px]">
@@ -1237,6 +1525,54 @@ function StockSummaryHeader(props: { instrument: StockInstrument }) {
             {props.instrument.symbol}
             <span className="ml-4">{props.instrument.name}</span>
           </h2>
+          <div className="relative">
+            <button
+              aria-expanded={props.isGroupMenuOpen}
+              aria-label="管理当前标的分组"
+              className="workbench-icon-button h-8 w-8"
+              onClick={() => props.onGroupMenuOpenChange(!props.isGroupMenuOpen)}
+              title="将当前标的加入自定义分组"
+              type="button"
+            >
+              <StarIcon
+                aria-hidden="true"
+                className={`h-4 w-4 ${
+                  props.groups.some((group) => group.symbols.includes(props.instrument.symbol))
+                    ? "fill-amber-400 text-amber-500"
+                    : "text-muted"
+                }`}
+              />
+            </button>
+            {props.isGroupMenuOpen ? (
+              <div
+                className="absolute left-0 top-10 z-20 w-44 rounded-panel border border-line bg-surface p-2 shadow-xl"
+                role="menu"
+              >
+                {props.groups.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted">暂无自定义分组</div>
+                ) : (
+                  props.groups.map((group) => {
+                    const checked = group.symbols.includes(props.instrument.symbol);
+                    return (
+                      <button
+                        aria-checked={checked}
+                        className={`flex w-full items-center justify-between rounded-control px-2 py-1.5 text-left text-xs font-semibold ${
+                          checked ? "text-accent" : "text-ink hover:bg-accent-soft"
+                        }`}
+                        key={group.id}
+                        onClick={() => props.onGroupToggle(group.id)}
+                        role="menuitemcheckbox"
+                        type="button"
+                      >
+                        加入{group.name}
+                        {checked ? <CheckIcon aria-hidden="true" className="h-3.5 w-3.5" /> : null}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </div>
           <span className="rounded-control bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent">{props.instrument.market_board}</span>
         </div>
         <div className="mt-1 text-xs font-medium text-muted">{props.instrument.name}股份有限公司</div>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 import sys
@@ -31,10 +32,14 @@ def repair_stock_instrument_classification(db_path: str | Path = ".data/market_d
         各类修正数量统计。
     """
 
-    # 初始化仓储会先幂等迁移旧 CHECK 约束，确保 LOF 可写入。
+    legacy_market_board_count = _count_legacy_mainboard_rows(db_path)
+    # 初始化仓储会先幂等迁移旧 CHECK 约束和旧市场分类，确保 LOF 可写入且主板归类先自愈。
     repository = StockMarketRepository(db_path, precreate_shards=False)
     counters: Counter[str] = Counter()
-    with sqlite3.connect(repository.db_path) as connection:
+    if legacy_market_board_count:
+        counters["market_board"] = legacy_market_board_count
+        counters["rows"] = legacy_market_board_count
+    with closing(sqlite3.connect(repository.db_path)) as connection:
         connection.row_factory = sqlite3.Row
         rows = connection.execute(
             """
@@ -76,6 +81,38 @@ def repair_stock_instrument_classification(db_path: str | Path = ".data/market_d
                 counters["rows"] += 1
         connection.commit()
     return dict(counters)
+
+
+def _count_legacy_mainboard_rows(db_path: str | Path) -> int:
+    """统计修复前仍使用沪深主板旧分类的标的行数。
+
+    Args:
+        db_path: 股票市场主库路径。
+
+    Returns:
+        旧版 `沪市主板` 或 `深市主板` 行数；库或表不存在时返回 0。
+    """
+
+    path = Path(db_path)
+    if not path.exists():
+        return 0
+    try:
+        with closing(sqlite3.connect(path)) as connection:
+            table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_instrument'"
+            ).fetchone()
+            if table is None:
+                return 0
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM market_stock_instrument
+                WHERE market_board IN ('沪市主板', '深市主板')
+                """
+            ).fetchone()
+    except sqlite3.Error:
+        return 0
+    return int(row[0]) if row else 0
 
 
 if __name__ == "__main__":
