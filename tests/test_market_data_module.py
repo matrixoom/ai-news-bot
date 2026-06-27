@@ -2579,8 +2579,8 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 25))
         self.assertFalse(sync_call.kwargs["include_valuation"])
 
-    def test_scheduled_all_instrument_refresh_starts_at_1530_on_trading_day(self) -> None:
-        """校验股票服务定时任务仅在开盘日上海时间 15:30 启动全标的刷新。"""
+    def test_scheduled_all_instrument_refresh_skips_without_custom_groups(self) -> None:
+        """校验 15:30 定时任务没有自定义分组标的时不刷新全部标的。"""
         repository = self._repository()
         repository.upsert_instruments(
             [
@@ -2611,9 +2611,104 @@ class StockMarketModuleTests(unittest.TestCase):
         due = service.run_due_scheduled_refresh(now=datetime(2026, 6, 19, 7, 30, tzinfo=UTC), run_inline=True)
 
         self.assertEqual(early, [])
+        self.assertEqual(due, [])
+        syncer.sync_symbol_window.assert_not_called()
+
+    def test_stock_instrument_groups_are_persisted_with_instruments(self) -> None:
+        """校验自定义标的分组持久化到本地库，并返回组内标的详情。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+
+        saved = repository.replace_instrument_groups(
+            [
+                {
+                    "id": "group-watch",
+                    "name": "观察池",
+                    "symbols": ["000001.SZ", "000001.SZ", "missing"],
+                }
+            ]
+        )
+        loaded = repository.list_instrument_groups()
+
+        self.assertEqual(saved, loaded)
+        self.assertEqual(loaded[0]["id"], "group-watch")
+        self.assertEqual(loaded[0]["name"], "观察池")
+        self.assertEqual(loaded[0]["symbols"], ["000001.SZ", "MISSING"])
+        self.assertEqual(loaded[0]["instruments"][0]["symbol"], "000001.SZ")
+        self.assertEqual(loaded[0]["instruments"][0]["name"], "平安银行")
+
+    def test_scheduled_refresh_uses_custom_groups_recent_week_only(self) -> None:
+        """校验 15:30 自动刷新只处理自定义分组内标的，并使用最近一周窗口。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                },
+                {
+                    "symbol": "000002.SZ",
+                    "code": "000002",
+                    "exchange": "SZ",
+                    "name": "万科A",
+                    "instrument_type": "stock",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                },
+            ]
+        )
+        repository.replace_instrument_groups(
+            [{"id": "group-watch", "name": "观察池", "symbols": ["000001.SZ"]}]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.return_value = {"daily_bars": 1}
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+            trading_day_checker=lambda _: True,
+        )
+
+        class FixedDate(date):
+            """固定当前日期，便于断言最近一周刷新窗口。"""
+
+            @classmethod
+            def today(cls) -> date:
+                """返回测试使用的本地日期。"""
+
+                return cls(2026, 6, 19)
+
+        with patch("src.services.stock_market_service.date", FixedDate):
+            due = service.run_due_scheduled_refresh(now=datetime(2026, 6, 19, 7, 30, tzinfo=UTC), run_inline=True)
+
         self.assertEqual(due[0]["job"]["trigger"], "scheduled")
-        self.assertEqual(due[0]["job"]["status"], "completed")
+        self.assertEqual(due[0]["job"]["refresh_mode"], "recent_week")
+        self.assertEqual(due[0]["job"]["group_name"], "自定义分组")
+        self.assertEqual(due[0]["job"]["total"], 1)
         syncer.sync_symbol_window.assert_called_once()
+        sync_call = syncer.sync_symbol_window.call_args
+        self.assertEqual(sync_call.args[0].symbol, "000001.SZ")
+        self.assertEqual(sync_call.kwargs["start_date"], date(2026, 6, 12))
+        self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
 
     def test_scheduled_all_instrument_refresh_skips_closed_market_day(self) -> None:
         """校验 15:30 遇到节假日或休市日时不启动全标的刷新。"""

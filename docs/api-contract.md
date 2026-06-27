@@ -478,18 +478,23 @@ uv run python main.py macro-sync
 
 ### 4.4.6 `POST /api/frontend/modules/market-data/stocks/refresh-all`
 
-用途：启动“全部标的”后台刷新任务。服务会逐只检查当前本地上市和 ST 状态股票、ETF、LOF 的日线行情；历史模式优先读取 `market_stock_instrument.history_coverage_status`，已标记 `covered` 的标的直接跳过，未标记的标的会按近 20 年或上市日至今窗口刷新一次基础 OHLCV 日线行情并计算均线，成功覆盖后写入覆盖标记。当日模式仅刷新已有日线的标的，任务启动时固定每只标的的结束日期为当天，默认从本地最后一个有效日线日期补到当天；若最后有效日前一周的交易日数据不连续，则回退补刷最近一周数据。从未建仓的标的不会在当日模式补历史，避免 ETF/LOF 空历史拖慢日常刷新。刷新任务按股票、ETF、LOF 分池受控并发，不刷新公司概况、日频估值、分红或财务指标。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态；若已有任务正在运行，重复启动会返回正在运行的任务，前端刷新按钮会改为取消确认入口。
+用途：启动“全部标的”或当前自定义分组的后台刷新任务。服务会逐只检查当前本地上市和 ST 状态股票、ETF、LOF 的日线行情；历史模式优先读取 `market_stock_instrument.history_coverage_status`，已标记 `covered` 的标的直接跳过，未标记的标的会按近 20 年或上市日至今窗口刷新一次基础 OHLCV 日线行情并计算均线，成功覆盖后写入覆盖标记。当日模式仅刷新已有日线的标的，任务启动时固定每只标的的结束日期为当天，默认从本地最后一个有效日线日期补到当天；若最后有效日前一周的交易日数据不连续，则回退补刷最近一周数据。从未建仓的标的不会在当日模式补历史，避免 ETF/LOF 空历史拖慢日常刷新。`recent_week` 模式刷新最近 7 个自然日窗口，当前由 15:30 自动任务用于自定义分组。刷新任务按股票、ETF、LOF 分池受控并发，不刷新公司概况、日频估值、分红或财务指标。该任务异步执行，手动刷新和自动定时刷新共用同一任务状态；若已有任务正在运行，重复启动会返回正在运行的任务，前端刷新按钮会改为取消确认入口。
 
 请求：
 
 ```json
 {
-  "mode": "history"
+  "mode": "history",
+  "groupName": "观察池",
+  "symbols": ["000001.SZ", "002415.SZ"]
 }
 ```
 
 - `mode=history`：刷新近 20 年日线；若本地概况记录中上市日期晚于近 20 年起点，则目标窗口从上市日期开始。启动时会自动扫描既有分片日线并为已覆盖目标窗口的标的补 `history_coverage_status=covered`，后续历史刷新直接跳过。
 - `mode=today`：仅刷新已有本地日线标的的增量窗口；结束日固定为任务当天，起始日默认为本地最后有效日线日期，若最后有效日前一周存在应有交易日缺口，则起始日回退到最近一周窗口。
+- `mode=recent_week`：刷新最近 7 个自然日窗口；前端不直接展示该按钮，15:30 自动任务会读取数据库中全部自定义分组的去重 `symbols` 后使用该模式。
+- `symbols`：可选；传入时仅刷新这些标的，省略或 `null` 表示全部标的。
+- `groupName`：可选；用于任务进度展示，默认 `全部`。
 - 不传 `mode` 时默认 `history`。
 
 成功：`202`
@@ -501,6 +506,7 @@ uv run python main.py macro-sync
     "status": "running",
     "trigger": "manual",
     "refresh_mode": "history",
+    "group_name": "观察池",
     "completed": 128,
     "total": 6931,
     "percentage": 2,
@@ -519,7 +525,61 @@ uv run python main.py macro-sync
 - `400 invalid_stock_all_refresh_mode`
 - `503 frontend_stock_all_refresh_start_failed`
 
-### 4.4.7 `GET /api/frontend/modules/market-data/stocks/refresh-all/latest`
+### 4.4.7 `GET /api/frontend/modules/market-data/stocks/groups`
+
+用途：读取股票市场自定义标的分组。分组持久化在 `.data/market_data.db` 的 `market_stock_instrument_group` 表；每个分组保存 `id/name/symbols_json`，响应中的 `instruments` 会按当前标的库实时回填股票详情。旧版前端 `localStorage` 分组会在页面首次加载时迁移到该接口。
+
+成功：`200`
+
+```json
+{
+  "generated_at": "2026-06-27T16:20:00Z",
+  "groups": [
+    {
+      "id": "group-watch",
+      "name": "观察池",
+      "symbols": ["000001.SZ"],
+      "instruments": [
+        {
+          "symbol": "000001.SZ",
+          "code": "000001",
+          "exchange": "SZ",
+          "name": "平安银行",
+          "instrument_type": "stock",
+          "market_board": "深市",
+          "listing_status": "listed"
+        }
+      ],
+      "updated_at": "2026-06-27T16:19:00Z"
+    }
+  ]
+}
+```
+
+失败：`503 frontend_stock_instrument_groups_failed`
+
+### 4.4.8 `PUT /api/frontend/modules/market-data/stocks/groups`
+
+用途：整体保存股票市场自定义标的分组。前端创建分组、五角星加入/移出当前标的时都会提交完整分组数组。
+
+请求：
+
+```json
+{
+  "groups": [
+    { "id": "group-watch", "name": "观察池", "symbols": ["000001.SZ"] }
+  ]
+}
+```
+
+成功：`200`，响应结构同 `GET /stocks/groups`。
+
+失败：
+
+- `400 invalid_stock_instrument_groups`
+- `503 frontend_stock_instrument_groups_update_failed`
+
+### 4.4.9 `GET /api/frontend/modules/market-data/stocks/refresh-all/latest`
 
 用途：读取最近一次全部标的刷新任务，供前端微型进度条展示手动任务或 15:30 自动任务进度。
 
@@ -536,7 +596,7 @@ uv run python main.py macro-sync
 }
 ```
 
-### 4.4.8 `GET /api/frontend/modules/market-data/stocks/refresh-all/{job_id}`
+### 4.4.10 `GET /api/frontend/modules/market-data/stocks/refresh-all/{job_id}`
 
 用途：读取指定全部标的刷新任务状态。任务状态为 `completed_with_warnings` 时表示部分标的外部数据源失败，服务保留旧数据并在 `errors` 中返回短错误摘要；`canceling` 表示已收到取消请求且正在等待已开始的标的写入完成；`canceled` 表示任务已取消，已写入的数据保留。
 
@@ -545,7 +605,7 @@ uv run python main.py macro-sync
 - `404`：任务不存在
 - `503`：`frontend_stock_all_refresh_status_failed`
 
-### 4.4.9 `POST /api/frontend/modules/market-data/stocks/refresh-all/{job_id}/cancel`
+### 4.4.11 `POST /api/frontend/modules/market-data/stocks/refresh-all/{job_id}/cancel`
 
 用途：取消指定全部标的刷新任务。服务采用协作式取消：已开始执行的少量并发标的会先完成当前写入，尚未开始的补采会停止；已写入日线不会回滚。已完成、失败、跳过或已取消的任务再次调用时会保持原状态返回。
 

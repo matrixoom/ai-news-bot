@@ -110,11 +110,25 @@ export type StockInstrumentListPayload = {
   warning_message: string;
 };
 
+export type StockInstrumentGroup = {
+  id: string;
+  name: string;
+  symbols: string[];
+  instruments?: StockInstrument[];
+  updated_at?: string;
+};
+
+export type StockInstrumentGroupPayload = {
+  generated_at: string;
+  groups: StockInstrumentGroup[];
+};
+
 export type StockMarketAllRefreshJob = {
   id: string;
   status: "pending" | "running" | "canceling" | "completed" | "completed_with_warnings" | "failed" | "skipped" | "canceled";
   trigger: "manual" | "scheduled" | string;
   refresh_mode: StockMarketAllRefreshMode;
+  group_name?: string;
   completed: number;
   total: number;
   percentage: number;
@@ -126,7 +140,12 @@ export type StockMarketAllRefreshJob = {
   finished_at: string;
 };
 
-export type StockMarketAllRefreshMode = "history" | "today";
+export type StockMarketAllRefreshMode = "history" | "today" | "recent_week";
+
+export type StockMarketAllRefreshOptions = {
+  symbols?: string[];
+  groupName?: string;
+};
 
 export type StockMarketAllRefreshPayload = {
   job: StockMarketAllRefreshJob | null;

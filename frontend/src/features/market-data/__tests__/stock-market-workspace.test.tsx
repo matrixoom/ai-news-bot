@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   detailDailyBars: null as null | StockDailyBar[],
   echartOptions: [] as Array<Record<string, unknown>>,
   financialRefresh: vi.fn(),
+  groupSave: vi.fn(),
+  instrumentGroups: [] as Array<Record<string, unknown>>,
   indexRefresh: vi.fn(),
   instrumentFilters: [] as Array<Record<string, unknown>>,
   refresh: vi.fn(),
@@ -305,6 +307,23 @@ vi.mock("../hooks/use-stock-market-all-refresh", () => ({
   }),
 }));
 
+vi.mock("../hooks/use-stock-market-instrument-groups", () => ({
+  useStockMarketInstrumentGroups: () => {
+    const [groups, setGroups] = useState(mocks.instrumentGroups);
+    return {
+      errorMessage: "",
+      groups,
+      isPending: false,
+      isSaving: false,
+      save: (nextGroups: Array<Record<string, unknown>>) => {
+        mocks.instrumentGroups = nextGroups;
+        mocks.groupSave(nextGroups);
+        setGroups(nextGroups);
+      },
+    };
+  },
+}));
+
 vi.mock("../hooks/use-stock-market-financial-refresh-mutation", () => ({
   useStockMarketFinancialRefreshMutation: (
     symbol: string | null,
@@ -470,6 +489,8 @@ describe("StockMarketWorkspace", () => {
     mocks.detailDailyBars = null;
     mocks.echartOptions.length = 0;
     mocks.financialRefresh.mockClear();
+    mocks.groupSave.mockClear();
+    mocks.instrumentGroups = [];
     mocks.indexRefresh.mockClear();
     mocks.instrumentFilters.length = 0;
     mocks.refresh.mockClear();
@@ -539,7 +560,7 @@ describe("StockMarketWorkspace", () => {
       expect(indexOption.series?.find((series) => series.name === "MA10")?.lineStyle?.type).toEqual([3, 3]);
       expect(indexOption.series?.find((series) => series.name === "MA20")?.lineStyle?.type).toBe("solid");
       expect(indexOption.series?.find((series) => series.name === "MA60")?.lineStyle?.type).toEqual([10, 5, 2, 5]);
-      expect(indexOption.series?.find((series) => series.name === "MA120")?.lineStyle?.type).toEqual([1, 4]);
+      expect(indexOption.series?.find((series) => series.name === "MA120")?.lineStyle?.type).toEqual([6, 3, 5, 2]);
       expect(indexOption.series?.find((series) => series.name === "PE(TTM)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "PB(MRQ)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "K线")?.data).toHaveLength(2);
@@ -651,7 +672,7 @@ describe("StockMarketWorkspace", () => {
     const filterBand = screen.getByTestId("stock-filter-band");
     expect(within(filterBand).getByRole("button", { name: "刷新全部标的数据" })).toBeInTheDocument();
     expect(screen.getByRole("tablist", { name: "标的分组" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "全部标的" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "全部" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: "新增标的分组" })).toBeInTheDocument();
     expect(screen.queryByText(/只$/)).not.toBeInTheDocument();
   });
@@ -730,7 +751,7 @@ describe("StockMarketWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "刷新全部标的数据" }));
     await user.click(screen.getByRole("button", { name: "刷新历史数据" }));
 
-    expect(mocks.allRefresh).toHaveBeenCalledWith("history");
+    expect(mocks.allRefresh).toHaveBeenCalledWith("history", { groupName: "全部", symbols: undefined });
   });
 
   it("shows a visible error when all-instrument refresh cannot start", () => {
@@ -834,12 +855,33 @@ describe("StockMarketWorkspace", () => {
 
     await user.click(screen.getByRole("button", { name: "刷新全部标的数据" }));
 
-    const dialog = screen.getByRole("dialog", { name: "选择全部标的刷新范围" });
+    const dialog = screen.getByRole("dialog", { name: "选择当前分组刷新范围" });
     expect(within(dialog).getByText("刷新全部标的")).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "刷新当日数据" }));
 
-    expect(mocks.allRefresh).toHaveBeenCalledWith("today");
+    expect(mocks.allRefresh).toHaveBeenCalledWith("today", { groupName: "全部", symbols: undefined });
+  });
+
+  it("refreshes only the currently selected custom group instruments", async () => {
+    const user = userEvent.setup();
+    render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("button", { name: "新增标的分组" }));
+    const dialog = screen.getByRole("dialog", { name: "新增标的分组" });
+    await user.type(within(dialog).getByLabelText("分组名称"), "观察池");
+    await user.click(within(dialog).getByRole("button", { name: "保存分组" }));
+
+    await user.click(screen.getByRole("button", { name: "管理当前标的分组" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "加入观察池" }));
+    await user.click(screen.getByRole("tab", { name: "观察池" }));
+    await user.click(screen.getByRole("button", { name: "刷新观察池数据" }));
+    await user.click(screen.getByRole("button", { name: "刷新当日数据" }));
+
+    expect(mocks.allRefresh).toHaveBeenCalledWith("today", {
+      groupName: "观察池",
+      symbols: ["000001.SZ"],
+    });
   });
 
   it("asks for confirmation and cancels when refreshing all instruments is running", async () => {
@@ -1136,7 +1178,7 @@ describe("StockMarketWorkspace", () => {
     expect(seriesByName["MA10"]?.lineStyle?.type).toEqual([3, 3]);
     expect(seriesByName["MA20"]?.lineStyle?.type).toBe("solid");
     expect(seriesByName["MA60"]?.lineStyle?.type).toEqual([10, 5, 2, 5]);
-    expect(seriesByName["MA120"]?.lineStyle?.type).toEqual([1, 4]);
+    expect(seriesByName["MA120"]?.lineStyle?.type).toEqual([6, 3, 5, 2]);
     expect(klineOption.tooltip?.textStyle?.fontSize).toBe(10);
     expect(klineOption.tooltip?.padding).toEqual([6, 8]);
     expect(klineOption.grid?.[0]?.height).toBe("56%");

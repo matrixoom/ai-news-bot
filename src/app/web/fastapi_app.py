@@ -375,6 +375,8 @@ def create_fastapi_app(
                 stock_service.start_all_instrument_refresh(
                     trigger="manual",
                     refresh_mode=str(body.get("mode", "history")),
+                    symbols=list(body["symbols"]) if isinstance(body.get("symbols"), list) else None,
+                    group_name=str(body.get("groupName") or "全部"),
                 ),
                 status_code=202,
             )
@@ -424,6 +426,29 @@ def create_fastapi_app(
         except Exception:
             logger.exception("frontend stock all refresh status failed", extra={"job_id": job_id})
             return JSONResponse({"error": "frontend_stock_all_refresh_status_failed"}, status_code=503)
+
+    @app.get("/api/frontend/modules/market-data/stocks/groups")
+    def frontend_stock_market_groups() -> JSONResponse:
+        """返回股票市场自定义标的分组。"""
+
+        try:
+            return JSONResponse(stock_service.list_instrument_groups())
+        except Exception:
+            logger.exception("frontend stock instrument groups failed")
+            return JSONResponse({"error": "frontend_stock_instrument_groups_failed"}, status_code=503)
+
+    @app.put("/api/frontend/modules/market-data/stocks/groups")
+    def frontend_stock_market_groups_update(payload: dict | None = None) -> JSONResponse:
+        """整体保存股票市场自定义标的分组。"""
+
+        body = payload or {}
+        try:
+            return JSONResponse(stock_service.replace_instrument_groups(list(body.get("groups") or [])))
+        except StockMarketValidationError:
+            return JSONResponse({"error": "invalid_stock_instrument_groups"}, status_code=400)
+        except Exception:
+            logger.exception("frontend stock instrument groups update failed")
+            return JSONResponse({"error": "frontend_stock_instrument_groups_update_failed"}, status_code=503)
 
     @app.post("/api/frontend/modules/market-data/stocks/refresh-all/{job_id}/cancel")
     def frontend_stock_market_refresh_all_cancel(job_id: str) -> JSONResponse:

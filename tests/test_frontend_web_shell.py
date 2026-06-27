@@ -221,6 +221,72 @@ class FastAPIWebShellTests(unittest.TestCase):
         stock_service.start_all_instrument_refresh.assert_called_once_with(
             trigger="manual",
             refresh_mode="today",
+            symbols=None,
+            group_name="全部",
+        )
+
+    def test_stock_market_refresh_all_endpoint_passes_group_symbols(self):
+        """校验分组刷新接口把当前分组标的列表传给 Service。"""
+
+        stock_service = Mock()
+        stock_service.start_all_instrument_refresh.return_value = {
+            "job": {
+                "id": "job-1",
+                "status": "pending",
+                "trigger": "manual",
+                "refresh_mode": "today",
+                "group_name": "观察池",
+                "completed": 0,
+                "total": 1,
+                "percentage": 0,
+                "current_symbol": "",
+                "current_label": "",
+                "message": "",
+                "errors": [],
+                "started_at": "",
+                "finished_at": "",
+            }
+        }
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        response = client.post(
+            "/api/frontend/modules/market-data/stocks/refresh-all",
+            json={"mode": "today", "symbols": ["000001.SZ"], "groupName": "观察池"},
+        )
+
+        self.assertEqual(response.status_code, 202)
+        stock_service.start_all_instrument_refresh.assert_called_once_with(
+            trigger="manual",
+            refresh_mode="today",
+            symbols=["000001.SZ"],
+            group_name="观察池",
+        )
+
+    def test_stock_market_group_endpoints_delegate_to_service(self):
+        """校验自定义标的分组接口通过 Service 持久化本地库。"""
+
+        stock_service = Mock()
+        stock_service.list_instrument_groups.return_value = {
+            "generated_at": "2026-06-19T07:30:00Z",
+            "groups": [],
+        }
+        stock_service.replace_instrument_groups.return_value = {
+            "generated_at": "2026-06-19T07:31:00Z",
+            "groups": [{"id": "group-watch", "name": "观察池", "symbols": ["000001.SZ"], "instruments": []}],
+        }
+        client = TestClient(create_fastapi_app(stock_market_service=stock_service))
+
+        get_response = client.get("/api/frontend/modules/market-data/stocks/groups")
+        put_response = client.put(
+            "/api/frontend/modules/market-data/stocks/groups",
+            json={"groups": [{"id": "group-watch", "name": "观察池", "symbols": ["000001.SZ"]}]},
+        )
+
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(put_response.status_code, 200)
+        stock_service.list_instrument_groups.assert_called_once_with()
+        stock_service.replace_instrument_groups.assert_called_once_with(
+            [{"id": "group-watch", "name": "观察池", "symbols": ["000001.SZ"]}]
         )
 
     def test_stock_market_refresh_all_cancel_endpoint_passes_job_id(self):

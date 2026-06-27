@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cancelStockMarketAllRefresh } from "../api/cancel-stock-market-all-refresh";
 import { getStockMarketAllRefresh } from "../api/get-stock-market-all-refresh";
 import { startStockMarketAllRefresh } from "../api/start-stock-market-all-refresh";
-import type { StockMarketAllRefreshJob, StockMarketAllRefreshMode } from "../model/market-data.types";
+import type {
+  StockMarketAllRefreshJob,
+  StockMarketAllRefreshMode,
+  StockMarketAllRefreshOptions,
+} from "../model/market-data.types";
 
 const TERMINAL_STATUSES = new Set(["completed", "completed_with_warnings", "failed", "skipped", "canceled"]);
 
@@ -21,7 +25,8 @@ export function useStockMarketAllRefresh() {
     },
   });
   const mutation = useMutation({
-    mutationFn: startStockMarketAllRefresh,
+    mutationFn: (payload: { mode: StockMarketAllRefreshMode; options?: StockMarketAllRefreshOptions }) =>
+      startStockMarketAllRefresh(payload.mode, payload.options),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stock-market-all-refresh", "latest"] });
     },
@@ -43,7 +48,8 @@ export function useStockMarketAllRefresh() {
     isCanceling: cancelMutation.isPending,
     isStarting: mutation.isPending,
     job: cancelMutation.data?.job ?? mutation.data?.job ?? latestQuery.data?.job ?? null,
-    start: (mode: StockMarketAllRefreshMode) => mutation.mutate(mode),
+    start: (mode: StockMarketAllRefreshMode, options?: StockMarketAllRefreshOptions) =>
+      mutation.mutate({ mode, options }),
   };
 }
 

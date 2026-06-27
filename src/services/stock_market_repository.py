@@ -215,6 +215,104 @@ class StockMarketRepository:
             row = connection.execute("SELECT COUNT(*) AS count FROM market_stock_instrument").fetchone()
         return int(row["count"]) if row else 0
 
+    def list_instrument_groups(self) -> list[dict[str, Any]]:
+        """读取自定义股票分组及组内可识别标的详情。
+
+        Args:
+            无。
+
+        Returns:
+            按创建顺序排列的自定义分组列表；`symbols` 保留用户标记顺序，
+            `instruments` 仅包含当前标的库中存在的股票/ETF/LOF。
+        """
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, name, symbols_json, sort_order, created_at, updated_at
+                FROM market_stock_instrument_group
+                ORDER BY sort_order ASC, created_at ASC, id ASC
+                """
+            ).fetchall()
+        symbols_by_group = [_decode_group_symbols(str(row["symbols_json"])) for row in rows]
+        instruments_by_symbol = self.get_instruments_by_symbols(
+            [symbol for symbols in symbols_by_group for symbol in symbols]
+        )
+        return [
+            _instrument_group_payload(
+                row,
+                symbols=symbols,
+                instruments_by_symbol=instruments_by_symbol,
+            )
+            for row, symbols in zip(rows, symbols_by_group)
+        ]
+
+    def replace_instrument_groups(self, groups: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        """整体替换自定义股票分组。
+
+        Args:
+            groups: 前端提交的分组数组，每项包含稳定 `id`、展示名 `name` 和 `symbols`。
+
+        Returns:
+            写入后的规范化分组列表。
+        """
+
+        timestamp = _utc_now()
+        rows: list[tuple[str, str, str, int, str, str]] = []
+        seen_ids: set[str] = set()
+        for index, group in enumerate(groups):
+            group_id = str(group.get("id") or "").strip()
+            name = str(group.get("name") or "").strip()
+            if not group_id or not name or group_id in seen_ids:
+                continue
+            seen_ids.add(group_id)
+            symbols = _normalize_group_symbols(group.get("symbols", []))
+            rows.append((group_id, name[:64], json.dumps(symbols, ensure_ascii=False), index, timestamp, timestamp))
+
+        with self._session() as connection:
+            connection.execute("DELETE FROM market_stock_instrument_group")
+            connection.executemany(
+                """
+                INSERT INTO market_stock_instrument_group (
+                    id, name, symbols_json, sort_order, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+        return self.list_instrument_groups()
+
+    def get_instruments_by_symbols(self, symbols: Sequence[str]) -> dict[str, StockInstrument]:
+        """按 symbol 批量读取标的并保持可用于分组回填的映射。
+
+        Args:
+            symbols: 带交易所后缀的标的代码列表。
+
+        Returns:
+            `symbol -> StockInstrument` 映射；不存在的 symbol 会被忽略。
+        """
+
+        normalized_symbols = _normalize_group_symbols(symbols)
+        if not normalized_symbols:
+            return {}
+        placeholders = ",".join("?" for _ in normalized_symbols)
+        with self._session() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT symbol, code, exchange, name, instrument_type, market_board,
+                       listing_status, updated_at, access_count,
+                       history_coverage_status, history_coverage_at,
+                       history_coverage_start_date, history_coverage_end_date
+                FROM market_stock_instrument
+                WHERE symbol IN ({placeholders})
+                """,
+                normalized_symbols,
+            ).fetchall()
+        latest_prices = self._load_latest_prices([str(row["symbol"]) for row in rows])
+        return {
+            str(row["symbol"]): self._build_instrument(row, latest_price=latest_prices.get(str(row["symbol"])))
+            for row in rows
+        }
+
     def load_market_breadth(self) -> dict[str, Any]:
         """聚合最近两个交易日的 A 股上涨、下跌和平盘家数。
 
@@ -1006,6 +1104,24 @@ class StockMarketRepository:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS market_stock_instrument_group (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    symbols_json TEXT NOT NULL,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_market_stock_instrument_group_order
+                ON market_stock_instrument_group(sort_order, created_at)
+                """
+            )
         migrate_legacy_market_stock_shards(self._db_path.parent, self._shard_dir)
         if self._precreate_shards:
             initialize_all_market_stock_shards(self._shard_dir)
@@ -1468,6 +1584,73 @@ def _legacy_mainboard_market(value: str) -> str:
     if value == "深市":
         return "深市主板"
     return ""
+
+
+def _normalize_group_symbols(value: object) -> list[str]:
+    """规范化分组中的标的代码并按首次出现顺序去重。"""
+
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        symbol = str(item).strip().upper()
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        symbols.append(symbol)
+    return symbols
+
+
+def _decode_group_symbols(raw_value: str) -> list[str]:
+    """从分组 JSON 字段读取标的代码列表。"""
+
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return []
+    return _normalize_group_symbols(payload)
+
+
+def _instrument_payload(instrument: StockInstrument) -> dict[str, Any]:
+    """将标的数据类转换为分组接口可复用的字典。"""
+
+    return {
+        "symbol": instrument.symbol,
+        "code": instrument.code,
+        "exchange": instrument.exchange,
+        "name": instrument.name,
+        "instrument_type": instrument.instrument_type,
+        "market_board": instrument.market_board,
+        "listing_status": instrument.listing_status,
+        "updated_at": instrument.updated_at,
+        "latest_price": instrument.latest_price,
+        "history_coverage_status": instrument.history_coverage_status,
+        "history_coverage_at": instrument.history_coverage_at,
+        "history_coverage_start_date": instrument.history_coverage_start_date,
+        "history_coverage_end_date": instrument.history_coverage_end_date,
+    }
+
+
+def _instrument_group_payload(
+    row: sqlite3.Row,
+    *,
+    symbols: Sequence[str],
+    instruments_by_symbol: Mapping[str, StockInstrument],
+) -> dict[str, Any]:
+    """组装自定义分组接口 payload。"""
+
+    return {
+        "id": str(row["id"]),
+        "name": str(row["name"]),
+        "symbols": list(symbols),
+        "instruments": [
+            _instrument_payload(instruments_by_symbol[symbol])
+            for symbol in symbols
+            if symbol in instruments_by_symbol
+        ],
+        "updated_at": str(row["updated_at"]),
+    }
 
 
 def _max_iso_date(left: str, right: str) -> str:

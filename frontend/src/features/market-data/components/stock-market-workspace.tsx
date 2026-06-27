@@ -15,6 +15,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStockMarketDetailQuery } from "../hooks/use-stock-market-detail-query";
 import { useStockMarketAllRefresh } from "../hooks/use-stock-market-all-refresh";
+import { useStockMarketInstrumentGroups } from "../hooks/use-stock-market-instrument-groups";
 import { useStockMarketInstrumentsQuery } from "../hooks/use-stock-market-instruments-query";
 import { useStockMarketOverviewQuery } from "../hooks/use-stock-market-overview-query";
 import { useStockMarketOverviewRefreshMutation } from "../hooks/use-stock-market-overview-refresh-mutation";
@@ -25,6 +26,7 @@ import type {
   StockDailyBar,
   StockFinancialReportType,
   StockFinancialSeries,
+  StockInstrumentGroup,
   StockMarketAllRefreshJob,
   StockMarketAllRefreshMode,
   StockInstrument,
@@ -101,19 +103,14 @@ const KLINE_MA_VISIBLE_BY_DEFAULT: Record<string, boolean> = {
 };
 const KLINE_MA_STYLES = {
   MA5: { color: "#f59e0b", lineType: [6, 4] },
-  MA10: { color: "#38bdf8", lineType: [3, 3] },
-  MA20: { color: "#e35151", lineType: "solid" },
-  MA60: { color: "#34d399", lineType: [10, 5, 2, 5] },
-  MA120: { color: "#fd9893", lineType: [1, 4] },
+  MA10: { color: "#3daee7", lineType: [3, 3] },
+  MA20: { color: "#3979f1", lineType: "solid" },
+  MA60: { color: "#bb24dd", lineType: [10, 5, 2, 5] },
+  MA120: { color: "#655d5d", lineType: [6, 3, 5, 2] },
 } satisfies Record<string, { color: string; lineType: "solid" | number[] }>;
 type StockDetailTab = "overview" | "financial";
 type StockPriceAdjustment = "none" | "forward" | "backward";
 type TurtleTradingSystem = "systemOne" | "systemTwo";
-type StockInstrumentGroup = {
-  id: string;
-  name: string;
-  symbols: string[];
-};
 type TurtleThresholdSignal = {
   isReady: boolean;
   threshold: number | null;
@@ -177,14 +174,13 @@ function loadInstrumentGroups(): StockInstrumentGroup[] {
 }
 
 /**
- * 将自定义标的分组写入浏览器本地偏好。
+ * 清理旧版浏览器本地分组，避免数据库迁移后再次重复导入。
  *
- * @param groups 需要持久化的分组列表。
  * @returns 无返回值。
  */
-function saveInstrumentGroups(groups: StockInstrumentGroup[]): void {
+function clearLegacyInstrumentGroups(): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STOCK_GROUP_STORAGE_KEY, JSON.stringify(groups));
+  window.localStorage.removeItem(STOCK_GROUP_STORAGE_KEY);
 }
 
 /**
@@ -220,6 +216,7 @@ export function StockMarketWorkspace() {
   const [listPanelWidth, setListPanelWidth] = useState(DEFAULT_LIST_PANEL_WIDTH);
   const splitLayoutRef = useRef<HTMLDivElement | null>(null);
   const pendingSearchSelectionRef = useRef(false);
+  const legacyGroupMigrationRef = useRef(false);
 
   const instrumentsQuery = useStockMarketInstrumentsQuery({
     query: searchText,
@@ -239,13 +236,21 @@ export function StockMarketWorkspace() {
     financialReportType,
   );
   const allRefresh = useStockMarketAllRefresh();
+  const groupStore = useStockMarketInstrumentGroups();
+  const persistedInstrumentGroups = groupStore.groups;
   const instruments = instrumentsQuery.data?.items ?? [];
   const instrumentTotal = instrumentsQuery.data?.total ?? 0;
   const activeInstrumentGroup = instrumentGroups.find((group) => group.id === activeInstrumentGroupId) ?? null;
   const groupedInstruments = useMemo(() => {
     if (!activeInstrumentGroup) return instruments;
+    const groupInstruments = activeInstrumentGroup.instruments ?? [];
     return activeInstrumentGroup.symbols
-      .map((symbol) => knownInstruments[symbol] ?? instruments.find((item) => item.symbol === symbol))
+      .map(
+        (symbol) =>
+          knownInstruments[symbol] ??
+          groupInstruments.find((item) => item.symbol === symbol) ??
+          instruments.find((item) => item.symbol === symbol),
+      )
       .filter((instrument): instrument is StockInstrument => Boolean(instrument));
   }, [activeInstrumentGroup, instruments, knownInstruments]);
   const visibleInstruments = activeInstrumentGroup ? groupedInstruments : instruments;
@@ -263,6 +268,28 @@ export function StockMarketWorkspace() {
       recordAccess,
     }));
   }, []);
+
+  useEffect(() => {
+    if (groupStore.isPending) return;
+    if (!legacyGroupMigrationRef.current && persistedInstrumentGroups.length === 0 && instrumentGroups.length > 0) {
+      legacyGroupMigrationRef.current = true;
+      groupStore.save(instrumentGroups);
+      clearLegacyInstrumentGroups();
+      return;
+    }
+    if (groupStore.isSaving) {
+      return;
+    }
+    legacyGroupMigrationRef.current = true;
+    setInstrumentGroups(persistedInstrumentGroups);
+    clearLegacyInstrumentGroups();
+  }, [groupStore.isPending, groupStore.isSaving, groupStore.save, instrumentGroups, persistedInstrumentGroups]);
+
+  useEffect(() => {
+    if (activeInstrumentGroupId === ALL_INSTRUMENT_GROUP_ID) return;
+    if (instrumentGroups.some((group) => group.id === activeInstrumentGroupId)) return;
+    setActiveInstrumentGroupId(ALL_INSTRUMENT_GROUP_ID);
+  }, [activeInstrumentGroupId, instrumentGroups]);
 
   useEffect(() => {
     if (instrumentsQuery.isPending) return;
@@ -295,9 +322,17 @@ export function StockMarketWorkspace() {
         }
         next[detailQuery.data.instrument.symbol] = detailQuery.data.instrument;
       }
+      for (const group of instrumentGroups) {
+        for (const instrument of group.instruments ?? []) {
+          if (current[instrument.symbol] !== instrument) {
+            changed = true;
+          }
+          next[instrument.symbol] = instrument;
+        }
+      }
       return changed ? next : current;
     });
-  }, [detailQuery.data?.instrument, instruments]);
+  }, [detailQuery.data?.instrument, instrumentGroups, instruments]);
 
   useEffect(() => {
     if (!detailAccessIntent.recordAccess || detailQuery.isPending) return;
@@ -379,7 +414,10 @@ export function StockMarketWorkspace() {
 
   /** 启动全部标的刷新，并关闭模式选择弹窗。 */
   function handleAllRefreshStart(mode: StockMarketAllRefreshMode) {
-    allRefresh.start(mode);
+    allRefresh.start(mode, {
+      groupName: activeInstrumentGroup?.name ?? "全部",
+      symbols: activeInstrumentGroup ? activeInstrumentGroup.symbols : undefined,
+    });
     setIsAllRefreshDialogOpen(false);
   }
 
@@ -390,6 +428,12 @@ export function StockMarketWorkspace() {
     setIsAllRefreshCancelDialogOpen(false);
   }
 
+  /** 更新本地分组状态并保存到后台本地库。 */
+  function persistInstrumentGroups(nextGroups: StockInstrumentGroup[]) {
+    setInstrumentGroups(nextGroups);
+    groupStore.save(nextGroups);
+  }
+
   /** 新增自定义标的分组，并切换到该分组。 */
   function handleGroupCreate(name: string) {
     const normalizedName = name.trim();
@@ -398,32 +442,29 @@ export function StockMarketWorkspace() {
       id: `group-${Date.now()}`,
       name: normalizedName,
       symbols: [],
+      instruments: [],
     };
-    setInstrumentGroups((current) => {
-      const next = [...current, nextGroup];
-      saveInstrumentGroups(next);
-      return next;
-    });
+    persistInstrumentGroups([...instrumentGroups, nextGroup]);
     setIsGroupDialogOpen(false);
   }
 
   /** 将当前详情标的加入或移出指定自定义分组。 */
   function handleSelectedInstrumentGroupToggle(groupId: string) {
     if (!selectedInstrument) return;
-    setInstrumentGroups((current) => {
-      const next = current.map((group) => {
-        if (group.id !== groupId) return group;
-        const hasSymbol = group.symbols.includes(selectedInstrument.symbol);
-        return {
-          ...group,
-          symbols: hasSymbol
-            ? group.symbols.filter((symbol) => symbol !== selectedInstrument.symbol)
-            : [...group.symbols, selectedInstrument.symbol],
-        };
-      });
-      saveInstrumentGroups(next);
-      return next;
+    const next = instrumentGroups.map((group) => {
+      if (group.id !== groupId) return group;
+      const hasSymbol = group.symbols.includes(selectedInstrument.symbol);
+      return {
+        ...group,
+        symbols: hasSymbol
+          ? group.symbols.filter((symbol) => symbol !== selectedInstrument.symbol)
+          : [...group.symbols, selectedInstrument.symbol],
+        instruments: hasSymbol
+          ? (group.instruments ?? []).filter((instrument) => instrument.symbol !== selectedInstrument.symbol)
+          : [...(group.instruments ?? []), selectedInstrument],
+      };
     });
+    persistInstrumentGroups(next);
   }
 
   /** 开始拖动左右分隔条，按鼠标位置更新标的列表宽度。 */
@@ -469,6 +510,7 @@ export function StockMarketWorkspace() {
             allRefreshError={allRefresh.errorMessage}
             allRefreshJob={allRefresh.job}
             allRefreshStarting={allRefresh.isStarting}
+            refreshGroupName={activeInstrumentGroup?.name ?? "全部"}
             instrumentType={instrumentType}
             listingStatus={listingStatus}
             marketBoard={marketBoard}
@@ -610,6 +652,7 @@ export function StockMarketWorkspace() {
           </div>
           {isAllRefreshDialogOpen ? (
             <AllInstrumentRefreshDialog
+              groupName={activeInstrumentGroup?.name ?? "全部"}
               onClose={() => setIsAllRefreshDialogOpen(false)}
               onStart={handleAllRefreshStart}
             />
@@ -977,6 +1020,7 @@ function FilterBand(props: {
   allRefreshError: string;
   allRefreshCanceling: boolean;
   allRefreshStarting: boolean;
+  refreshGroupName: string;
   onSearchTextChange: (value: string) => void;
   onInstrumentTypeChange: (value: string) => void;
   onMarketBoardChange: (value: string) => void;
@@ -985,6 +1029,7 @@ function FilterBand(props: {
 }) {
   const isRefreshCancelable = isAllRefreshCancelable(props.allRefreshJob);
   const isRefreshActive = isAllRefreshRunning(props.allRefreshJob);
+  const refreshGroupName = formatRefreshGroupName(props.refreshGroupName);
 
   return (
     <div
@@ -1011,11 +1056,11 @@ function FilterBand(props: {
           <AllInstrumentRefreshProgress job={props.allRefreshJob} />
         )}
         <button
-          aria-label="刷新全部标的数据"
+          aria-label={`刷新${refreshGroupName}数据`}
           className="workbench-icon-button h-10 w-10 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={props.allRefreshStarting || props.allRefreshCanceling || props.allRefreshJob?.status === "canceling"}
           onClick={props.onRefreshAll}
-          title={isRefreshCancelable ? "取消当前全部标的刷新" : "选择刷新全部标的历史行情或当日行情"}
+          title={isRefreshCancelable ? "取消当前分组刷新" : `选择刷新${refreshGroupName}历史行情或当日行情`}
           type="button"
         >
           <ArrowPathIcon
@@ -1119,7 +1164,7 @@ function InstrumentListPanel(props: {
         >
           <InstrumentGroupTab
             active={props.activeGroupId === ALL_INSTRUMENT_GROUP_ID}
-            label="全部标的"
+            label="全部"
             onClick={() => props.onGroupChange(ALL_INSTRUMENT_GROUP_ID)}
           />
           {props.groups.map((group) => (
@@ -1234,23 +1279,25 @@ function InstrumentListPanel(props: {
 }
 
 function AllInstrumentRefreshDialog(props: {
+  groupName: string;
   onClose: () => void;
   onStart: (mode: StockMarketAllRefreshMode) => void;
 }) {
+  const groupName = formatRefreshGroupName(props.groupName);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4">
       <section
-        aria-label="选择全部标的刷新范围"
+        aria-label="选择当前分组刷新范围"
         className="w-full max-w-sm rounded-panel border border-line bg-surface p-4 shadow-xl"
         role="dialog"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-ink">刷新全部标的</h3>
+            <h3 className="text-sm font-semibold text-ink">刷新{groupName}</h3>
             <p className="mt-1 text-xs leading-5 text-muted">历史数据会补近 20 年窗口；当日数据只补今天的行情。</p>
           </div>
           <button
-            aria-label="关闭全部标的刷新选择"
+            aria-label="关闭当前分组刷新选择"
             className="workbench-icon-button h-8 w-8 shrink-0"
             onClick={props.onClose}
             type="button"
@@ -1397,6 +1444,15 @@ function isAllRefreshRunning(job: StockMarketAllRefreshJob | null): boolean {
  */
 function isAllRefreshCancelable(job: StockMarketAllRefreshJob | null): boolean {
   return Boolean(job?.id) && (job?.status === "pending" || job?.status === "running");
+}
+
+/**
+ * 格式化刷新任务展示中的分组名。
+ * @param groupName 当前分组名称。
+ * @returns 用于按钮和弹窗的短标签。
+ */
+function formatRefreshGroupName(groupName: string): string {
+  return groupName === "全部" ? "全部标的" : groupName;
 }
 
 /**

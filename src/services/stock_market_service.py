@@ -38,7 +38,7 @@ STOCK_REQUIRED_FINANCIAL_METRICS = {
 }
 STOCK_OVERVIEW_INDEX_REGISTRY = tuple(build_default_market_registry().values())
 STOCK_ALL_REFRESH_TERMINAL_STATUSES = {"completed", "completed_with_warnings", "failed", "skipped", "canceled"}
-STOCK_ALL_REFRESH_MODES = {"history", "today"}
+STOCK_ALL_REFRESH_MODES = {"history", "today", "recent_week"}
 STOCK_ALL_REFRESH_SCHEDULE_TIME = "15:30"
 STOCK_ALL_REFRESH_TIMEZONE = "Asia/Shanghai"
 STOCK_ALL_REFRESH_HISTORY_MONTHS = 240
@@ -155,7 +155,7 @@ class StockMarketService:
         now: datetime | None = None,
         run_inline: bool = False,
     ) -> list[dict[str, Any]]:
-        """在上海时间 15:30 触发全标的刷新。
+        """在上海时间 15:30 触发自定义分组标的最近一周刷新。
 
         Args:
             now: 测试可注入的当前 UTC 时间。
@@ -174,7 +174,19 @@ class StockMarketService:
         if not self._is_scheduled_trading_day(local_time.date()):
             logger.info("stock market scheduled refresh skipped closed market day %s", local_time.date().isoformat())
             return []
-        return [self.start_all_instrument_refresh(trigger="scheduled", refresh_mode="today", run_inline=run_inline)]
+        grouped_symbols = self._load_custom_group_symbols()
+        if not grouped_symbols:
+            logger.info("stock market scheduled refresh skipped because no custom group symbols exist")
+            return []
+        return [
+            self.start_all_instrument_refresh(
+                trigger="scheduled",
+                refresh_mode="recent_week",
+                run_inline=run_inline,
+                symbols=grouped_symbols,
+                group_name="自定义分组",
+            )
+        ]
 
     def start_all_instrument_refresh(
         self,
@@ -182,24 +194,35 @@ class StockMarketService:
         trigger: str = "manual",
         refresh_mode: str = "history",
         run_inline: bool = False,
+        symbols: list[str] | None = None,
+        group_name: str = "全部",
     ) -> dict[str, Any]:
-        """启动全标的近 20 年基础行情刷新任务。
+        """启动全部或指定分组标的基础行情刷新任务。
 
         Args:
             trigger: `manual` 或 `scheduled`，用于前端展示和状态追踪。
-            refresh_mode: `history` 刷新近 20 年窗口，`today` 仅刷新当日行情。
+            refresh_mode: `history` 刷新近 20 年窗口，`today` 仅刷新当日行情，`recent_week` 刷新最近一周。
             run_inline: 测试模式下同步执行任务。
+            symbols: 指定分组的标的代码；`None` 表示全部标的。
+            group_name: 当前刷新分组名称，用于前端进度展示。
 
         Returns:
             可供前端轮询的任务状态。
         """
 
         normalized_mode = self._validate_all_refresh_mode(refresh_mode)
+        target_symbols = None if symbols is None else self._normalize_refresh_symbols(symbols)
+        normalized_group_name = group_name.strip() if isinstance(group_name, str) and group_name.strip() else "全部"
         with self._all_refresh_lock:
             for existing_job in self._all_refresh_jobs.values():
                 if existing_job["status"] not in STOCK_ALL_REFRESH_TERMINAL_STATUSES:
                     return {"job": self._public_all_refresh_job(existing_job)}
-            job = self._new_all_refresh_job(trigger=trigger, refresh_mode=normalized_mode)
+            job = self._new_all_refresh_job(
+                trigger=trigger,
+                refresh_mode=normalized_mode,
+                target_symbols=target_symbols,
+                group_name=normalized_group_name,
+            )
             self._all_refresh_jobs[job["id"]] = job
             self._latest_all_refresh_job_id = job["id"]
 
@@ -278,13 +301,20 @@ class StockMarketService:
                 return
             refresh_mode = str(job.get("refresh_mode") or "history")
             end = self._resolve_all_refresh_end(today=today, refresh_mode=refresh_mode)
-            start = end if refresh_mode == "today" else _shift_months(end, -STOCK_ALL_REFRESH_HISTORY_MONTHS)
+            if refresh_mode == "today":
+                start = end
+            elif refresh_mode == "recent_week":
+                start = end - timedelta(days=STOCK_ALL_REFRESH_RECENT_WEEK_DAYS)
+            else:
+                start = _shift_months(end, -STOCK_ALL_REFRESH_HISTORY_MONTHS)
+            group_name = str(job.get("group_name") or "全部")
             job["status"] = "running"
-            job["message"] = (
-                "正在刷新全部标的当日基础行情数据。"
-                if refresh_mode == "today"
-                else "正在刷新全部标的近 20 年基础行情数据。"
-            )
+            if refresh_mode == "today":
+                job["message"] = f"正在刷新{group_name}当日基础行情数据。"
+            elif refresh_mode == "recent_week":
+                job["message"] = f"正在刷新{group_name}最近一周基础行情数据。"
+            else:
+                job["message"] = f"正在刷新{group_name}近 20 年基础行情数据。"
             job["started_at"] = _utc_now()
         try:
             if refresh_mode == "history":
@@ -292,7 +322,7 @@ class StockMarketService:
                     start_date=start.isoformat(),
                     end_date=end.isoformat(),
                 )
-            instruments = self._load_all_refresh_instruments()
+            instruments = self._load_all_refresh_instruments(job.get("target_symbols"))
             with self._all_refresh_lock:
                 job = self._all_refresh_jobs[job_id]
                 job["total"] = len(instruments)
@@ -303,7 +333,7 @@ class StockMarketService:
                     completed=0,
                     total=len(instruments),
                     instrument=first_instrument,
-                    message="正在并发刷新全部标的基础行情。",
+                    message=f"正在并发刷新{job.get('group_name') or '全部'}基础行情。",
                 )
             completed_count = 0
             executors: list[ThreadPoolExecutor] = []
@@ -386,20 +416,23 @@ class StockMarketService:
                 job["finished_at"] = _utc_now()
                 if job["errors"]:
                     job["status"] = "completed_with_warnings"
-                    job["message"] = "全标的刷新完成，部分标的失败，已保留旧数据。"
+                    job["message"] = f"{job.get('group_name') or '全部'}刷新完成，部分标的失败，已保留旧数据。"
                 else:
                     job["status"] = "completed"
-                    job["message"] = (
-                        "全标的当日基础行情数据已刷新。"
-                        if job.get("refresh_mode") == "today"
-                        else "全标的近 20 年基础行情数据已刷新。"
-                    )
+                    group_name = str(job.get("group_name") or "全部")
+                    if job.get("refresh_mode") == "today":
+                        job["message"] = f"{group_name}当日基础行情数据已刷新。"
+                    elif job.get("refresh_mode") == "recent_week":
+                        job["message"] = f"{group_name}最近一周基础行情数据已刷新。"
+                    else:
+                        job["message"] = f"{group_name}近 20 年基础行情数据已刷新。"
                 self._save_refresh_state(
                     {
                         "last_refresh_date": self._local_today(),
                         "last_refresh_at": job["finished_at"],
                         "last_trigger": job["trigger"],
                         "last_refresh_mode": job["refresh_mode"],
+                        "last_group_name": job.get("group_name") or "全部",
                     }
                 )
         except Exception as error:  # pragma: no cover - 后台任务兜底
@@ -486,6 +519,38 @@ class StockMarketService:
             "generated_at": _utc_now(),
             "indices": indices,
             "breadth": breadth,
+        }
+
+    def list_instrument_groups(self) -> dict[str, Any]:
+        """返回本地库中的自定义股票分组。
+
+        Args:
+            无。
+
+        Returns:
+            包含生成时间和分组数组的前端 payload。
+        """
+
+        return {
+            "generated_at": _utc_now(),
+            "groups": self._repository.list_instrument_groups(),
+        }
+
+    def replace_instrument_groups(self, groups: list[dict[str, Any]]) -> dict[str, Any]:
+        """持久化前端提交的自定义股票分组。
+
+        Args:
+            groups: 自定义分组数组。
+
+        Returns:
+            写入后的规范化分组 payload。
+        """
+
+        if not isinstance(groups, list):
+            raise StockMarketValidationError("invalid stock instrument groups")
+        return {
+            "generated_at": _utc_now(),
+            "groups": self._repository.replace_instrument_groups(groups),
         }
 
     def _build_index_overview(self, symbol: str, display_name: str) -> dict[str, Any]:
@@ -784,12 +849,21 @@ class StockMarketService:
         payload["refresh_result"] = result
         return payload
 
-    def _load_all_refresh_instruments(self) -> list[StockInstrument]:
-        """按分页读取全部可交易标的，避免一次性加载超大结果集。
+    def _load_all_refresh_instruments(self, target_symbols: object = None) -> list[StockInstrument]:
+        """读取本次刷新需要处理的可交易标的。
 
         Returns:
-            当前库内上市和 ST 状态的股票、ETF、LOF 标的。
+            当前库内上市和 ST 状态的股票、ETF、LOF 标的；传入 symbol 子集时保持用户分组顺序。
         """
+
+        if isinstance(target_symbols, list):
+            instruments_by_symbol = self._repository.get_instruments_by_symbols(target_symbols)
+            return [
+                instruments_by_symbol[symbol]
+                for symbol in target_symbols
+                if symbol in instruments_by_symbol
+                and instruments_by_symbol[symbol].listing_status in {"listed", "st"}
+            ]
 
         instruments: list[StockInstrument] = []
         page_size = 200
@@ -810,6 +884,20 @@ class StockMarketService:
             if offset >= total or not items:
                 break
         return instruments
+
+    def _load_custom_group_symbols(self) -> list[str]:
+        """读取全部自定义分组中的去重标的代码。"""
+
+        symbols: list[str] = []
+        seen: set[str] = set()
+        for group in self._repository.list_instrument_groups():
+            for symbol in group.get("symbols", []):
+                normalized_symbol = str(symbol).strip().upper()
+                if not normalized_symbol or normalized_symbol in seen:
+                    continue
+                seen.add(normalized_symbol)
+                symbols.append(normalized_symbol)
+        return symbols
 
     def _refresh_single_instrument(
         self,
@@ -975,10 +1063,10 @@ class StockMarketService:
             refresh_mode: 全标的刷新模式，`today` 表示每日刷新。
 
         Returns:
-            每日刷新固定返回当天；历史模式返回最近开盘交易日。
+            当日和最近一周刷新固定返回当天；历史模式返回最近开盘交易日。
         """
 
-        if refresh_mode == "today":
+        if refresh_mode in {"today", "recent_week"}:
             return today
         return self._latest_trading_day_on_or_before(today)
 
@@ -1020,18 +1108,23 @@ class StockMarketService:
         *,
         trigger: str,
         refresh_mode: str,
+        target_symbols: list[str] | None,
+        group_name: str,
         status: str = "pending",
         message: str = "刷新任务已创建，等待后台执行。",
     ) -> dict[str, Any]:
         """创建全标的刷新任务状态对象。"""
 
+        total = self._repository.count_instruments() if target_symbols is None else len(target_symbols)
         return {
             "id": uuid4().hex,
             "status": status,
             "trigger": trigger,
             "refresh_mode": refresh_mode,
+            "group_name": group_name,
+            "target_symbols": target_symbols,
             "completed": 0,
-            "total": self._repository.count_instruments(),
+            "total": total,
             "percentage": 0,
             "current_symbol": "",
             "current_label": "",
@@ -1044,7 +1137,11 @@ class StockMarketService:
     def _public_all_refresh_job(self, job: dict[str, Any] | None) -> dict[str, Any] | None:
         """复制任务字段，避免前端拿到内部可变对象。"""
 
-        return deepcopy(job) if job is not None else None
+        if job is None:
+            return None
+        public_job = deepcopy(job)
+        public_job.pop("target_symbols", None)
+        return public_job
 
     def _validate_all_refresh_mode(self, value: str) -> str:
         """校验全部标的刷新模式。"""
@@ -1053,6 +1150,26 @@ class StockMarketService:
         if normalized not in STOCK_ALL_REFRESH_MODES:
             raise StockMarketValidationError("invalid stock all refresh mode")
         return normalized
+
+    def _normalize_refresh_symbols(self, symbols: list[str]) -> list[str]:
+        """规范化分组刷新入参中的标的代码。
+
+        Args:
+            symbols: 前端当前分组中的 symbol 列表。
+
+        Returns:
+            大写去重后的 symbol 列表，保持首次出现顺序。
+        """
+
+        normalized_symbols: list[str] = []
+        seen: set[str] = set()
+        for item in symbols:
+            symbol = str(item).strip().upper()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            normalized_symbols.append(symbol)
+        return normalized_symbols
 
     def _local_today(self) -> str:
         """返回上海时区当天日期，作为最近刷新状态日期。"""
