@@ -219,6 +219,8 @@ export type StockFinancialSeries = {
 
 export type StockFinancialReportType = "quarterly" | "yearly";
 
+export type StockPriceAdjustment = "none" | "qfq" | "hfq";
+
 export type StockDetailPayload = {
   generated_at: string;
   instrument: StockInstrument;
@@ -227,6 +229,7 @@ export type StockDetailPayload = {
     start_date: string;
     end_date: string;
   };
+  adjust_type?: StockPriceAdjustment;
   daily_bars: StockDailyBar[];
   profile: StockProfile;
   financials: {

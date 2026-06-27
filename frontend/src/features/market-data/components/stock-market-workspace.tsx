@@ -31,6 +31,7 @@ import type {
   StockMarketAllRefreshMode,
   StockInstrument,
   StockMarketOverviewPayload,
+  StockPriceAdjustment,
 } from "../model/market-data.types";
 import { formatLocalDateTime } from "../../../shared/utils/format-local-date-time";
 import { buildCartesianTheme, useWorkbenchChartTheme } from "../../../shared/charts/use-workbench-chart-theme";
@@ -109,7 +110,6 @@ const KLINE_MA_STYLES = {
   MA120: { color: "#655d5d", lineType: [6, 3, 5, 2] },
 } satisfies Record<string, { color: string; lineType: "solid" | number[] }>;
 type StockDetailTab = "overview" | "financial";
-type StockPriceAdjustment = "none" | "forward" | "backward";
 type TurtleTradingSystem = "systemOne" | "systemTwo";
 type TurtleThresholdSignal = {
   isReady: boolean;
@@ -226,10 +226,16 @@ export function StockMarketWorkspace() {
     page: instrumentPage,
     pageSize: instrumentPageSize,
   });
-  const detailQuery = useStockMarketDetailQuery(selectedSymbol, range, financialReportType, detailAccessIntent);
+  const detailQuery = useStockMarketDetailQuery(
+    selectedSymbol,
+    range,
+    financialReportType,
+    priceAdjustment,
+    detailAccessIntent,
+  );
   const overviewQuery = useStockMarketOverviewQuery();
   const overviewRefreshMutation = useStockMarketOverviewRefreshMutation();
-  const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType);
+  const refreshMutation = useStockMarketRefreshMutation(selectedSymbol, range, financialReportType, priceAdjustment);
   const financialRefreshMutation = useStockMarketFinancialRefreshMutation(
     selectedSymbol,
     financialRange,
@@ -1753,35 +1759,16 @@ function RangeToolbar(props: {
             className={`h-4 w-4 ${props.refreshPending ? "animate-spin" : ""}`}
           />
         </button>
-        <div
+        <select
           aria-label="价格复权方式"
-          className="inline-flex h-8 overflow-hidden rounded-control border border-line bg-surface text-xs font-semibold"
+          className="workbench-input h-8 min-w-24 py-1 text-xs font-semibold"
+          onChange={(event) => props.onPriceAdjustmentChange(event.target.value as StockPriceAdjustment)}
+          value={props.priceAdjustment}
         >
-          {(
-            [
-              { value: "none", label: "不复权" },
-              // { value: "forward", label: "前复权" },
-              // { value: "backward", label: "后复权" },
-            ] as const
-          ).map((option) => {
-            const isSelected = props.priceAdjustment === option.value;
-            return (
-              <button
-                aria-pressed={isSelected}
-                className={`border-r border-line px-3 last:border-r-0 ${
-                  isSelected
-                    ? "bg-accent text-white"
-                    : "text-muted hover:bg-accent-soft hover:text-accent"
-                }`}
-                key={option.value}
-                onClick={() => props.onPriceAdjustmentChange(option.value)}
-                type="button"
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
+          <option value="none">不复权</option>
+          <option value="qfq">前复权</option>
+          <option value="hfq">后复权</option>
+        </select>
       </div>
     </div>
   );

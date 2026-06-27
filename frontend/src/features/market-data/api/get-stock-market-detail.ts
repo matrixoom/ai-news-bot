@@ -2,6 +2,7 @@ import type {
   MarketDataRangeSelection,
   StockDetailPayload,
   StockFinancialReportType,
+  StockPriceAdjustment,
 } from "../model/market-data.types";
 
 /**
@@ -17,12 +18,14 @@ export async function getStockMarketDetail(options: {
   symbol: string;
   range: MarketDataRangeSelection;
   financialReportType: StockFinancialReportType;
+  adjustType: StockPriceAdjustment;
   recordAccess?: boolean;
   signal?: AbortSignal;
 }): Promise<StockDetailPayload> {
   const params = new URLSearchParams({
     range: options.range.type,
     financial_report_type: options.financialReportType,
+    adjust_type: options.adjustType,
     record_access: String(options.recordAccess ?? true),
   });
   if (options.range.type === "custom") {

@@ -176,7 +176,12 @@ class FastAPIWebShellTests(unittest.TestCase):
 
         response = client.get(
             "/api/frontend/modules/market-data/stocks/000001.SZ",
-            params={"range": "1m", "financial_report_type": "quarterly", "record_access": "false"},
+            params={
+                "range": "1m",
+                "financial_report_type": "quarterly",
+                "record_access": "false",
+                "adjust_type": "qfq",
+            },
         )
 
         self.assertEqual(response.status_code, 200)
@@ -187,6 +192,7 @@ class FastAPIWebShellTests(unittest.TestCase):
             end_date=None,
             financial_report_type="quarterly",
             record_access=False,
+            adjust_type="qfq",
         )
 
     def test_stock_market_refresh_all_endpoint_passes_refresh_mode(self):

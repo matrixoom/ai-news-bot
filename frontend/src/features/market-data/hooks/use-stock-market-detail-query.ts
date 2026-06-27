@@ -3,6 +3,7 @@ import { getStockMarketDetail } from "../api/get-stock-market-detail";
 import type {
   MarketDataRangeSelection,
   StockFinancialReportType,
+  StockPriceAdjustment,
 } from "../model/market-data.types";
 
 /**
@@ -12,6 +13,7 @@ export function useStockMarketDetailQuery(
   symbol: string | null,
   range: MarketDataRangeSelection,
   financialReportType: StockFinancialReportType,
+  adjustType: StockPriceAdjustment,
   options: { recordAccess?: boolean; accessRequestId?: number } = {},
 ) {
   return useQuery({
@@ -23,6 +25,7 @@ export function useStockMarketDetailQuery(
       range.startDate ?? "",
       range.endDate ?? "",
       financialReportType,
+      adjustType,
       options.accessRequestId ?? 0,
     ],
     queryFn: ({ signal }) =>
@@ -30,6 +33,7 @@ export function useStockMarketDetailQuery(
         symbol: symbol ?? "",
         range,
         financialReportType,
+        adjustType,
         recordAccess: options.recordAccess ?? true,
         signal,
       }),

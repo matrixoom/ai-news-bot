@@ -29,6 +29,7 @@ from .stock_market_sync_service import StockMarketSyncService, _compact_error_me
 
 STOCK_MARKET_RANGES = {"1m", "3m", "6m", "1y", "3y", "5y", "10y", "20y", "custom"}
 STOCK_FINANCIAL_REPORT_TYPES = {"quarterly", "yearly"}
+STOCK_PRICE_ADJUST_TYPES = {"none", "qfq", "hfq"}
 STOCK_OVERVIEW_INDEX_HISTORY_DAYS = 365 * 20 + 10
 STOCK_REQUIRED_FINANCIAL_METRICS = {
     "roe",
@@ -712,6 +713,7 @@ class StockMarketService:
         end_date: str | None = None,
         financial_report_type: str = "quarterly",
         record_access: bool = True,
+        adjust_type: str = "none",
     ) -> dict[str, Any]:
         """返回选中股票详情，并在首次无日线数据时懒加载近 1 个月。
 
@@ -722,6 +724,7 @@ class StockMarketService:
             end_date: 自定义范围结束日期。
             financial_report_type: 财报维度。
             record_access: 是否记录本次由用户主动选择产生的访问热度。
+            adjust_type: K 线价格口径，支持 `none`、`qfq`、`hfq`。
 
         Returns:
             股票详情前端 payload。
@@ -732,6 +735,11 @@ class StockMarketService:
             self._repository.record_instrument_access(instrument.symbol)
             instrument = self._require_instrument(symbol)
         resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
+        price_adjust_type = self._validate_filter(
+            adjust_type,
+            STOCK_PRICE_ADJUST_TYPES,
+            "invalid stock price adjust type",
+        )
         warning = ""
         if not self._repository.has_daily_bars(instrument.symbol):
             default_range = self._resolve_range(range_type="1m", start_date=None, end_date=None)
@@ -745,12 +753,16 @@ class StockMarketService:
                 warning = f"首次行情同步失败：{_compact_error_message(error)}"
                 logger.warning("stock lazy daily sync failed for %s: %s", instrument.symbol, warning)
                 self._repository.record_sync_warning(instrument.symbol, warning)
+        factor_warning = self._ensure_adjust_factors(instrument, price_adjust_type)
+        if factor_warning:
+            warning = "；".join(item for item in (warning, factor_warning) if item)
         self._ensure_profile_and_financials(instrument)
         return self._build_detail_payload(
             instrument,
             resolved_range=resolved_range,
             financial_report_type=financial_report_type,
             warning_message=warning,
+            adjust_type=price_adjust_type,
         )
 
     def refresh_stock_detail(
@@ -761,6 +773,7 @@ class StockMarketService:
         start_date: str | None = None,
         end_date: str | None = None,
         financial_report_type: str = "quarterly",
+        adjust_type: str = "none",
     ) -> dict[str, Any]:
         """手动刷新选中日期范围内的日线与财务数据并返回详情。"""
 
@@ -768,6 +781,11 @@ class StockMarketService:
         self._repository.record_instrument_access(instrument.symbol)
         instrument = self._require_instrument(symbol)
         resolved_range = self._resolve_range(range_type=range_type, start_date=start_date, end_date=end_date)
+        price_adjust_type = self._validate_filter(
+            adjust_type,
+            STOCK_PRICE_ADJUST_TYPES,
+            "invalid stock price adjust type",
+        )
         warnings: list[str] = []
         result = {"daily_bars": 0}
         try:
@@ -789,12 +807,17 @@ class StockMarketService:
                 warnings.append(warning)
                 logger.warning("stock financial refresh failed for %s: %s", instrument.symbol, warning)
                 self._repository.record_sync_warning(instrument.symbol, warning)
+            if price_adjust_type != "none":
+                factor_warning = self._ensure_adjust_factors(instrument, price_adjust_type)
+                if factor_warning:
+                    warnings.append(factor_warning)
         self._ensure_profile_and_financials(instrument, ensure_financials=False)
         payload = self._build_detail_payload(
             instrument,
             resolved_range=resolved_range,
             financial_report_type=financial_report_type,
             warning_message="；".join(warnings),
+            adjust_type=price_adjust_type,
         )
         payload["refresh_result"] = result
         return payload
@@ -845,6 +868,7 @@ class StockMarketService:
             resolved_range=resolved_range,
             financial_report_type=financial_report_type,
             warning_message="；".join(warnings),
+            adjust_type="none",
         )
         payload["refresh_result"] = result
         return payload
@@ -1202,6 +1226,7 @@ class StockMarketService:
         resolved_range: ResolvedStockRange,
         financial_report_type: str,
         warning_message: str,
+        adjust_type: str,
     ) -> dict[str, Any]:
         """组装前端股票详情 payload。"""
 
@@ -1210,11 +1235,16 @@ class StockMarketService:
             STOCK_FINANCIAL_REPORT_TYPES,
             "invalid financial report type",
         )
+        daily_start = resolved_range.start_date
+        if adjust_type != "none":
+            daily_start = (date.fromisoformat(resolved_range.start_date) - timedelta(days=220)).isoformat()
         daily_bars = self._repository.load_daily_bars(
             symbol=instrument.symbol,
-            start_date=resolved_range.start_date,
+            start_date=daily_start,
             end_date=resolved_range.end_date,
+            adjust_type=adjust_type,
         )
+        visible_daily_bars = [bar for bar in daily_bars if bar.trade_date >= resolved_range.start_date]
         profile = self._repository.get_profile(instrument.symbol)
         sync_state = self._repository.get_sync_state(instrument.symbol)
         financial_metrics = self._repository.load_financial_metrics(symbol=instrument.symbol, report_type=report_type)
@@ -1226,6 +1256,7 @@ class StockMarketService:
                 "start_date": resolved_range.start_date,
                 "end_date": resolved_range.end_date,
             },
+            "adjust_type": adjust_type,
             "daily_bars": [
                 {
                     "date": bar.trade_date,
@@ -1248,7 +1279,7 @@ class StockMarketService:
                         else None
                     ),
                 }
-                for bar in daily_bars
+                for bar in visible_daily_bars
             ],
             "profile": {
                 "company_name": profile.company_name if profile else instrument.name,
@@ -1271,6 +1302,30 @@ class StockMarketService:
                 "synced_at": sync_state.synced_at if sync_state else "",
             },
         }
+
+    def _ensure_adjust_factors(self, instrument: StockInstrument, adjust_type: str) -> str:
+        """在复权视图需要时补齐本地复权因子。
+
+        Args:
+            instrument: 当前股票或场内基金标的。
+            adjust_type: 用户选择的 K 线价格口径。
+
+        Returns:
+            可展示的告警文案；无需同步或同步成功时返回空字符串。
+        """
+
+        if adjust_type == "none" or instrument.instrument_type != "stock":
+            return ""
+        if self._repository.has_adjust_factors(instrument.symbol):
+            return ""
+        try:
+            self._sync_service.sync_adjust_factors(instrument)
+        except Exception as error:
+            warning = f"复权因子同步失败：{_compact_error_message(error)}"
+            logger.warning("stock adjust factor lazy sync failed for %s: %s", instrument.symbol, warning)
+            self._repository.record_sync_warning(instrument.symbol, warning)
+            return warning
+        return ""
 
     def _ensure_profile_and_financials(
         self,

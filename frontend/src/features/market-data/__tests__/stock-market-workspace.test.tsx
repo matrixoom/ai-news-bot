@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   allRefreshCancel: vi.fn(),
   allRefreshError: "",
   allRefreshStatuses: [] as Array<Record<string, unknown> | null>,
+  detailAdjustments: [] as string[],
   detailRanges: [] as Array<Record<string, unknown>>,
   detailAccessOptions: [] as Array<{ symbol: string; recordAccess: boolean | undefined }>,
   detailDailyBars: null as null | StockDailyBar[],
@@ -252,9 +253,11 @@ vi.mock("../hooks/use-stock-market-detail-query", () => ({
     symbol: string | null,
     range: Record<string, unknown>,
     _financialReportType: string,
+    adjustment: string,
     options?: { recordAccess: boolean },
   ) => {
     mocks.detailRanges.push(range);
+    mocks.detailAdjustments.push(adjustment);
     if (symbol) {
       mocks.detailAccessOptions.push({ symbol, recordAccess: options?.recordAccess });
     }
@@ -291,9 +294,10 @@ vi.mock("../hooks/use-stock-market-refresh-mutation", () => ({
     symbol: string | null,
     range: Record<string, unknown>,
     financialReportType: string,
+    adjustType: string,
   ) => ({
     isPending: false,
-    mutate: () => mocks.refresh({ symbol, range, financialReportType }),
+    mutate: () => mocks.refresh({ symbol, range, financialReportType, adjustType }),
   }),
 }));
 
@@ -484,6 +488,7 @@ describe("StockMarketWorkspace", () => {
     mocks.allRefreshCancel.mockClear();
     mocks.allRefreshError = "";
     mocks.allRefreshStatuses.length = 0;
+    mocks.detailAdjustments.length = 0;
     mocks.detailRanges.length = 0;
     mocks.detailAccessOptions.length = 0;
     mocks.detailDailyBars = null;
@@ -828,11 +833,12 @@ describe("StockMarketWorkspace", () => {
         endDate: "2024-02-03",
       },
       financialReportType: "quarterly",
+      adjustType: "none",
     });
 
     const refreshButton = screen.getByRole("button", { name: "刷新行情数据" });
-    const unadjustedButton = screen.getByRole("button", { name: "不复权" });
-    expect(refreshButton.compareDocumentPosition(unadjustedButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const adjustmentSelect = screen.getByRole("combobox", { name: "价格复权方式" });
+    expect(refreshButton.compareDocumentPosition(adjustmentSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("refreshes latest data from the research summary header", async () => {
@@ -846,6 +852,7 @@ describe("StockMarketWorkspace", () => {
       symbol: "000001.SZ",
       range: { type: "1m" },
       financialReportType: "quarterly",
+      adjustType: "none",
     });
   });
 
@@ -1134,15 +1141,18 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("button", { name: "近10年" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "近20年" })).toBeInTheDocument();
     expect(screen.getByLabelText("价格复权方式")).toHaveClass("h-8");
-    expect(screen.getByRole("button", { name: "不复权" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("button", { name: "前复权" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "后复权" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "价格复权方式" })).toHaveValue("none");
   });
 
-  it("keeps the current unadjusted price mode", () => {
+  it("requests the selected price adjustment mode", async () => {
+    const user = userEvent.setup();
     render(<StockMarketWorkspace />);
 
-    expect(screen.getByRole("button", { name: "不复权" })).toHaveAttribute("aria-pressed", "true");
+    expect(mocks.detailAdjustments.at(-1)).toBe("none");
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "价格复权方式" }), "qfq");
+
+    expect(mocks.detailAdjustments.at(-1)).toBe("qfq");
   });
 
   it("uses compact chart labels and hides valuation metrics from the kline legend", async () => {

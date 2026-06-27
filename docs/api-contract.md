@@ -650,13 +650,15 @@ uv run python main.py macro-sync
 - `start_date` / `end_date`：自定义日期，`YYYY-MM-DD`。
 - `financial_report_type`：`quarterly | yearly`，默认 `quarterly`。
 - `record_access`：`true | false`，默认 `true`。前端刷新页面时自动选中的首个标的传 `false`，仅用户手动点击或搜索触发的选中传 `true`，用于控制 `market_stock_instrument.access_count` 是否累计。
+- `adjust_type`：`none | qfq | hfq`，默认 `none`。`none` 返回不复权价格；`qfq` / `hfq` 分别基于本地不复权日线和 `market_stock_adjust_factor` 动态计算前复权/后复权 OHLC。
 
 日线同步策略：
 
 - A 股使用 AkShare `stock_zh_a_hist`，ETF 使用 `fund_etf_hist_em`，LOF 使用 `fund_lof_hist_em`。
 - A 股日线在东方财富端点失败时回退 `stock_zh_a_hist_tx` / `stock_zh_a_daily`；腾讯接口的 `amount` 手数会转换为统一的 `volume` 股数。ETF 日线在东方财富端点失败时回退 `fund_etf_hist_sina`。
 - 本地事实表以 `(symbol, trade_date)` 作为幂等键，刷新同一天只更新，不重复插入。
-- 服务会为 MA120 额外拉取起始日前约 220 天缓冲数据，返回 payload 仍只包含用户所选时间跨度。
+- `market_stock_daily_bar` 只保存不复权 OHLCV 与估值字段；前后复权价格不落库，复权因子保存到主库 `market_stock_adjust_factor(symbol, effective_date, qfq_factor, hfq_factor)`。
+- 服务会为 MA120 额外拉取起始日前约 220 天缓冲数据；复权视图的 MA 基于复权后收盘价重新计算，返回 payload 仍只包含用户所选时间跨度。
 - 外部接口失败时保留本地已有历史，并在 `sync_state.warning_message` 返回可展示的短提示；服务不会把代理失败的完整 traceback 写入前端响应。
 
 成功：`200`
@@ -665,6 +667,7 @@ uv run python main.py macro-sync
 {
   "instrument": { "symbol": "000001.SZ", "name": "平安银行" },
   "range": { "type": "1m", "start_date": "2026-05-05", "end_date": "2026-06-05" },
+  "adjust_type": "qfq",
   "daily_bars": [
     {
       "date": "2026-06-05",
@@ -734,7 +737,8 @@ OHLCV 和本地已有指标，并通过 `sync_state.warning_message` 返回短�
   "range": "1m",
   "start_date": null,
   "end_date": null,
-  "financial_report_type": "quarterly"
+  "financial_report_type": "quarterly",
+  "adjust_type": "none"
 }
 ```
 

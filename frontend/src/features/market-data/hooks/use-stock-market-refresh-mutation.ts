@@ -3,6 +3,7 @@ import { refreshStockMarketDetail } from "../api/refresh-stock-market-detail";
 import type {
   MarketDataRangeSelection,
   StockFinancialReportType,
+  StockPriceAdjustment,
 } from "../model/market-data.types";
 
 /**
@@ -12,6 +13,7 @@ export function useStockMarketRefreshMutation(
   symbol: string | null,
   range: MarketDataRangeSelection,
   financialReportType: StockFinancialReportType,
+  adjustType: StockPriceAdjustment,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -19,7 +21,7 @@ export function useStockMarketRefreshMutation(
       if (!symbol) {
         throw new Error("stock symbol is required");
       }
-      return refreshStockMarketDetail({ symbol, range, financialReportType });
+      return refreshStockMarketDetail({ symbol, range, financialReportType, adjustType });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stock-market-detail", symbol] });

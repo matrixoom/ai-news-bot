@@ -819,6 +819,52 @@ class StockMarketModuleTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNone(legacy_table)
 
+    def test_daily_bars_can_be_returned_with_adjusted_prices(self) -> None:
+        """校验日线仅保存不复权价格，查询时按复权因子动态返回前后复权价格。"""
+
+        repository = self._repository()
+        repository.upsert_daily_bars(
+            "000001.SZ",
+            [
+                _stock_daily_bar("2026-06-01", close_price=10),
+                _stock_daily_bar("2026-06-02", close_price=12),
+                _stock_daily_bar("2026-06-03", close_price=14),
+            ],
+        )
+        repository.upsert_adjust_factors(
+            "000001.SZ",
+            [
+                {"effective_date": "2026-05-30", "qfq_factor": 2, "hfq_factor": 3},
+                {"effective_date": "2026-06-03", "qfq_factor": 4, "hfq_factor": 5},
+            ],
+        )
+
+        qfq_points = repository.load_daily_bars(
+            symbol="000001.SZ",
+            start_date="2026-06-01",
+            end_date="2026-06-03",
+            adjust_type="qfq",
+        )
+        hfq_points = repository.load_daily_bars(
+            symbol="000001.SZ",
+            start_date="2026-06-01",
+            end_date="2026-06-03",
+            adjust_type="hfq",
+        )
+
+        self.assertEqual([point.close_price for point in qfq_points], [5.0, 6.0, 3.5])
+        self.assertEqual([point.close_price for point in hfq_points], [30.0, 36.0, 70.0])
+        with repository._daily_bar_session("000001.SZ") as connection:
+            raw_close = connection.execute(
+                """
+                SELECT close_price
+                FROM market_stock_daily_bar
+                WHERE symbol = ? AND trade_date = ?
+                """,
+                ("000001.SZ", "2026-06-03"),
+            ).fetchone()[0]
+        self.assertEqual(raw_close, 14)
+
     def test_daily_bar_upsert_preserves_valuation_when_refresh_has_no_optional_values(self) -> None:
         """校验附加行情源缺值时不会清空已保存的估值指标。"""
 
@@ -1451,6 +1497,55 @@ class StockMarketModuleTests(unittest.TestCase):
         )
         roe_series = next(series for series in payload["financials"]["series"] if series["metric"] == "roe")
         self.assertEqual(roe_series["points"][0], {"period": "2026-03-31", "value": 2.83, "unit": "%"})
+
+    def test_stock_detail_returns_selected_adjustment_prices_and_ma(self) -> None:
+        """校验详情接口按选择的复权口径返回 K 线价格，并基于复权收盘价计算均线。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_daily_bars(
+            "000001.SZ",
+            [
+                _stock_daily_bar("2026-06-01", close_price=10),
+                _stock_daily_bar("2026-06-02", close_price=12),
+                _stock_daily_bar("2026-06-03", close_price=14),
+                _stock_daily_bar("2026-06-04", close_price=16),
+                _stock_daily_bar("2026-06-05", close_price=18),
+            ],
+        )
+        repository.upsert_adjust_factors(
+            "000001.SZ",
+            [{"effective_date": "2026-05-01", "qfq_factor": 2, "hfq_factor": 3}],
+        )
+        syncer = Mock()
+        syncer.sync_financials.return_value = {"financial_metrics": 0}
+        syncer.sync_profile.return_value = {"profile": 0}
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        payload = service.build_stock_detail_payload(
+            "000001.SZ",
+            range_type="custom",
+            start_date="2026-06-01",
+            end_date="2026-06-05",
+            adjust_type="qfq",
+        )
+
+        self.assertEqual(payload["adjust_type"], "qfq")
+        self.assertEqual([point["close"] for point in payload["daily_bars"]], [5.0, 6.0, 7.0, 8.0, 9.0])
+        self.assertEqual(payload["daily_bars"][-1]["ma5"], 7.0)
+        syncer.sync_adjust_factors.assert_not_called()
 
     def test_stock_detail_defaults_to_one_month_when_history_absent(self) -> None:
         """校验未指定范围时，详情查询和首次懒同步都使用最近一个月。"""

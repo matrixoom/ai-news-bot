@@ -2,6 +2,7 @@ import type {
   MarketDataRangeSelection,
   StockDetailPayload,
   StockFinancialReportType,
+  StockPriceAdjustment,
 } from "../model/market-data.types";
 
 /**
@@ -15,6 +16,7 @@ export async function refreshStockMarketDetail(options: {
   symbol: string;
   range: MarketDataRangeSelection;
   financialReportType: StockFinancialReportType;
+  adjustType: StockPriceAdjustment;
 }): Promise<StockDetailPayload> {
   const response = await fetch(`/api/frontend/modules/market-data/stocks/${options.symbol}/sync`, {
     method: "POST",
@@ -27,6 +29,7 @@ export async function refreshStockMarketDetail(options: {
       start_date: options.range.startDate,
       end_date: options.range.endDate,
       financial_report_type: options.financialReportType,
+      adjust_type: options.adjustType,
     }),
   });
   if (!response.ok) {

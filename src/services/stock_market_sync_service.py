@@ -26,6 +26,8 @@ class StockMarketSyncService:
         stock_daily_loader: A 股日线加载函数，测试可注入。
         etf_daily_loader: ETF 日线加载函数，测试可注入。
         lof_daily_loader: LOF 日线加载函数，测试可注入。
+        qfq_factor_loader: A 股前复权因子加载函数，测试可注入。
+        hfq_factor_loader: A 股后复权因子加载函数，测试可注入。
 
     Returns:
         可执行同步任务的服务实例。
@@ -41,6 +43,8 @@ class StockMarketSyncService:
         stock_daily_loader: DataFrameLoader | None = None,
         etf_daily_loader: DataFrameLoader | None = None,
         lof_daily_loader: DataFrameLoader | None = None,
+        qfq_factor_loader: DataFrameLoader | None = None,
+        hfq_factor_loader: DataFrameLoader | None = None,
         profile_loader: DataFrameLoader | None = None,
         benefit_loader: DataFrameLoader | None = None,
         cash_loader: DataFrameLoader | None = None,
@@ -59,6 +63,8 @@ class StockMarketSyncService:
             stock_daily_loader: A 股日线加载器。
             etf_daily_loader: ETF 日线加载器。
             lof_daily_loader: LOF 日线加载器。
+            qfq_factor_loader: A 股前复权因子加载器。
+            hfq_factor_loader: A 股后复权因子加载器。
             profile_loader: 公司概况加载器。
             benefit_loader: 利润表加载器。
             cash_loader: 现金流量表加载器。
@@ -75,6 +81,8 @@ class StockMarketSyncService:
         self._stock_daily_loader = stock_daily_loader or _ak_stock_daily
         self._etf_daily_loader = etf_daily_loader or _ak_etf_daily
         self._lof_daily_loader = lof_daily_loader or _ak_lof_daily
+        self._qfq_factor_loader = qfq_factor_loader or _ak_qfq_factor
+        self._hfq_factor_loader = hfq_factor_loader or _ak_hfq_factor
         self._profile_loader = profile_loader or _ak_stock_profile
         self._benefit_loader = benefit_loader or _ak_financial_benefit
         self._cash_loader = cash_loader or _ak_financial_cash
@@ -183,6 +191,28 @@ class StockMarketSyncService:
         if warnings:
             self._repository.record_sync_warning(instrument.symbol, "；".join(warnings))
         return {"daily_bars": count}
+
+    def sync_adjust_factors(self, instrument: StockInstrument) -> dict[str, int]:
+        """同步单只 A 股的前复权和后复权因子。
+
+        Args:
+            instrument: 已持久化的股票标的；ETF/LOF 不同步股票复权因子。
+
+        Returns:
+            `adjust_factors` 表示本次写入或更新的因子行数。
+        """
+
+        if instrument.instrument_type != "stock":
+            return {"adjust_factors": 0}
+        qfq_frame = self._qfq_factor_loader(symbol=instrument.code)
+        hfq_frame = self._hfq_factor_loader(symbol=instrument.code)
+        rows_by_date: dict[str, dict[str, Any]] = {}
+        for row in _adjust_factor_rows_from_frame(qfq_frame, "qfq_factor"):
+            rows_by_date.setdefault(str(row["effective_date"]), {"effective_date": row["effective_date"]}).update(row)
+        for row in _adjust_factor_rows_from_frame(hfq_frame, "hfq_factor"):
+            rows_by_date.setdefault(str(row["effective_date"]), {"effective_date": row["effective_date"]}).update(row)
+        count = self._repository.upsert_adjust_factors(instrument.symbol, list(rows_by_date.values()))
+        return {"adjust_factors": count}
 
     def sync_profile(self, instrument: StockInstrument) -> dict[str, int]:
         """同步单只股票公司概况；ETF/LOF 使用基础信息兜底。"""
@@ -316,6 +346,28 @@ def _ak_stock_daily(**kwargs: Any) -> Any:
             ),
         ]
     )
+
+
+def _ak_qfq_factor(**kwargs: Any) -> Any:
+    """读取 A 股前复权因子。"""
+
+    return _ak_stock_adjust_factor(symbol=str(kwargs["symbol"]), adjust="qfq-factor")
+
+
+def _ak_hfq_factor(**kwargs: Any) -> Any:
+    """读取 A 股后复权因子。"""
+
+    return _ak_stock_adjust_factor(symbol=str(kwargs["symbol"]), adjust="hfq-factor")
+
+
+def _ak_stock_adjust_factor(*, symbol: str, adjust: str) -> Any:
+    """通过新浪源读取 A 股复权因子。"""
+
+    import akshare as ak
+
+    exchange = _exchange_for_code(symbol)
+    prefixed_symbol = f"{exchange.lower()}{symbol}" if exchange else symbol
+    return ak.stock_zh_a_daily(symbol=prefixed_symbol, adjust=adjust)
 
 
 def _normalize_tencent_stock_history_frame(frame: Any) -> Any:
@@ -622,6 +674,28 @@ def _daily_bars_from_frame(frame: Any) -> list[dict[str, float | str]]:
             "source_url": "https://akshare.akfamily.xyz/",
         })
     return sorted(bars, key=lambda item: str(item["trade_date"]))
+
+
+def _adjust_factor_rows_from_frame(frame: Any, factor_key: str) -> list[dict[str, float | str]]:
+    """将 AkShare 复权因子 DataFrame 解析为统一因子行。"""
+
+    rows: list[dict[str, float | str]] = []
+    for _, row in frame.iterrows():
+        effective_date = _cell(row, ["date", "日期", "effective_date"])
+        if hasattr(effective_date, "strftime"):
+            date_text = effective_date.strftime("%Y-%m-%d")
+        else:
+            date_text = str(effective_date)[:10]
+        factor_value = _parse_number(_cell(row, [factor_key, factor_key.replace("_", ""), "factor"]))
+        if not date_text or factor_value is None:
+            continue
+        rows.append({
+            "effective_date": date_text,
+            factor_key: float(factor_value),
+            "provider_key": "akshare_sina",
+            "source_url": "https://akshare.akfamily.xyz/",
+        })
+    return sorted(rows, key=lambda item: str(item["effective_date"]))
 
 
 def _with_moving_averages(bars: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:

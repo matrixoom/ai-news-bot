@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 import json
 from pathlib import Path
@@ -64,6 +64,16 @@ class StockDailyBar:
     pb_mrq: float | None
     dividend_yield_ttm: float | None
     total_market_cap: float | None
+
+
+@dataclass(frozen=True)
+class StockAdjustFactor:
+    """单个复权因子生效点。"""
+
+    symbol: str
+    effective_date: str
+    qfq_factor: float | None
+    hfq_factor: float | None
 
 
 @dataclass(frozen=True)
@@ -710,6 +720,69 @@ class StockMarketRepository:
             ).fetchone()
         return row is not None
 
+    def upsert_adjust_factors(self, symbol: str, factors: Sequence[Mapping[str, Any]]) -> int:
+        """幂等写入单只股票的前复权与后复权因子。
+
+        Args:
+            symbol: 带交易所后缀的股票代码。
+            factors: 标准化后的因子行，每行包含 `effective_date` 以及可选 `qfq_factor`、`hfq_factor`。
+
+        Returns:
+            本次处理的有效因子行数量。
+        """
+
+        timestamp = _utc_now()
+        rows = []
+        for item in factors:
+            effective_date = str(item.get("effective_date") or "").strip()[:10]
+            if not effective_date:
+                continue
+            rows.append(
+                (
+                    symbol,
+                    effective_date,
+                    _optional_float(item.get("qfq_factor")),
+                    _optional_float(item.get("hfq_factor")),
+                    str(item.get("provider_key", "akshare_sina")),
+                    str(item.get("source_url", "https://akshare.akfamily.xyz/")),
+                    timestamp,
+                )
+            )
+        if not rows:
+            return 0
+        with self._session() as connection:
+            connection.executemany(
+                """
+                INSERT INTO market_stock_adjust_factor (
+                    symbol, effective_date, qfq_factor, hfq_factor,
+                    provider_key, source_url, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(symbol, effective_date) DO UPDATE SET
+                    qfq_factor=COALESCE(excluded.qfq_factor, market_stock_adjust_factor.qfq_factor),
+                    hfq_factor=COALESCE(excluded.hfq_factor, market_stock_adjust_factor.hfq_factor),
+                    provider_key=excluded.provider_key,
+                    source_url=excluded.source_url,
+                    updated_at=excluded.updated_at
+                """,
+                rows,
+            )
+        return len(rows)
+
+    def has_adjust_factors(self, symbol: str) -> bool:
+        """判断指定股票是否已保存任意复权因子。"""
+
+        with self._session() as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM market_stock_adjust_factor
+                WHERE symbol = ?
+                LIMIT 1
+                """,
+                (symbol,),
+            ).fetchone()
+        return row is not None
+
     def find_daily_bar_missing_windows(
         self,
         *,
@@ -775,8 +848,25 @@ class StockMarketRepository:
             missing_windows.append(((last_date + timedelta(days=1)).isoformat(), required_end.isoformat()))
         return missing_windows
 
-    def load_daily_bars(self, *, symbol: str, start_date: str, end_date: str) -> list[StockDailyBar]:
-        """读取指定日期窗口内的日线行情。"""
+    def load_daily_bars(
+        self,
+        *,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        adjust_type: str = "none",
+    ) -> list[StockDailyBar]:
+        """读取指定日期窗口内的日线行情。
+
+        Args:
+            symbol: 带交易所后缀的股票代码。
+            start_date: 起始交易日，格式为 `YYYY-MM-DD`。
+            end_date: 结束交易日，格式为 `YYYY-MM-DD`。
+            adjust_type: 价格口径，`none` 为不复权，`qfq` 为前复权，`hfq` 为后复权。
+
+        Returns:
+            日线行情列表；复权价格仅动态计算，不写回日线分片表。
+        """
 
         with self._daily_bar_session(symbol) as connection:
             rows = connection.execute(
@@ -790,7 +880,12 @@ class StockMarketRepository:
                 """,
                 (symbol, start_date, end_date),
             ).fetchall()
-        return [self._build_daily_bar(row) for row in rows]
+        bars = [self._build_daily_bar(row) for row in rows]
+        if adjust_type == "none":
+            return bars
+        if adjust_type not in {"qfq", "hfq"}:
+            raise StockMarketValidationError("invalid stock price adjust type")
+        return _with_adjusted_daily_prices(bars, self._load_adjust_factors(symbol=symbol, end_date=end_date), adjust_type)
 
     def upsert_profile(self, profile: Mapping[str, Any]) -> None:
         """写入公司概况、板块和股票属性。"""
@@ -1120,6 +1215,26 @@ class StockMarketRepository:
                 """
                 CREATE INDEX IF NOT EXISTS idx_market_stock_instrument_group_order
                 ON market_stock_instrument_group(sort_order, created_at)
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS market_stock_adjust_factor (
+                    symbol TEXT NOT NULL,
+                    effective_date TEXT NOT NULL,
+                    qfq_factor REAL,
+                    hfq_factor REAL,
+                    provider_key TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(symbol, effective_date)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_market_stock_adjust_factor_symbol_date
+                ON market_stock_adjust_factor(symbol, effective_date)
                 """
             )
         migrate_legacy_market_stock_shards(self._db_path.parent, self._shard_dir)
@@ -1505,6 +1620,29 @@ class StockMarketRepository:
             total_market_cap=_optional_float(row["total_market_cap"]),
         )
 
+    def _load_adjust_factors(self, *, symbol: str, end_date: str) -> list[StockAdjustFactor]:
+        """读取指定截止日期前的复权因子。"""
+
+        with self._session() as connection:
+            rows = connection.execute(
+                """
+                SELECT symbol, effective_date, qfq_factor, hfq_factor
+                FROM market_stock_adjust_factor
+                WHERE symbol = ? AND effective_date <= ?
+                ORDER BY effective_date ASC
+                """,
+                (symbol, end_date),
+            ).fetchall()
+        return [
+            StockAdjustFactor(
+                symbol=str(row["symbol"]),
+                effective_date=str(row["effective_date"]),
+                qfq_factor=_optional_float(row["qfq_factor"]),
+                hfq_factor=_optional_float(row["hfq_factor"]),
+            )
+            for row in rows
+        ]
+
     @contextmanager
     def _session(self) -> Iterator[sqlite3.Connection]:
         """打开主库事务连接，并在成功时提交。"""
@@ -1564,6 +1702,74 @@ def _optional_float(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _with_adjusted_daily_prices(
+    bars: Sequence[StockDailyBar],
+    factors: Sequence[StockAdjustFactor],
+    adjust_type: str,
+) -> list[StockDailyBar]:
+    """按复权因子动态换算 OHLC，并按换算后的收盘价重算均线。"""
+
+    if not bars:
+        return []
+    factor_index = 0
+    active_factor = 1.0
+    adjusted_bars: list[StockDailyBar] = []
+    for bar in bars:
+        while factor_index < len(factors) and factors[factor_index].effective_date <= bar.trade_date:
+            factor_value = factors[factor_index].qfq_factor if adjust_type == "qfq" else factors[factor_index].hfq_factor
+            active_factor = factor_value if factor_value and factor_value > 0 else 1.0
+            factor_index += 1
+        adjusted_bars.append(_adjust_daily_bar_prices(bar, factor=active_factor, adjust_type=adjust_type))
+    return _with_recalculated_daily_moving_averages(adjusted_bars)
+
+
+def _adjust_daily_bar_prices(bar: StockDailyBar, *, factor: float, adjust_type: str) -> StockDailyBar:
+    """返回按指定因子换算 OHLC 的日线对象。"""
+
+    def adjusted(value: float) -> float:
+        next_value = value / factor if adjust_type == "qfq" else value * factor
+        return round(next_value, 4)
+
+    return replace(
+        bar,
+        open_price=adjusted(bar.open_price),
+        close_price=adjusted(bar.close_price),
+        high_price=adjusted(bar.high_price),
+        low_price=adjusted(bar.low_price),
+    )
+
+
+def _with_recalculated_daily_moving_averages(bars: Sequence[StockDailyBar]) -> list[StockDailyBar]:
+    """基于当前价格口径的收盘价重算 MA5/10/20/60/120。"""
+
+    closes = [bar.close_price for bar in bars]
+    averages = {period: _simple_moving_average(closes, period) for period in (5, 10, 20, 60, 120)}
+    return [
+        replace(
+            bar,
+            ma5=averages[5][index],
+            ma10=averages[10][index],
+            ma20=averages[20][index],
+            ma60=averages[60][index],
+            ma120=averages[120][index],
+        )
+        for index, bar in enumerate(bars)
+    ]
+
+
+def _simple_moving_average(values: Sequence[float], period: int) -> list[float | None]:
+    """计算简单移动平均线。"""
+
+    result: list[float | None] = []
+    rolling_sum = 0.0
+    for index, value in enumerate(values):
+        rolling_sum += value
+        if index >= period:
+            rolling_sum -= values[index - period]
+        result.append(round(rolling_sum / period, 4) if index >= period - 1 else None)
+    return result
 
 
 def _normalize_market_board(value: str) -> str:
