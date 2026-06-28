@@ -985,7 +985,7 @@ class StockMarketRepository:
             )
             for item in metrics
         ]
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             connection.executemany(
                 """
                 INSERT INTO market_stock_financial_metric (
@@ -1000,6 +1000,7 @@ class StockMarketRepository:
                 """,
                 rows,
             )
+        with self._session() as connection:
             self._upsert_stock_sync_state(
                 connection,
                 symbol,
@@ -1026,7 +1027,7 @@ class StockMarketRepository:
             已满足所需指标条件时返回 `True`。
         """
 
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             rows = connection.execute(
                 "SELECT DISTINCT metric FROM market_stock_financial_metric WHERE symbol = ?",
                 (symbol,),
@@ -1039,7 +1040,7 @@ class StockMarketRepository:
     def load_financial_metrics(self, *, symbol: str, report_type: str) -> list[StockFinancialMetric]:
         """读取季度或年度财报指标。"""
 
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             rows = connection.execute(
                 """
                 SELECT symbol, report_period, report_type, metric, label, value, unit
@@ -1163,29 +1164,6 @@ class StockMarketRepository:
             )
             connection.execute(
                 """
-                CREATE TABLE IF NOT EXISTS market_stock_financial_metric (
-                    symbol TEXT NOT NULL,
-                    report_period TEXT NOT NULL,
-                    report_type TEXT NOT NULL CHECK(report_type IN ('quarterly', 'yearly')),
-                    metric TEXT NOT NULL,
-                    label TEXT NOT NULL,
-                    value REAL NOT NULL,
-                    unit TEXT NOT NULL,
-                    provider_key TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY(symbol, report_period, report_type, metric),
-                    FOREIGN KEY(symbol) REFERENCES market_stock_instrument(symbol)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_market_stock_financial_symbol_type
-                ON market_stock_financial_metric(symbol, report_type, report_period)
-                """
-            )
-            connection.execute(
-                """
                 CREATE TABLE IF NOT EXISTS market_stock_sync_state (
                     symbol TEXT PRIMARY KEY,
                     latest_trade_date TEXT,
@@ -1221,6 +1199,7 @@ class StockMarketRepository:
         if self._precreate_shards:
             initialize_all_market_stock_shards(self._shard_dir)
         self._migrate_legacy_daily_bars()
+        self._migrate_legacy_financial_metrics()
         self._migrate_legacy_adjust_factors()
 
     def _migrate_stock_instrument_type_check(self, connection: sqlite3.Connection) -> None:
@@ -1519,6 +1498,91 @@ class StockMarketRepository:
             )
         with self._session() as connection:
             connection.execute("DROP TABLE market_stock_adjust_factor")
+            connection.execute("VACUUM")
+
+    def _migrate_legacy_financial_metrics(self) -> None:
+        """将主库旧财务指标表幂等迁移到对应股票分片。"""
+
+        with self._session() as connection:
+            legacy_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_financial_metric'"
+            ).fetchone()
+            if legacy_table is None:
+                return
+            symbols = [
+                str(row["symbol"])
+                for row in connection.execute(
+                    "SELECT DISTINCT symbol FROM market_stock_financial_metric ORDER BY symbol"
+                ).fetchall()
+            ]
+            source_total = int(connection.execute("SELECT COUNT(*) FROM market_stock_financial_metric").fetchone()[0])
+
+        if not symbols:
+            with self._session() as connection:
+                connection.execute("DROP TABLE market_stock_financial_metric")
+                connection.execute("VACUUM")
+            return
+
+        symbols_by_shard: dict[Path, list[str]] = defaultdict(list)
+        for symbol in symbols:
+            symbols_by_shard[resolve_market_stock_shard_path(symbol, self._shard_dir)].append(symbol)
+
+        migrated_source_count = 0
+        for shard_path, shard_symbols in symbols_by_shard.items():
+            initialize_market_stock_shard(shard_path)
+            shard_source_count = 0
+            with self._session() as source_connection, self._shard_session(shard_path) as shard_connection:
+                for start in range(0, len(shard_symbols), 500):
+                    symbol_batch = shard_symbols[start : start + 500]
+                    placeholders = ", ".join("?" for _ in symbol_batch)
+                    batch_source_count = 0
+                    source_cursor = source_connection.execute(
+                        f"""
+                        SELECT symbol, report_period, report_type, metric, label,
+                               value, unit, provider_key, updated_at
+                        FROM market_stock_financial_metric
+                        WHERE symbol IN ({placeholders})
+                        ORDER BY symbol, report_period, report_type, metric
+                        """,
+                        symbol_batch,
+                    )
+                    while source_rows := source_cursor.fetchmany(1_000):
+                        shard_connection.executemany(
+                            """
+                            INSERT INTO market_stock_financial_metric (
+                                symbol, report_period, report_type, metric, label,
+                                value, unit, provider_key, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(symbol, report_period, report_type, metric) DO UPDATE SET
+                                label=excluded.label,
+                                value=excluded.value,
+                                unit=excluded.unit,
+                                provider_key=excluded.provider_key,
+                                updated_at=excluded.updated_at
+                            """,
+                            source_rows,
+                        )
+                        batch_source_count += len(source_rows)
+                    target_count = int(
+                        shard_connection.execute(
+                            f"SELECT COUNT(*) FROM market_stock_financial_metric WHERE symbol IN ({placeholders})",
+                            symbol_batch,
+                        ).fetchone()[0]
+                    )
+                    if target_count < batch_source_count:
+                        raise RuntimeError(
+                            f"股票财务指标分片迁移校验失败: shard={shard_path.name}, "
+                            f"source={batch_source_count}, target={target_count}"
+                        )
+                    shard_source_count += batch_source_count
+            migrated_source_count += shard_source_count
+
+        if migrated_source_count != source_total:
+            raise RuntimeError(
+                f"股票财务指标分片迁移总数校验失败: source={source_total}, migrated={migrated_source_count}"
+            )
+        with self._session() as connection:
+            connection.execute("DROP TABLE market_stock_financial_metric")
             connection.execute("VACUUM")
 
     def _load_latest_prices(self, symbols: Sequence[str]) -> dict[str, float]:

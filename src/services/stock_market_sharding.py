@@ -58,6 +58,26 @@ CREATE INDEX IF NOT EXISTS idx_market_stock_adjust_factor_symbol_date
 ON market_stock_adjust_factor(symbol, effective_date)
 """
 
+MARKET_STOCK_FINANCIAL_METRIC_TABLE_SQL: Final[str] = """
+CREATE TABLE IF NOT EXISTS market_stock_financial_metric (
+    symbol TEXT NOT NULL,
+    report_period TEXT NOT NULL,
+    report_type TEXT NOT NULL CHECK(report_type IN ('quarterly', 'yearly')),
+    metric TEXT NOT NULL,
+    label TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    provider_key TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(symbol, report_period, report_type, metric)
+)
+"""
+
+MARKET_STOCK_FINANCIAL_METRIC_INDEX_SQL: Final[str] = """
+CREATE INDEX IF NOT EXISTS idx_market_stock_financial_symbol_type
+ON market_stock_financial_metric(symbol, report_type, report_period)
+"""
+
 MARKET_STOCK_DAILY_BAR_OPTIONAL_COLUMNS: Final[dict[str, str]] = {
     "pe_ttm": "REAL",
     "pb_mrq": "REAL",
@@ -187,6 +207,8 @@ def initialize_market_stock_shard(db_path: str | Path) -> Path:
         connection.execute(MARKET_STOCK_DAILY_BAR_INDEX_SQL)
         connection.execute(MARKET_STOCK_ADJUST_FACTOR_TABLE_SQL)
         connection.execute(MARKET_STOCK_ADJUST_FACTOR_INDEX_SQL)
+        connection.execute(MARKET_STOCK_FINANCIAL_METRIC_TABLE_SQL)
+        connection.execute(MARKET_STOCK_FINANCIAL_METRIC_INDEX_SQL)
         connection.commit()
     return path
 

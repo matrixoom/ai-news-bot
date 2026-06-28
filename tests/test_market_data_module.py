@@ -114,11 +114,20 @@ class StockMarketShardingTests(unittest.TestCase):
                 "SELECT name FROM sqlite_master WHERE type = 'index' "
                 "AND name = 'idx_market_stock_adjust_factor_symbol_date'"
             ).fetchone()
+            financial_table = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_financial_metric'"
+            ).fetchone()
+            financial_index = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' "
+                "AND name = 'idx_market_stock_financial_symbol_type'"
+            ).fetchone()
 
         self.assertIsNotNone(table)
         self.assertIsNotNone(index)
         self.assertIsNotNone(factor_table)
         self.assertIsNotNone(factor_index)
+        self.assertIsNotNone(financial_table)
+        self.assertIsNotNone(financial_index)
 
     def test_stock_shard_initializer_adds_valuation_columns_to_existing_table(self) -> None:
         """校验旧分片初始化时会幂等补齐四个可空估值字段。"""
@@ -1453,6 +1462,94 @@ class StockMarketModuleTests(unittest.TestCase):
                 required_metrics={"revenue", "roe"},
             )
         )
+        with repository._daily_bar_session("000001.SZ") as connection:
+            metrics_count = connection.execute(
+                "SELECT COUNT(*) FROM market_stock_financial_metric WHERE symbol = ?",
+                ("000001.SZ",),
+            ).fetchone()[0]
+        self.assertEqual(metrics_count, 2)
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            main_financial_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_financial_metric'"
+            ).fetchone()
+        self.assertIsNone(main_financial_table)
+
+    def test_legacy_financial_metrics_migrate_from_main_database_to_stock_shards(self) -> None:
+        """校验旧主库财务指标会按股票代码迁移到对应行情分片。"""
+
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute(
+                """
+                CREATE TABLE market_stock_financial_metric (
+                    symbol TEXT NOT NULL,
+                    report_period TEXT NOT NULL,
+                    report_type TEXT NOT NULL CHECK(report_type IN ('quarterly', 'yearly')),
+                    metric TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    value REAL NOT NULL,
+                    unit TEXT NOT NULL,
+                    provider_key TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(symbol, report_period, report_type, metric)
+                )
+                """
+            )
+            connection.executemany(
+                """
+                INSERT INTO market_stock_financial_metric (
+                    symbol, report_period, report_type, metric, label,
+                    value, unit, provider_key, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        "000001.SZ",
+                        "2026-03-31",
+                        "quarterly",
+                        "revenue",
+                        "营业收入",
+                        352.77,
+                        "亿元",
+                        "legacy",
+                        "2026-06-01T00:00:00Z",
+                    ),
+                    (
+                        "600519.SH",
+                        "2025-12-31",
+                        "yearly",
+                        "roe",
+                        "ROE",
+                        9.15,
+                        "%",
+                        "legacy",
+                        "2026-06-01T00:00:00Z",
+                    ),
+                ],
+            )
+            connection.commit()
+
+        repository = self._repository()
+
+        self.assertTrue(repository.has_financial_metrics("000001.SZ", required_metrics={"revenue"}))
+        self.assertTrue(repository.has_financial_metrics("600519.SH", required_metrics={"roe"}))
+        for symbol, expected_metric in (("000001.SZ", "revenue"), ("600519.SH", "roe")):
+            shard_path = resolve_market_stock_shard_path(symbol, self.db_path.parent / "market")
+            with closing(sqlite3.connect(shard_path)) as connection:
+                row = connection.execute(
+                    """
+                    SELECT metric
+                    FROM market_stock_financial_metric
+                    WHERE symbol = ?
+                    """,
+                    (symbol,),
+                ).fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row[0], expected_metric)
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            legacy_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_financial_metric'"
+            ).fetchone()
+        self.assertIsNone(legacy_table)
 
     def test_stock_detail_lazy_loads_requested_window_when_history_absent(self) -> None:
         """校验首次查看股票详情时，会懒加载日线并返回概况和财报数据。"""

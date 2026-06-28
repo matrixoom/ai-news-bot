@@ -713,7 +713,9 @@ uv run python main.py macro-sync
 
 估值字段均允许为 `null`。`pe_ttm` 与 `pb_mrq` 单位为倍，
 `dividend_yield_ttm` 单位为 `%`，`total_market_cap` 单位为亿元。季度财务新增指标的
-`points[].unit` 均为 `%`。本次契约只增加字段和指标序列，不删除或改名现有字段。
+`points[].unit` 均为 `%`。财务指标保存到同一股票分片库的独立表
+`market_stock_financial_metric(symbol, report_period, report_type, metric)`，仓储启动时会把旧主库财务指标表
+按 `symbol` 幂等迁移到对应分片。本次契约只调整本地存储位置，不删除或改名现有响应字段。
 
 股票日线刷新会从东方财富估值历史补充 PE(TTM)、PB(MRQ) 和总市值；股息率(TTM) 基于过去
 365 个自然日内已实施且已除息的每股现金分红与当日收盘价计算。附加数据源失败时保留
