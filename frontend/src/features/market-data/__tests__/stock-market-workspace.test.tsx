@@ -556,16 +556,16 @@ describe("StockMarketWorkspace", () => {
         legend?: { data?: string[]; left?: string; top?: number; orient?: string; selected?: Record<string, boolean> };
         series?: Array<{ name?: string; data?: unknown[]; lineStyle?: { type?: string | number[] } }>;
       };
-      expect(indexOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
+      expect(indexOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20"]);
       expect(indexOption.legend?.top).toBe(10);
       expect(indexOption.legend?.left).toBe("center");
       expect(indexOption.legend?.orient).toBe("horizontal");
-      expect(indexOption.legend?.selected).toEqual({ MA60: false, MA120: false });
+      expect(indexOption.legend?.selected).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "MA5")?.lineStyle?.type).toEqual([6, 4]);
       expect(indexOption.series?.find((series) => series.name === "MA10")?.lineStyle?.type).toEqual([3, 3]);
       expect(indexOption.series?.find((series) => series.name === "MA20")?.lineStyle?.type).toBe("solid");
-      expect(indexOption.series?.find((series) => series.name === "MA60")?.lineStyle?.type).toEqual([10, 5, 2, 5]);
-      expect(indexOption.series?.find((series) => series.name === "MA120")?.lineStyle?.type).toEqual([6, 3, 5, 2]);
+      expect(indexOption.series?.find((series) => series.name === "MA60")).toBeUndefined();
+      expect(indexOption.series?.find((series) => series.name === "MA120")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "PE(TTM)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "PB(MRQ)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "K线")?.data).toHaveLength(2);
@@ -1167,7 +1167,18 @@ describe("StockMarketWorkspace", () => {
         data?: string[];
         selected?: Record<string, boolean>;
       };
-      tooltip?: { padding?: number[]; textStyle?: { fontSize?: number } };
+      tooltip?: {
+        padding?: number[];
+        textStyle?: { fontSize?: number };
+        formatter?: (
+          params: Array<{
+            dataIndex: number;
+            marker: string;
+            seriesName: string;
+            value: number | number[] | null;
+          }>,
+        ) => string;
+      };
       grid?: Array<{ height?: string | number }>;
       yAxis?: Array<{ axisLabel?: { show?: boolean; fontSize?: number } }>;
       series?: Array<{ name?: string; data?: Array<number | null>; lineStyle?: { type?: string | number[] } }>;
@@ -1179,21 +1190,85 @@ describe("StockMarketWorkspace", () => {
     expect(klineOption.legend?.top).toBe(10);
     expect(klineOption.legend?.left).toBe("center");
     expect(klineOption.legend?.orient).toBe("horizontal");
-    expect(klineOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
-    expect(klineOption.legend?.selected).toEqual({ MA60: false, MA120: false });
+    expect(klineOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20"]);
+    expect(klineOption.legend?.selected).toBeUndefined();
     expect(seriesByName["PE(TTM)"]).toBeUndefined();
     expect(seriesByName["PB(MRQ)"]).toBeUndefined();
     expect(seriesByName["总市值"]).toBeUndefined();
     expect(seriesByName["MA5"]?.lineStyle?.type).toEqual([6, 4]);
     expect(seriesByName["MA10"]?.lineStyle?.type).toEqual([3, 3]);
     expect(seriesByName["MA20"]?.lineStyle?.type).toBe("solid");
-    expect(seriesByName["MA60"]?.lineStyle?.type).toEqual([10, 5, 2, 5]);
-    expect(seriesByName["MA120"]?.lineStyle?.type).toEqual([6, 3, 5, 2]);
+    expect(seriesByName["MA60"]).toBeUndefined();
+    expect(seriesByName["MA120"]).toBeUndefined();
     expect(klineOption.tooltip?.textStyle?.fontSize).toBe(10);
     expect(klineOption.tooltip?.padding).toEqual([6, 8]);
+    const tooltipHtml = klineOption.tooltip?.formatter?.([
+      { dataIndex: 0, marker: "", seriesName: "K线", value: [10, 10.5, 9, 11] },
+      { dataIndex: 0, marker: "", seriesName: "MA5", value: 10.2 },
+      { dataIndex: 0, marker: "", seriesName: "MA20", value: null },
+      { dataIndex: 0, marker: "", seriesName: "MA60", value: 10.9 },
+      { dataIndex: 0, marker: "", seriesName: "MA120", value: 10.8 },
+    ]);
+    expect(tooltipHtml).toContain("至今涨幅");
+    expect(tooltipHtml).toContain("-4.55%");
+    expect(tooltipHtml).toContain("color:#059669");
+    expect(tooltipHtml).not.toContain("MA60");
+    expect(tooltipHtml).not.toContain("MA120");
+    expect((tooltipHtml?.indexOf("MA5") ?? -1)).toBeLessThan(tooltipHtml?.indexOf("至今涨幅") ?? -1);
     expect(klineOption.grid?.[0]?.height).toBe("56%");
     expect(klineOption.yAxis?.[0]?.axisLabel?.fontSize).toBe(10);
     expect(klineOption.yAxis?.[1]?.axisLabel?.show).toBe(false);
+  });
+
+  it("uses red positive and green negative colors for the kline gain-to-date tooltip", async () => {
+    mocks.detailDailyBars = [
+      {
+        ...dailyBars[0],
+        date: "2026-06-05",
+        open: 11.5,
+        high: 12.5,
+        low: 11,
+        close: 12,
+        ma5: 11.6,
+        ma10: 11.2,
+        ma20: 10.8,
+      },
+      {
+        ...dailyBars[1],
+        date: "2026-06-06",
+        open: 10.5,
+        high: 11,
+        low: 9.8,
+        close: 10,
+        ma5: 10.6,
+        ma10: 10.4,
+        ma20: 10.2,
+      },
+    ];
+    render(<StockMarketWorkspace />);
+
+    await waitFor(() => expect(mocks.echartOptions.length).toBeGreaterThan(0));
+    const klineOption = mocks.echartOptions[0] as {
+      tooltip?: {
+        formatter?: (
+          params: Array<{
+            dataIndex: number;
+            marker: string;
+            seriesName: string;
+            value: number | number[] | null;
+          }>,
+        ) => string;
+      };
+    };
+
+    const tooltipHtml = klineOption.tooltip?.formatter?.([
+      { dataIndex: 0, marker: "", seriesName: "K线", value: [11.5, 12, 11, 12.5] },
+      { dataIndex: 0, marker: "", seriesName: "MA20", value: 10.8 },
+    ]);
+
+    expect(tooltipHtml).toContain("至今涨幅");
+    expect(tooltipHtml).toContain("+20.00%");
+    expect(tooltipHtml).toContain("color:#dc2626");
   });
 
   it("uses smaller financial controls and keeps the chart in a flexible panel", async () => {

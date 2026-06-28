@@ -193,17 +193,20 @@ class StockMarketSyncService:
         return {"daily_bars": count}
 
     def sync_adjust_factors(self, instrument: StockInstrument) -> dict[str, int]:
-        """同步单只 A 股的前复权和后复权因子。
+        """同步单只标的的前复权和后复权因子。
 
         Args:
-            instrument: 已持久化的股票标的；ETF/LOF 不同步股票复权因子。
+            instrument: 已持久化的股票、ETF 或 LOF 标的。
 
         Returns:
             `adjust_factors` 表示本次写入或更新的因子行数。
         """
 
-        if instrument.instrument_type != "stock":
-            return {"adjust_factors": 0}
+        if _is_fund_instrument(instrument):
+            rows = self._fund_adjust_factor_rows(instrument)
+            count = self._repository.upsert_adjust_factors(instrument.symbol, rows)
+            return {"adjust_factors": count}
+
         qfq_frame = self._qfq_factor_loader(symbol=instrument.code)
         hfq_frame = self._hfq_factor_loader(symbol=instrument.code)
         rows_by_date: dict[str, dict[str, Any]] = {}
@@ -213,6 +216,30 @@ class StockMarketSyncService:
             rows_by_date.setdefault(str(row["effective_date"]), {"effective_date": row["effective_date"]}).update(row)
         count = self._repository.upsert_adjust_factors(instrument.symbol, list(rows_by_date.values()))
         return {"adjust_factors": count}
+
+    def _fund_adjust_factor_rows(self, instrument: StockInstrument) -> list[dict[str, Any]]:
+        """用基金不复权与复权日线反推出复权因子变化点。
+
+        Args:
+            instrument: ETF 或 LOF 标的。
+
+        Returns:
+            可写入仓储的复权因子行；因子未变化的连续区间只保留首日。
+        """
+
+        sync_state = self._repository.get_sync_state(instrument.symbol)
+        start_date = (sync_state.earliest_trade_date if sync_state and sync_state.earliest_trade_date else "1900-01-01")
+        end_date = (sync_state.latest_trade_date if sync_state and sync_state.latest_trade_date else date.today().isoformat())
+        loader = self._lof_daily_loader if instrument.instrument_type == "lof" else self._etf_daily_loader
+        loader_kwargs = {
+            "symbol": instrument.code,
+            "start_date": start_date.replace("-", ""),
+            "end_date": end_date.replace("-", ""),
+        }
+        base_bars = _daily_bars_from_frame(loader(**loader_kwargs, adjust=""))
+        qfq_bars = _daily_bars_from_frame(loader(**loader_kwargs, adjust="qfq"))
+        hfq_bars = _daily_bars_from_frame(loader(**loader_kwargs, adjust="hfq"))
+        return _fund_adjust_factor_rows_from_daily_bars(base_bars, qfq_bars, hfq_bars)
 
     def sync_profile(self, instrument: StockInstrument) -> dict[str, int]:
         """同步单只股票公司概况；ETF/LOF 使用基础信息兜底。"""
@@ -398,20 +425,24 @@ def _ak_etf_daily(**kwargs: Any) -> Any:
     symbol = str(kwargs["symbol"])
     start_date = str(kwargs["start_date"])
     end_date = str(kwargs["end_date"])
+    adjust = str(kwargs.get("adjust", ""))
     exchange = _exchange_for_code(symbol)
     prefixed_symbol = f"{exchange.lower()}{symbol}" if exchange else symbol
+    em_loader = (
+        "fund_etf_hist_em",
+        lambda: ak.fund_etf_hist_em(
+            symbol=symbol,
+            period="daily",
+            start_date=start_date,
+            end_date=end_date,
+            adjust=adjust,
+        ),
+    )
+    if adjust:
+        return _first_successful_akshare_call([em_loader])
     return _first_successful_akshare_call(
         [
-            (
-                "fund_etf_hist_em",
-                lambda: ak.fund_etf_hist_em(
-                    symbol=symbol,
-                    period="daily",
-                    start_date=start_date,
-                    end_date=end_date,
-                    adjust="",
-                ),
-            ),
+            em_loader,
             (
                 "fund_etf_hist_sina",
                 lambda: _filter_history_frame_by_date(
@@ -434,7 +465,7 @@ def _ak_lof_daily(**kwargs: Any) -> Any:
         period="daily",
         start_date=str(kwargs["start_date"]),
         end_date=str(kwargs["end_date"]),
-        adjust="",
+        adjust=str(kwargs.get("adjust", "")),
     )
 
 
@@ -696,6 +727,73 @@ def _adjust_factor_rows_from_frame(frame: Any, factor_key: str) -> list[dict[str
             "source_url": "https://akshare.akfamily.xyz/",
         })
     return sorted(rows, key=lambda item: str(item["effective_date"]))
+
+
+def _fund_adjust_factor_rows_from_daily_bars(
+    base_bars: Sequence[Mapping[str, Any]],
+    qfq_bars: Sequence[Mapping[str, Any]],
+    hfq_bars: Sequence[Mapping[str, Any]],
+) -> list[dict[str, float | str]]:
+    """从基金日线价格反推前复权和后复权因子变化点。
+
+    Args:
+        base_bars: 不复权 OHLCV 日线。
+        qfq_bars: 前复权 OHLCV 日线。
+        hfq_bars: 后复权 OHLCV 日线。
+
+    Returns:
+        按日期升序排列的因子变化点，字段兼容 `upsert_adjust_factors`。
+    """
+
+    base_close_by_date = _close_price_by_trade_date(base_bars)
+    qfq_close_by_date = _close_price_by_trade_date(qfq_bars)
+    hfq_close_by_date = _close_price_by_trade_date(hfq_bars)
+    rows_by_date: dict[str, dict[str, float | str]] = {}
+    previous_qfq_factor: float | None = None
+    previous_hfq_factor: float | None = None
+    for trade_date in sorted(base_close_by_date):
+        base_close = base_close_by_date[trade_date]
+        if base_close <= 0:
+            continue
+        qfq_close = qfq_close_by_date.get(trade_date)
+        if qfq_close is not None and qfq_close > 0:
+            qfq_factor = round(base_close / qfq_close, 8)
+            if previous_qfq_factor is None or not _float_nearly_equal(qfq_factor, previous_qfq_factor):
+                rows_by_date.setdefault(trade_date, {"effective_date": trade_date}).update({
+                    "qfq_factor": qfq_factor,
+                    "provider_key": "akshare_fund_adjust",
+                    "source_url": "https://akshare.akfamily.xyz/",
+                })
+                previous_qfq_factor = qfq_factor
+        hfq_close = hfq_close_by_date.get(trade_date)
+        if hfq_close is not None and hfq_close > 0:
+            hfq_factor = round(hfq_close / base_close, 8)
+            if previous_hfq_factor is None or not _float_nearly_equal(hfq_factor, previous_hfq_factor):
+                rows_by_date.setdefault(trade_date, {"effective_date": trade_date}).update({
+                    "hfq_factor": hfq_factor,
+                    "provider_key": "akshare_fund_adjust",
+                    "source_url": "https://akshare.akfamily.xyz/",
+                })
+                previous_hfq_factor = hfq_factor
+    return [rows_by_date[trade_date] for trade_date in sorted(rows_by_date)]
+
+
+def _close_price_by_trade_date(bars: Sequence[Mapping[str, Any]]) -> dict[str, float]:
+    """提取日线收盘价索引，过滤无效日期和值。"""
+
+    values: dict[str, float] = {}
+    for item in bars:
+        trade_date = str(item.get("trade_date") or "").strip()[:10]
+        close_price = _parse_number(item.get("close_price"))
+        if trade_date and close_price is not None:
+            values[trade_date] = float(close_price)
+    return values
+
+
+def _float_nearly_equal(left: float, right: float, *, tolerance: float = 0.0000001) -> bool:
+    """判断两个因子是否可视为同一变化点。"""
+
+    return abs(left - right) <= tolerance
 
 
 def _with_moving_averages(bars: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:

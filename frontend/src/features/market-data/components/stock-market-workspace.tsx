@@ -98,23 +98,25 @@ const TURTLE_HELP_TEXT = {
   systemTwoExit: "多头持仓跌破前 20 日低点时触发离场。",
   addOn: "入场后每上涨 0.5N 触发一次加仓观察信号。",
 } as const;
-const KLINE_MA_VISIBLE_BY_DEFAULT: Record<string, boolean> = {
-  MA60: false,
-  MA120: false,
-};
+const KLINE_VISIBLE_MA_SERIES = ["MA5", "MA10", "MA20"] as const;
 const KLINE_MA_STYLES = {
   MA5: { color: "#f59e0b", lineType: [6, 4] },
   MA10: { color: "#3daee7", lineType: [3, 3] },
   MA20: { color: "#3979f1", lineType: "solid" },
-  MA60: { color: "#bb24dd", lineType: [10, 5, 2, 5] },
-  MA120: { color: "#655d5d", lineType: [6, 3, 5, 2] },
 } satisfies Record<string, { color: string; lineType: "solid" | number[] }>;
+type KlineVisibleMaSeries = (typeof KLINE_VISIBLE_MA_SERIES)[number];
 type StockDetailTab = "overview" | "financial";
 type TurtleTradingSystem = "systemOne" | "systemTwo";
 type TurtleThresholdSignal = {
   isReady: boolean;
   threshold: number | null;
   triggered: boolean;
+};
+type KlineTooltipPoint = {
+  dataIndex?: unknown;
+  marker?: unknown;
+  seriesName?: unknown;
+  value?: unknown;
 };
 const STOCK_GROUP_STORAGE_KEY = "stock-market-instrument-groups";
 const ALL_INSTRUMENT_GROUP_ID = "all";
@@ -1799,7 +1801,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
   const chartHeightClass = props.mode === "index" ? "min-h-[34rem]" : "min-h-[22rem]";
   const option = useMemo((): echarts.EChartsOption => {
     const labels = props.bars.map((bar) => bar.date);
-    const legendData = ["K线", "MA5", "MA10", "MA20", "MA60", "MA120"];
+    const legendData = ["K线", ...KLINE_VISIBLE_MA_SERIES];
     return {
       animation: false,
       tooltip: {
@@ -1809,6 +1811,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         ...chartTheme.tooltip,
         textStyle: { fontSize: 10, lineHeight: 15 },
         axisPointer: { type: "cross" },
+        formatter: buildKlineTooltipFormatter(props.bars, workbenchTheme.positive, workbenchTheme.negative),
       },
       legend: {
         top: 10,
@@ -1819,7 +1822,6 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         itemHeight: 8,
         textStyle: chartTheme.legendText,
         data: legendData,
-        selected: KLINE_MA_VISIBLE_BY_DEFAULT,
       },
       grid: [
         { left: 54, right: 42, top: 48, height: "56%" },
@@ -1885,16 +1887,6 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
           "MA20",
           props.bars.map((bar) => bar.ma20),
           KLINE_MA_STYLES.MA20,
-        ),
-        lineSeries(
-          "MA60",
-          props.bars.map((bar) => bar.ma60),
-          KLINE_MA_STYLES.MA60,
-        ),
-        lineSeries(
-          "MA120",
-          props.bars.map((bar) => bar.ma120),
-          KLINE_MA_STYLES.MA120,
         ),
         {
           name: "成交量",
@@ -2159,6 +2151,140 @@ function calculateRangeChangeRate(bars: StockDailyBar[]): number | null {
   const latestBar = bars.at(-1);
   if (!firstBar || !latestBar || firstBar.close === 0) return null;
   return ((latestBar.close - firstBar.close) / Math.abs(firstBar.close)) * 100;
+}
+
+/**
+ * 计算鼠标选中日收盘价相对最新交易日收盘价的涨跌幅。
+ * @param selectedClose 鼠标指针当前选中交易日的收盘价。
+ * @param latestClose 当前时间范围内最新交易日的收盘价。
+ * @returns 相对最新收盘价的涨跌幅百分比；价格无效时返回 null。
+ */
+function calculateCloseDistanceFromLatest(selectedClose: number, latestClose: number | undefined): number | null {
+  if (!Number.isFinite(selectedClose) || latestClose === undefined || !Number.isFinite(latestClose) || latestClose === 0) {
+    return null;
+  }
+  return ((selectedClose - latestClose) / Math.abs(latestClose)) * 100;
+}
+
+/**
+ * 构建 K 线 tooltip 内容，补充选中日收盘价相对最新收盘价的涨跌幅。
+ * @param bars 按交易日升序排列的日线序列。
+ * @returns ECharts tooltip formatter，用于股票标的和宽基指数 K 线。
+ */
+function buildKlineTooltipFormatter(
+  bars: StockDailyBar[],
+  positiveColor: string,
+  negativeColor: string,
+): (params: unknown) => string {
+  const latestClose = bars.at(-1)?.close;
+  return (params: unknown): string => {
+    const points = normalizeKlineTooltipPoints(params);
+    const dataIndexPoint = points.find((point) => typeof point.dataIndex === "number");
+    const dataIndex = typeof dataIndexPoint?.dataIndex === "number" ? dataIndexPoint.dataIndex : undefined;
+    const bar = dataIndex === undefined ? undefined : bars[dataIndex];
+    if (!bar) return "";
+
+    const klinePoint = points.find((point) => point.seriesName === "K线");
+    const closeDistanceRate = calculateCloseDistanceFromLatest(bar.close, latestClose);
+    const gainToDateColor =
+      closeDistanceRate === null || closeDistanceRate === 0
+        ? undefined
+        : closeDistanceRate > 0
+          ? positiveColor
+          : negativeColor;
+    const maRows = KLINE_VISIBLE_MA_SERIES.flatMap((seriesName) => {
+      const value = klineMaValue(bar, seriesName);
+      const point = points.find((item) => item.seriesName === seriesName);
+      return value === null ? [] : [buildTooltipRow(point?.marker, seriesName, formatKlineNumber(value))];
+    });
+    const rows = [
+      buildTooltipRow(klinePoint?.marker, "K线", ""),
+      buildTooltipRow("", "open", formatKlineNumber(bar.open)),
+      buildTooltipRow("", "close", formatKlineNumber(bar.close)),
+      buildTooltipRow("", "lowest", formatKlineNumber(bar.low)),
+      buildTooltipRow("", "highest", formatKlineNumber(bar.high)),
+      ...maRows,
+      buildTooltipRow("", "至今涨幅", closeDistanceRate === null ? "--" : `${formatSigned(closeDistanceRate, 2)}%`, gainToDateColor),
+    ];
+
+    return [`<div>${escapeTooltipHtml(bar.date)}</div>`, ...rows].join("");
+  };
+}
+
+/**
+ * 归一化 ECharts tooltip formatter 入参，兼容单系列和 axis 多系列两种形态。
+ * @param params ECharts 传入的 formatter 原始参数。
+ * @returns 可安全读取常用字段的 tooltip 点数组。
+ */
+function normalizeKlineTooltipPoints(params: unknown): KlineTooltipPoint[] {
+  const values = Array.isArray(params) ? params : [params];
+  return values.filter((value): value is KlineTooltipPoint => typeof value === "object" && value !== null);
+}
+
+/**
+ * 读取单个交易日的均线数值。
+ * @param bar 单个日线点。
+ * @param seriesName 均线系列名称。
+ * @returns 对应均线值；无数据时返回 null。
+ */
+function klineMaValue(bar: StockDailyBar, seriesName: KlineVisibleMaSeries): number | null {
+  const keyBySeries = {
+    MA5: "ma5",
+    MA10: "ma10",
+    MA20: "ma20",
+  } as const;
+  return bar[keyBySeries[seriesName]];
+}
+
+/**
+ * 渲染 tooltip 的单行键值内容。
+ * @param marker ECharts 提供的系列色块 HTML。
+ * @param label 行标签。
+ * @param value 行值。
+ * @returns 可供 ECharts tooltip 使用的 HTML 字符串。
+ */
+function buildTooltipRow(marker: unknown, label: string, value: string, valueColor?: string): string {
+  const valueStyle = `margin-left:16px;${valueColor ? `color:${valueColor};` : ""}`;
+  return [
+    '<div style="display:flex;align-items:center;gap:8px;justify-content:space-between;min-width:132px;">',
+    `<span>${tooltipMarkerHtml(marker)}${escapeTooltipHtml(label)}</span>`,
+    value ? `<strong style="${valueStyle}">${escapeTooltipHtml(value)}</strong>` : "",
+    "</div>",
+  ].join("");
+}
+
+/**
+ * 提取 ECharts HTML 色块标记，非 HTML 字符串形态时忽略。
+ * @param marker ECharts tooltip marker 字段。
+ * @returns 可直接放入 tooltip HTML 的 marker 字符串。
+ */
+function tooltipMarkerHtml(marker: unknown): string {
+  return typeof marker === "string" ? marker : "";
+}
+
+/**
+ * 格式化 K 线 tooltip 数值，避免小数位被强制补零。
+ * @param value 待展示的价格或均线数值。
+ * @returns 最多保留 4 位小数的本地化数字。
+ */
+function formatKlineNumber(value: number): string {
+  return new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
+/**
+ * 转义 tooltip HTML 文本，避免动态字段破坏 tooltip 结构。
+ * @param value 需要展示的文本。
+ * @returns 转义后的安全文本。
+ */
+function escapeTooltipHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**

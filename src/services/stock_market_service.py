@@ -799,6 +799,15 @@ class StockMarketService:
             warnings.append(warning)
             logger.warning("stock daily refresh failed for %s: %s", instrument.symbol, warning)
             self._repository.record_sync_warning(instrument.symbol, warning)
+        try:
+            factor_result = self._sync_service.sync_adjust_factors(instrument)
+            if isinstance(factor_result, dict):
+                result.update(factor_result)
+        except Exception as error:
+            warning = f"复权因子刷新失败：{_compact_error_message(error)}"
+            warnings.append(warning)
+            logger.warning("stock adjust factor refresh failed for %s: %s", instrument.symbol, warning)
+            self._repository.record_sync_warning(instrument.symbol, warning)
         if instrument.instrument_type == "stock":
             try:
                 result.update(self._sync_service.sync_financials(instrument))
@@ -807,10 +816,6 @@ class StockMarketService:
                 warnings.append(warning)
                 logger.warning("stock financial refresh failed for %s: %s", instrument.symbol, warning)
                 self._repository.record_sync_warning(instrument.symbol, warning)
-            if price_adjust_type != "none":
-                factor_warning = self._ensure_adjust_factors(instrument, price_adjust_type)
-                if factor_warning:
-                    warnings.append(factor_warning)
         self._ensure_profile_and_financials(instrument, ensure_financials=False)
         payload = self._build_detail_payload(
             instrument,
@@ -944,21 +949,21 @@ class StockMarketService:
         """
 
         if refresh_mode == "history" and instrument.history_coverage_status == "covered":
-            return []
+            return self._sync_adjust_factors_for_refresh(instrument)
         effective_start = self._resolve_all_refresh_start(instrument, start=start, end=end)
         latest_trade_date: date | None = None
         if refresh_mode == "today":
             sync_state = self._repository.get_sync_state(instrument.symbol)
             latest_trade_date = _parse_iso_date(sync_state.latest_trade_date if sync_state else "")
             if latest_trade_date is None:
-                return []
+                return self._sync_adjust_factors_for_refresh(instrument)
             effective_start = self._resolve_today_refresh_start(
                 instrument.symbol,
                 latest_trade_date=latest_trade_date,
                 end=end,
             )
         if effective_start > end:
-            return []
+            return self._sync_adjust_factors_for_refresh(instrument)
         start_text = effective_start.isoformat()
         end_text = end.isoformat()
         is_recent_week_refetch = (
@@ -977,7 +982,7 @@ class StockMarketService:
                 start_text,
                 end_text,
             )
-            return []
+            return self._sync_adjust_factors_for_refresh(instrument)
 
         errors: list[str] = []
         try:
@@ -1009,7 +1014,20 @@ class StockMarketService:
             )
             self._repository.record_sync_warning(instrument.symbol, warning)
             errors.append(warning)
+        errors.extend(self._sync_adjust_factors_for_refresh(instrument))
         return errors
+
+    def _sync_adjust_factors_for_refresh(self, instrument: StockInstrument) -> list[str]:
+        """全标的刷新中同步复权因子，失败时返回可汇总告警。"""
+
+        try:
+            self._sync_service.sync_adjust_factors(instrument)
+            return []
+        except Exception as error:
+            warning = f"{instrument.symbol} 复权因子刷新失败：{_compact_error_message(error)}"
+            logger.warning("stock all refresh adjust factor failed for %s: %s", instrument.symbol, warning)
+            self._repository.record_sync_warning(instrument.symbol, warning)
+            return [warning]
 
     def _resolve_today_refresh_start(self, symbol: str, *, latest_trade_date: date, end: date) -> date:
         """解析每日刷新起始日，兼顾增量补齐和最近一周缺口修复。
@@ -1314,7 +1332,7 @@ class StockMarketService:
             可展示的告警文案；无需同步或同步成功时返回空字符串。
         """
 
-        if adjust_type == "none" or instrument.instrument_type != "stock":
+        if adjust_type == "none":
             return ""
         if self._repository.has_adjust_factors(instrument.symbol):
             return ""

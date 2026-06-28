@@ -1718,6 +1718,174 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(payload["daily_bars"][-1]["ma5"], 7.0)
         syncer.sync_adjust_factors.assert_not_called()
 
+    def test_etf_detail_lazily_syncs_adjust_factors_for_adjusted_prices(self) -> None:
+        """校验 ETF 详情切换复权口径时会补采因子并返回复权 K 线。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "515880.SH",
+                    "code": "515880",
+                    "exchange": "SH",
+                    "name": "通信ETF国泰",
+                    "instrument_type": "etf",
+                    "market_board": "沪市",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_daily_bars(
+            "515880.SH",
+            [
+                _stock_daily_bar("2026-06-01", close_price=10),
+                _stock_daily_bar("2026-06-02", close_price=12),
+            ],
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_profile.return_value = {"profile": 0}
+        syncer.sync_financials.return_value = {"financial_metrics": 0}
+        syncer.sync_adjust_factors.side_effect = lambda instrument: {
+            "adjust_factors": repository.upsert_adjust_factors(
+                instrument.symbol,
+                [{"effective_date": "2026-06-01", "qfq_factor": 2, "hfq_factor": 3}],
+            )
+        }
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        payload = service.build_stock_detail_payload(
+            "515880.SH",
+            range_type="custom",
+            start_date="2026-06-01",
+            end_date="2026-06-02",
+            adjust_type="qfq",
+        )
+
+        instrument = repository.get_instrument("515880.SH")
+        syncer.sync_adjust_factors.assert_called_once_with(instrument)
+        self.assertEqual(payload["adjust_type"], "qfq")
+        self.assertEqual([point["close"] for point in payload["daily_bars"]], [5.0, 6.0])
+
+    def test_etf_manual_refresh_syncs_adjust_factors_for_selected_adjust_type(self) -> None:
+        """校验 ETF 手动刷新在复权口径下会同步因子并返回复权价格。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "159915.SZ",
+                    "code": "159915",
+                    "exchange": "SZ",
+                    "name": "创业板ETF易方达",
+                    "instrument_type": "etf",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_symbol_window.side_effect = lambda instrument, **_: {
+            "daily_bars": repository.upsert_daily_bars(
+                instrument.symbol,
+                [
+                    _stock_daily_bar("2026-06-01", close_price=10),
+                    _stock_daily_bar("2026-06-02", close_price=12),
+                ],
+            )
+        }
+        syncer.sync_profile.return_value = {"profile": 0}
+        syncer.sync_adjust_factors.side_effect = lambda instrument: {
+            "adjust_factors": repository.upsert_adjust_factors(
+                instrument.symbol,
+                [{"effective_date": "2026-06-01", "qfq_factor": 2, "hfq_factor": 3}],
+            )
+        }
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        payload = service.refresh_stock_detail(
+            "159915.SZ",
+            range_type="custom",
+            start_date="2026-06-01",
+            end_date="2026-06-02",
+            adjust_type="qfq",
+        )
+
+        instrument = repository.get_instrument("159915.SZ")
+        syncer.sync_adjust_factors.assert_called_once_with(instrument)
+        self.assertEqual([point["close"] for point in payload["daily_bars"]], [5.0, 6.0])
+        self.assertEqual(payload["refresh_result"], {"daily_bars": 2, "adjust_factors": 1})
+
+    def test_etf_adjust_factor_sync_derives_factors_from_adjusted_daily_prices(self) -> None:
+        """校验 ETF 可由不复权、前复权、后复权日线反推出本地复权因子。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "512690.SH",
+                    "code": "512690",
+                    "exchange": "SH",
+                    "name": "酒ETF鹏华",
+                    "instrument_type": "etf",
+                    "market_board": "沪市",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        instrument = repository.get_instrument("512690.SH")
+        repository.upsert_daily_bars(
+            "512690.SH",
+            [
+                _stock_daily_bar("2026-06-01", close_price=10),
+                _stock_daily_bar("2026-06-02", close_price=12),
+            ],
+        )
+
+        def etf_daily_loader(**kwargs: object) -> pd.DataFrame:
+            """按请求的复权参数返回一组可反推因子的 ETF 日线。"""
+
+            adjust = str(kwargs.get("adjust", ""))
+            closes_by_adjust = {
+                "": [10, 12],
+                "qfq": [5, 6],
+                "hfq": [30, 36],
+            }
+            return pd.DataFrame(
+                [
+                    {
+                        "日期": trade_date,
+                        "开盘": close,
+                        "收盘": close,
+                        "最高": close,
+                        "最低": close,
+                        "成交量": 100,
+                    }
+                    for trade_date, close in zip(("2026-06-01", "2026-06-02"), closes_by_adjust[adjust])
+                ]
+            )
+
+        etf_loader = Mock(side_effect=etf_daily_loader)
+        syncer = StockMarketSyncService(repository=repository, etf_daily_loader=etf_loader)
+
+        result = syncer.sync_adjust_factors(instrument)
+        qfq_points = repository.load_daily_bars(
+            symbol="512690.SH",
+            start_date="2026-06-01",
+            end_date="2026-06-02",
+            adjust_type="qfq",
+        )
+        hfq_points = repository.load_daily_bars(
+            symbol="512690.SH",
+            start_date="2026-06-01",
+            end_date="2026-06-02",
+            adjust_type="hfq",
+        )
+
+        self.assertEqual(result, {"adjust_factors": 1})
+        self.assertEqual([call.kwargs.get("adjust", "") for call in etf_loader.call_args_list], ["", "qfq", "hfq"])
+        self.assertEqual([point.close_price for point in qfq_points], [5.0, 6.0])
+        self.assertEqual([point.close_price for point in hfq_points], [30.0, 36.0])
+
     def test_stock_detail_defaults_to_one_month_when_history_absent(self) -> None:
         """校验未指定范围时，详情查询和首次懒同步都使用最近一个月。"""
         repository = self._repository()
@@ -1837,6 +2005,7 @@ class StockMarketModuleTests(unittest.TestCase):
         )
         syncer = Mock(spec=StockMarketSyncService)
         syncer.sync_symbol_window.return_value = {"daily_bars": 2}
+        syncer.sync_adjust_factors.return_value = {"adjust_factors": 2}
         syncer.sync_financials.return_value = {"financial_metrics": 4}
         service = StockMarketService(repository=repository, sync_service=syncer)
 
@@ -1848,10 +2017,11 @@ class StockMarketModuleTests(unittest.TestCase):
         )
 
         instrument = repository.get_instrument("000001.SZ")
+        syncer.sync_adjust_factors.assert_called_once_with(instrument)
         syncer.sync_financials.assert_called_once_with(instrument)
         self.assertEqual(
             payload["refresh_result"],
-            {"daily_bars": 2, "financial_metrics": 4},
+            {"daily_bars": 2, "adjust_factors": 2, "financial_metrics": 4},
         )
 
     def test_financial_refresh_only_syncs_financial_metrics_for_selected_range(self) -> None:
@@ -2528,6 +2698,50 @@ class StockMarketModuleTests(unittest.TestCase):
 
         self.assertEqual(errors, [])
         syncer.sync_symbol_window.assert_not_called()
+
+    def test_all_instrument_refresh_syncs_adjust_factors_when_daily_window_cached(self) -> None:
+        """校验全标的刷新即使跳过已缓存日线，也会同步复权因子。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "515880.SH",
+                    "code": "515880",
+                    "exchange": "SH",
+                    "name": "通信ETF国泰",
+                    "instrument_type": "etf",
+                    "market_board": "沪市",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_daily_bars(
+            "515880.SH",
+            [
+                _stock_daily_bar("2026-06-01", close_price=10),
+                _stock_daily_bar("2026-06-30", close_price=12),
+            ],
+        )
+        syncer = Mock(spec=StockMarketSyncService)
+        syncer.sync_adjust_factors.return_value = {"adjust_factors": 1}
+        service = StockMarketService(
+            repository=repository,
+            sync_service=syncer,
+            refresh_state_path=Path(self.temp_dir.name) / "stock_refresh_state.json",
+        )
+        instrument = repository.get_instrument("515880.SH")
+        assert instrument is not None
+
+        errors = service._refresh_single_instrument(
+            instrument,
+            start=date(2026, 6, 1),
+            end=date(2026, 6, 30),
+        )
+
+        self.assertEqual(errors, [])
+        syncer.sync_symbol_window.assert_not_called()
+        syncer.sync_adjust_factors.assert_called_once_with(instrument)
 
     def test_all_instrument_refresh_uses_listing_date_for_shorter_listed_stock(self) -> None:
         """校验未满 20 年且已有上市日期的标的按上市日至最近交易日刷新。"""

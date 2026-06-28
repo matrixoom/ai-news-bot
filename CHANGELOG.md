@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- 股市标的和宽基指数 K 线 tooltip 新增末行“至今涨幅”，鼠标指向历史交易日时按红涨绿跌展示该日收盘价相对最新交易日收盘价的偏离。
+- 股票市场 ETF/LOF 不再跳过复权因子同步；详情切换前/后复权会懒加载因子，手动刷新和全标的刷新会同步刷新复权因子，并在详情刷新结果中返回 `adjust_factors`。
 - 股票市场 K 线复权控件从单一“不复权”按钮改为下拉选择，支持 `不复权 / 前复权 / 后复权`；后端新增 `market_stock_adjust_factor` 保存复权因子，详情接口按 `adjust_type` 动态计算 OHLC 和均线，不额外落库三套日线。
 - 股票复权因子表 `market_stock_adjust_factor` 从主库迁移到股票行情分片库，与 `market_stock_daily_bar` 同分片独立存储；仓储启动时自动迁移旧主库因子数据，外部 API 契约保持不变。
 - 股票财务指标表 `market_stock_financial_metric` 从主库迁移到股票行情分片库，与 `market_stock_daily_bar` 同分片独立存储；仓储启动时自动迁移旧主库财务指标数据，详情接口响应保持不变。
