@@ -1,4 +1,4 @@
-"""股票日线 SQLite 分片路由与建库工具。"""
+"""股票行情 SQLite 分片路由与建库工具。"""
 
 from __future__ import annotations
 
@@ -40,6 +40,24 @@ CREATE INDEX IF NOT EXISTS idx_market_stock_daily_bar_symbol_date
 ON market_stock_daily_bar(symbol, trade_date)
 """
 
+MARKET_STOCK_ADJUST_FACTOR_TABLE_SQL: Final[str] = """
+CREATE TABLE IF NOT EXISTS market_stock_adjust_factor (
+    symbol TEXT NOT NULL,
+    effective_date TEXT NOT NULL,
+    qfq_factor REAL,
+    hfq_factor REAL,
+    provider_key TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(symbol, effective_date)
+)
+"""
+
+MARKET_STOCK_ADJUST_FACTOR_INDEX_SQL: Final[str] = """
+CREATE INDEX IF NOT EXISTS idx_market_stock_adjust_factor_symbol_date
+ON market_stock_adjust_factor(symbol, effective_date)
+"""
+
 MARKET_STOCK_DAILY_BAR_OPTIONAL_COLUMNS: Final[dict[str, str]] = {
     "pe_ttm": "REAL",
     "pb_mrq": "REAL",
@@ -74,7 +92,7 @@ def resolve_market_stock_shard_name(symbol: str) -> str:
 
 
 def resolve_market_stock_shard_path(symbol: str, shard_dir: str | Path) -> Path:
-    """返回指定股票日线分片的完整路径。
+    """返回指定股票行情分片的完整路径。
 
     Args:
         symbol: `股票代码.交易所缩写` 格式的标识。
@@ -144,7 +162,7 @@ def migrate_legacy_market_stock_shards(
 
 
 def initialize_market_stock_shard(db_path: str | Path) -> Path:
-    """初始化单个股票日线分片的表和索引。
+    """初始化单个股票行情分片的表和索引。
 
     Args:
         db_path: 待初始化的 SQLite 分片路径。
@@ -167,12 +185,14 @@ def initialize_market_stock_shard(db_path: str | Path) -> Path:
                     f"ALTER TABLE market_stock_daily_bar ADD COLUMN {column_name} {column_type}"
                 )
         connection.execute(MARKET_STOCK_DAILY_BAR_INDEX_SQL)
+        connection.execute(MARKET_STOCK_ADJUST_FACTOR_TABLE_SQL)
+        connection.execute(MARKET_STOCK_ADJUST_FACTOR_INDEX_SQL)
         connection.commit()
     return path
 
 
 def initialize_all_market_stock_shards(shard_dir: str | Path) -> list[Path]:
-    """预建全部股票日线分片数据库。
+    """预建全部股票行情分片数据库。
 
     Args:
         shard_dir: 分片数据库所在目录。

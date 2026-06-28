@@ -107,9 +107,18 @@ class StockMarketShardingTests(unittest.TestCase):
                 "SELECT name FROM sqlite_master WHERE type = 'index' "
                 "AND name = 'idx_market_stock_daily_bar_symbol_date'"
             ).fetchone()
+            factor_table = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_adjust_factor'"
+            ).fetchone()
+            factor_index = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' "
+                "AND name = 'idx_market_stock_adjust_factor_symbol_date'"
+            ).fetchone()
 
         self.assertIsNotNone(table)
         self.assertIsNotNone(index)
+        self.assertIsNotNone(factor_table)
+        self.assertIsNotNone(factor_index)
 
     def test_stock_shard_initializer_adds_valuation_columns_to_existing_table(self) -> None:
         """校验旧分片初始化时会幂等补齐四个可空估值字段。"""
@@ -863,7 +872,72 @@ class StockMarketModuleTests(unittest.TestCase):
                 """,
                 ("000001.SZ", "2026-06-03"),
             ).fetchone()[0]
+            factor_count = connection.execute(
+                "SELECT COUNT(*) FROM market_stock_adjust_factor WHERE symbol = ?",
+                ("000001.SZ",),
+            ).fetchone()[0]
         self.assertEqual(raw_close, 14)
+        self.assertEqual(factor_count, 2)
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            main_factor_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_adjust_factor'"
+            ).fetchone()
+        self.assertIsNone(main_factor_table)
+
+    def test_legacy_adjust_factors_migrate_from_main_database_to_stock_shards(self) -> None:
+        """校验旧主库复权因子会按股票代码迁移到对应日线分片。"""
+
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute(
+                """
+                CREATE TABLE market_stock_adjust_factor (
+                    symbol TEXT NOT NULL,
+                    effective_date TEXT NOT NULL,
+                    qfq_factor REAL,
+                    hfq_factor REAL,
+                    provider_key TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(symbol, effective_date)
+                )
+                """
+            )
+            connection.executemany(
+                """
+                INSERT INTO market_stock_adjust_factor (
+                    symbol, effective_date, qfq_factor, hfq_factor,
+                    provider_key, source_url, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    ("000001.SZ", "2026-05-30", 2.0, 3.0, "legacy", "legacy://unit", "2026-06-01T00:00:00Z"),
+                    ("600519.SH", "2026-05-30", 4.0, 5.0, "legacy", "legacy://unit", "2026-06-01T00:00:00Z"),
+                ],
+            )
+            connection.commit()
+
+        repository = self._repository()
+
+        self.assertTrue(repository.has_adjust_factors("000001.SZ"))
+        self.assertTrue(repository.has_adjust_factors("600519.SH"))
+        for symbol, expected_qfq in (("000001.SZ", 2.0), ("600519.SH", 4.0)):
+            shard_path = resolve_market_stock_shard_path(symbol, self.db_path.parent / "market")
+            with closing(sqlite3.connect(shard_path)) as connection:
+                row = connection.execute(
+                    """
+                    SELECT qfq_factor
+                    FROM market_stock_adjust_factor
+                    WHERE symbol = ? AND effective_date = ?
+                    """,
+                    (symbol, "2026-05-30"),
+                ).fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row[0], expected_qfq)
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            legacy_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_adjust_factor'"
+            ).fetchone()
+        self.assertIsNone(legacy_table)
 
     def test_daily_bar_upsert_preserves_valuation_when_refresh_has_no_optional_values(self) -> None:
         """校验附加行情源缺值时不会清空已保存的估值指标。"""

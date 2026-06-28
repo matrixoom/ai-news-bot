@@ -657,7 +657,7 @@ uv run python main.py macro-sync
 - A 股使用 AkShare `stock_zh_a_hist`，ETF 使用 `fund_etf_hist_em`，LOF 使用 `fund_lof_hist_em`。
 - A 股日线在东方财富端点失败时回退 `stock_zh_a_hist_tx` / `stock_zh_a_daily`；腾讯接口的 `amount` 手数会转换为统一的 `volume` 股数。ETF 日线在东方财富端点失败时回退 `fund_etf_hist_sina`。
 - 本地事实表以 `(symbol, trade_date)` 作为幂等键，刷新同一天只更新，不重复插入。
-- `market_stock_daily_bar` 只保存不复权 OHLCV 与估值字段；前后复权价格不落库，复权因子保存到主库 `market_stock_adjust_factor(symbol, effective_date, qfq_factor, hfq_factor)`。
+- `market_stock_daily_bar` 只保存不复权 OHLCV 与估值字段；前后复权价格不落库。复权因子保存到同一股票分片库的独立表 `market_stock_adjust_factor(symbol, effective_date, qfq_factor, hfq_factor)`，仓储启动时会把旧主库因子表按 `symbol` 幂等迁移到对应分片。
 - 服务会为 MA120 额外拉取起始日前约 220 天缓冲数据；复权视图的 MA 基于复权后收盘价重新计算，返回 payload 仍只包含用户所选时间跨度。
 - 外部接口失败时保留本地已有历史，并在 `sync_state.warning_message` 返回可展示的短提示；服务不会把代理失败的完整 traceback 写入前端响应。
 

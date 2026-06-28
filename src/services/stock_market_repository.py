@@ -151,7 +151,7 @@ class StockMarketRepository:
 
         Args:
             db_path: SQLite 数据库路径。
-            shard_dir: 日线分片根目录，默认是主库同级的 `market/`。
+            shard_dir: 股票行情分片根目录，默认是主库同级的 `market/`。
             precreate_shards: 是否在初始化时预建全部 210 个分片。
 
         Returns:
@@ -750,7 +750,7 @@ class StockMarketRepository:
             )
         if not rows:
             return 0
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             connection.executemany(
                 """
                 INSERT INTO market_stock_adjust_factor (
@@ -771,7 +771,7 @@ class StockMarketRepository:
     def has_adjust_factors(self, symbol: str) -> bool:
         """判断指定股票是否已保存任意复权因子。"""
 
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             row = connection.execute(
                 """
                 SELECT 1
@@ -1217,30 +1217,11 @@ class StockMarketRepository:
                 ON market_stock_instrument_group(sort_order, created_at)
                 """
             )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS market_stock_adjust_factor (
-                    symbol TEXT NOT NULL,
-                    effective_date TEXT NOT NULL,
-                    qfq_factor REAL,
-                    hfq_factor REAL,
-                    provider_key TEXT NOT NULL,
-                    source_url TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY(symbol, effective_date)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_market_stock_adjust_factor_symbol_date
-                ON market_stock_adjust_factor(symbol, effective_date)
-                """
-            )
         migrate_legacy_market_stock_shards(self._db_path.parent, self._shard_dir)
         if self._precreate_shards:
             initialize_all_market_stock_shards(self._shard_dir)
         self._migrate_legacy_daily_bars()
+        self._migrate_legacy_adjust_factors()
 
     def _migrate_stock_instrument_type_check(self, connection: sqlite3.Connection) -> None:
         """迁移旧版标的表的证券类型约束，允许 LOF 标的入库。
@@ -1455,6 +1436,91 @@ class StockMarketRepository:
         with self._session() as connection:
             connection.execute("VACUUM")
 
+    def _migrate_legacy_adjust_factors(self) -> None:
+        """将主库旧复权因子表幂等迁移到对应股票分片。"""
+
+        with self._session() as connection:
+            legacy_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'market_stock_adjust_factor'"
+            ).fetchone()
+            if legacy_table is None:
+                return
+            symbols = [
+                str(row["symbol"])
+                for row in connection.execute(
+                    "SELECT DISTINCT symbol FROM market_stock_adjust_factor ORDER BY symbol"
+                ).fetchall()
+            ]
+            source_total = int(connection.execute("SELECT COUNT(*) FROM market_stock_adjust_factor").fetchone()[0])
+
+        if not symbols:
+            with self._session() as connection:
+                connection.execute("DROP TABLE market_stock_adjust_factor")
+                connection.execute("VACUUM")
+            return
+
+        symbols_by_shard: dict[Path, list[str]] = defaultdict(list)
+        for symbol in symbols:
+            symbols_by_shard[resolve_market_stock_shard_path(symbol, self._shard_dir)].append(symbol)
+
+        migrated_source_count = 0
+        for shard_path, shard_symbols in symbols_by_shard.items():
+            initialize_market_stock_shard(shard_path)
+            shard_source_count = 0
+            with self._session() as source_connection, self._shard_session(shard_path) as shard_connection:
+                for start in range(0, len(shard_symbols), 500):
+                    symbol_batch = shard_symbols[start : start + 500]
+                    placeholders = ", ".join("?" for _ in symbol_batch)
+                    batch_source_count = 0
+                    source_cursor = source_connection.execute(
+                        f"""
+                        SELECT symbol, effective_date, qfq_factor, hfq_factor,
+                               provider_key, source_url, updated_at
+                        FROM market_stock_adjust_factor
+                        WHERE symbol IN ({placeholders})
+                        ORDER BY symbol, effective_date
+                        """,
+                        symbol_batch,
+                    )
+                    while source_rows := source_cursor.fetchmany(1_000):
+                        shard_connection.executemany(
+                            """
+                            INSERT INTO market_stock_adjust_factor (
+                                symbol, effective_date, qfq_factor, hfq_factor,
+                                provider_key, source_url, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(symbol, effective_date) DO UPDATE SET
+                                qfq_factor=COALESCE(excluded.qfq_factor, market_stock_adjust_factor.qfq_factor),
+                                hfq_factor=COALESCE(excluded.hfq_factor, market_stock_adjust_factor.hfq_factor),
+                                provider_key=excluded.provider_key,
+                                source_url=excluded.source_url,
+                                updated_at=excluded.updated_at
+                            """,
+                            source_rows,
+                        )
+                        batch_source_count += len(source_rows)
+                    target_count = int(
+                        shard_connection.execute(
+                            f"SELECT COUNT(*) FROM market_stock_adjust_factor WHERE symbol IN ({placeholders})",
+                            symbol_batch,
+                        ).fetchone()[0]
+                    )
+                    if target_count < batch_source_count:
+                        raise RuntimeError(
+                            f"股票复权因子分片迁移校验失败: shard={shard_path.name}, "
+                            f"source={batch_source_count}, target={target_count}"
+                        )
+                    shard_source_count += batch_source_count
+            migrated_source_count += shard_source_count
+
+        if migrated_source_count != source_total:
+            raise RuntimeError(
+                f"股票复权因子分片迁移总数校验失败: source={source_total}, migrated={migrated_source_count}"
+            )
+        with self._session() as connection:
+            connection.execute("DROP TABLE market_stock_adjust_factor")
+            connection.execute("VACUUM")
+
     def _load_latest_prices(self, symbols: Sequence[str]) -> dict[str, float]:
         """按分片批量读取当前页标的的最新收盘价。"""
 
@@ -1623,7 +1689,7 @@ class StockMarketRepository:
     def _load_adjust_factors(self, *, symbol: str, end_date: str) -> list[StockAdjustFactor]:
         """读取指定截止日期前的复权因子。"""
 
-        with self._session() as connection:
+        with self._daily_bar_session(symbol) as connection:
             rows = connection.execute(
                 """
                 SELECT symbol, effective_date, qfq_factor, hfq_factor
@@ -1658,7 +1724,7 @@ class StockMarketRepository:
 
     @contextmanager
     def _daily_bar_session(self, symbol: str) -> Iterator[sqlite3.Connection]:
-        """按 symbol 打开目标日线分片连接。
+        """按 symbol 打开目标股票行情分片连接。
 
         Args:
             symbol: `股票代码.交易所缩写` 格式的标识。
