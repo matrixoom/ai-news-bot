@@ -882,7 +882,7 @@ class StockMarketRepository:
             ).fetchall()
         bars = [self._build_daily_bar(row) for row in rows]
         if adjust_type == "none":
-            return bars
+            return _with_recalculated_daily_moving_averages(bars)
         if adjust_type not in {"qfq", "hfq"}:
             raise StockMarketValidationError("invalid stock price adjust type")
         return _with_adjusted_daily_prices(bars, self._load_adjust_factors(symbol=symbol, end_date=end_date), adjust_type)

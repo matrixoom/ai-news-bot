@@ -1718,6 +1718,47 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(payload["daily_bars"][-1]["ma5"], 7.0)
         syncer.sync_adjust_factors.assert_not_called()
 
+    def test_stock_detail_recalculates_plain_ma_with_history_padding(self) -> None:
+        """校验不复权详情读取会使用前置历史重算均线，避免旧空值导致断线。"""
+
+        repository = self._repository()
+        repository.upsert_instruments(
+            [
+                {
+                    "symbol": "000001.SZ",
+                    "code": "000001",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "instrument_type": "stock",
+                    "market_board": "深市",
+                    "listing_status": "listed",
+                }
+            ]
+        )
+        repository.upsert_daily_bars(
+            "000001.SZ",
+            [
+                _stock_daily_bar("2026-06-01", close_price=10),
+                _stock_daily_bar("2026-06-02", close_price=11),
+                _stock_daily_bar("2026-06-03", close_price=12),
+                _stock_daily_bar("2026-06-04", close_price=13),
+                _stock_daily_bar("2026-06-05", close_price=14),
+            ],
+        )
+        syncer = Mock()
+        syncer.sync_financials.return_value = {"financial_metrics": 0}
+        syncer.sync_profile.return_value = {"profile": 0}
+        service = StockMarketService(repository=repository, sync_service=syncer)
+
+        payload = service.build_stock_detail_payload(
+            "000001.SZ",
+            range_type="custom",
+            start_date="2026-06-05",
+            end_date="2026-06-05",
+        )
+
+        self.assertEqual(payload["daily_bars"][0]["ma5"], 12.0)
+
     def test_etf_detail_lazily_syncs_adjust_factors_for_adjusted_prices(self) -> None:
         """校验 ETF 详情切换复权口径时会补采因子并返回复权 K 线。"""
 
@@ -3189,6 +3230,7 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual(sync_call.args[0].symbol, "000001.SZ")
         self.assertEqual(sync_call.kwargs["start_date"], date(2026, 6, 12))
         self.assertEqual(sync_call.kwargs["end_date"], date(2026, 6, 19))
+        self.assertTrue(sync_call.kwargs["include_history_padding"])
 
     def test_scheduled_all_instrument_refresh_skips_closed_market_day(self) -> None:
         """校验 15:30 遇到节假日或休市日时不启动全标的刷新。"""

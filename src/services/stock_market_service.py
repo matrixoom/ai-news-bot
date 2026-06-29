@@ -942,7 +942,7 @@ class StockMarketService:
             instrument: 当前股票或 ETF 标的。
             start: 近 20 年窗口起始日期，未满 20 年且有上市日期的标的会改用上市日期。
             end: 近 20 年窗口结束日期。
-            refresh_mode: `history` 走近 20 年补齐，`today` 只从已有最新日线补到最近交易日。
+            refresh_mode: `history` 走近 20 年补齐，`today`/`recent_week` 走增量窗口并补足均线前置数据。
 
         Returns:
             本标的刷新过程中产生的短错误信息。
@@ -991,7 +991,8 @@ class StockMarketService:
                 start_date=effective_start,
                 end_date=end,
                 include_valuation=False,
-                include_history_padding=False,
+                # 增量刷新需要前置收盘价参与 MA 计算，避免定时任务把窗口开头的均线覆盖为空。
+                include_history_padding=refresh_mode in {"today", "recent_week"},
             )
             if refresh_mode == "history" and self._repository.has_daily_bar_window(
                 symbol=instrument.symbol,
@@ -1253,9 +1254,8 @@ class StockMarketService:
             STOCK_FINANCIAL_REPORT_TYPES,
             "invalid financial report type",
         )
-        daily_start = resolved_range.start_date
-        if adjust_type != "none":
-            daily_start = (date.fromisoformat(resolved_range.start_date) - timedelta(days=220)).isoformat()
+        # 详情展示统一多读前置历史，仓储会按当前价格口径重算 MA，避免旧库内空均线造成可见区间断线。
+        daily_start = (date.fromisoformat(resolved_range.start_date) - timedelta(days=220)).isoformat()
         daily_bars = self._repository.load_daily_bars(
             symbol=instrument.symbol,
             start_date=daily_start,

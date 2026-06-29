@@ -1,7 +1,7 @@
 {
-  "last_refresh_date": "2026-06-28",
-  "last_refresh_at": "2026-06-28T15:17:55Z",
-  "last_trigger": "manual",
-  "last_refresh_mode": "history",
-  "last_group_name": "关注"
+  "last_refresh_date": "2026-06-29",
+  "last_refresh_at": "2026-06-29T07:31:08Z",
+  "last_trigger": "scheduled",
+  "last_refresh_mode": "recent_week",
+  "last_group_name": "自定义分组"
 }
