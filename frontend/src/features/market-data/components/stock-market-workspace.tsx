@@ -119,6 +119,7 @@ type KlineTooltipPoint = {
   value?: unknown;
 };
 const STOCK_GROUP_STORAGE_KEY = "stock-market-instrument-groups";
+const ACTIVE_STOCK_GROUP_STORAGE_KEY = "stock-market-active-instrument-group";
 const ALL_INSTRUMENT_GROUP_ID = "all";
 const DEFAULT_LIST_PANEL_WIDTH = 360;
 const MIN_LIST_PANEL_WIDTH = 260;
@@ -186,6 +187,28 @@ function clearLegacyInstrumentGroups(): void {
 }
 
 /**
+ * 从浏览器本地偏好读取上一次选中的股票标的分组。
+ *
+ * @returns 分组 id；没有有效记录时返回全部分组。
+ */
+function loadActiveInstrumentGroupId(): string {
+  if (typeof window === "undefined") return ALL_INSTRUMENT_GROUP_ID;
+  const groupId = window.localStorage.getItem(ACTIVE_STOCK_GROUP_STORAGE_KEY);
+  return groupId && groupId.trim() ? groupId : ALL_INSTRUMENT_GROUP_ID;
+}
+
+/**
+ * 保存当前选中的股票标的分组，供页面刷新后恢复。
+ *
+ * @param groupId 当前选中的分组 id。
+ * @returns 无返回值。
+ */
+function saveActiveInstrumentGroupId(groupId: string): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ACTIVE_STOCK_GROUP_STORAGE_KEY, groupId);
+}
+
+/**
  * 渲染股票市场页，布局对齐截图中的交易终端式信息密度。
  */
 export function StockMarketWorkspace() {
@@ -205,13 +228,13 @@ export function StockMarketWorkspace() {
   const [isInstrumentListCollapsed, setIsInstrumentListCollapsed] = useState(false);
   const [isResearchSummaryCollapsed, setIsResearchSummaryCollapsed] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<StockDetailTab>("overview");
-  const [priceAdjustment, setPriceAdjustment] = useState<StockPriceAdjustment>("none");
+  const [priceAdjustment, setPriceAdjustment] = useState<StockPriceAdjustment>("qfq");
   const [selectedIndexSymbol, setSelectedIndexSymbol] = useState<string | null>(null);
   const [indexRange, setIndexRange] = useState<MarketDataRangeSelection>({ type: "1m" });
   const [isAllRefreshDialogOpen, setIsAllRefreshDialogOpen] = useState(false);
   const [isAllRefreshCancelDialogOpen, setIsAllRefreshCancelDialogOpen] = useState(false);
   const [instrumentGroups, setInstrumentGroups] = useState<StockInstrumentGroup[]>(() => loadInstrumentGroups());
-  const [activeInstrumentGroupId, setActiveInstrumentGroupId] = useState(ALL_INSTRUMENT_GROUP_ID);
+  const [activeInstrumentGroupId, setActiveInstrumentGroupId] = useState(loadActiveInstrumentGroupId);
   const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
   const [knownInstruments, setKnownInstruments] = useState<Record<string, StockInstrument>>({});
@@ -295,9 +318,12 @@ export function StockMarketWorkspace() {
 
   useEffect(() => {
     if (activeInstrumentGroupId === ALL_INSTRUMENT_GROUP_ID) return;
+    if (groupStore.isPending) return;
+    if (instrumentGroups.length === 0 && persistedInstrumentGroups.length > 0) return;
     if (instrumentGroups.some((group) => group.id === activeInstrumentGroupId)) return;
     setActiveInstrumentGroupId(ALL_INSTRUMENT_GROUP_ID);
-  }, [activeInstrumentGroupId, instrumentGroups]);
+    saveActiveInstrumentGroupId(ALL_INSTRUMENT_GROUP_ID);
+  }, [activeInstrumentGroupId, groupStore.isPending, instrumentGroups, persistedInstrumentGroups]);
 
   useEffect(() => {
     if (instrumentsQuery.isPending) return;
@@ -442,7 +468,13 @@ export function StockMarketWorkspace() {
     groupStore.save(nextGroups);
   }
 
-  /** 新增自定义标的分组，并切换到该分组。 */
+  /** 切换当前标的分组，并持久化用户最后一次选择。 */
+  function handleActiveInstrumentGroupChange(groupId: string) {
+    setActiveInstrumentGroupId(groupId);
+    saveActiveInstrumentGroupId(groupId);
+  }
+
+  /** 新增自定义标的分组，保留当前列表上下文便于继续把详情标的加入分组。 */
   function handleGroupCreate(name: string) {
     const normalizedName = name.trim();
     if (!normalizedName) return;
@@ -554,7 +586,7 @@ export function StockMarketWorkspace() {
               isPending={instrumentsQuery.isPending}
               onCollapseChange={setIsInstrumentListCollapsed}
               onAddGroup={() => setIsGroupDialogOpen(true)}
-              onGroupChange={setActiveInstrumentGroupId}
+              onGroupChange={handleActiveInstrumentGroupChange}
               onPageChange={setInstrumentPage}
               onPageSizeChange={handleInstrumentPageSizeChange}
               onSelect={handleInstrumentSelect}

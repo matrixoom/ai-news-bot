@@ -699,6 +699,33 @@ describe("StockMarketWorkspace", () => {
     expect(within(screen.getByRole("table")).queryByText("000002.SZ")).not.toBeInTheDocument();
   });
 
+  it("remembers the last selected custom instrument group after page refresh", async () => {
+    const user = userEvent.setup();
+    mocks.instrumentGroups = [
+      {
+        id: "group-watch",
+        name: "观察池",
+        symbols: ["000001.SZ"],
+      },
+      {
+        id: "group-hold",
+        name: "持仓",
+        symbols: ["000002.SZ"],
+      },
+    ];
+
+    const { unmount } = render(<StockMarketWorkspace />);
+
+    await user.click(screen.getByRole("tab", { name: "持仓" }));
+    expect(screen.getByRole("tab", { name: "持仓" })).toHaveAttribute("aria-selected", "true");
+
+    unmount();
+    render(<StockMarketWorkspace />);
+
+    expect(screen.getByRole("tab", { name: "持仓" })).toHaveAttribute("aria-selected", "true");
+    expect(within(screen.getByRole("table")).getByText("000002.SZ")).toBeInTheDocument();
+  });
+
   it("supports dragging the splitter between instrument list and detail panel", () => {
     render(<StockMarketWorkspace />);
 
@@ -833,7 +860,7 @@ describe("StockMarketWorkspace", () => {
         endDate: "2024-02-03",
       },
       financialReportType: "quarterly",
-      adjustType: "none",
+      adjustType: "qfq",
     });
 
     const refreshButton = screen.getByRole("button", { name: "刷新行情数据" });
@@ -852,7 +879,7 @@ describe("StockMarketWorkspace", () => {
       symbol: "000001.SZ",
       range: { type: "1m" },
       financialReportType: "quarterly",
-      adjustType: "none",
+      adjustType: "qfq",
     });
   });
 
@@ -1141,18 +1168,18 @@ describe("StockMarketWorkspace", () => {
     expect(screen.getByRole("button", { name: "近10年" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "近20年" })).toBeInTheDocument();
     expect(screen.getByLabelText("价格复权方式")).toHaveClass("h-8");
-    expect(screen.getByRole("combobox", { name: "价格复权方式" })).toHaveValue("none");
+    expect(screen.getByRole("combobox", { name: "价格复权方式" })).toHaveValue("qfq");
   });
 
   it("requests the selected price adjustment mode", async () => {
     const user = userEvent.setup();
     render(<StockMarketWorkspace />);
 
-    expect(mocks.detailAdjustments.at(-1)).toBe("none");
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "价格复权方式" }), "qfq");
-
     expect(mocks.detailAdjustments.at(-1)).toBe("qfq");
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "价格复权方式" }), "hfq");
+
+    expect(mocks.detailAdjustments.at(-1)).toBe("hfq");
   });
 
   it("uses compact chart labels and hides valuation metrics from the kline legend", async () => {

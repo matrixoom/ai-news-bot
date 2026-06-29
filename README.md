@@ -170,6 +170,7 @@ uv run python main.py push
   - `.data/push_center.state.json`: scheduler runtime state
   - `.data/push_center.template.json`: generated template snapshot
 - The current default market-report schedule is `08:00`, `12:05`, and `17:00` in `Asia/Shanghai`.
+- Market Data commodities and precious metals refresh automatically at `08:00` and `20:00` in `Asia/Shanghai`.
 - The midday slot is intentionally `12:05` rather than `12:00` or `11:45`, so Hong Kong morning trading is closed before the report runs.
 - Push delivery always rebuilds the dashboard snapshot with `force_refresh=True`; it should use the freshest data available immediately before delivery instead of a stale cached dashboard snapshot.
 - The Push Center `Schedules` page is a full-width report preview. Use the gear icon to edit schedules and delivery settings; preview refresh, chart refresh, and manual send stay in the preview toolbar.

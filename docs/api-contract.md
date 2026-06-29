@@ -197,6 +197,8 @@ uv run python main.py macro-sync
 
 用途：返回 Market Data 模块元数据、分类标签、时间范围选项和图表定义。房地产分类包含 `second_hand_housing`。
 
+后台刷新：后端默认启动商品与贵金属数据自动刷新检查线程，在 `Asia/Shanghai` 每天 `08:00` 和 `20:00` 各执行一次；刷新范围等同于依次同步商品页 `wti_crude_oil`、`brent_crude_oil` 和贵金属页 `gold_spot`、`silver_spot`、`copper`。同一进程内同一日期分钟槽只执行一次，失败会记录日志并允许下一次检查重试。
+
 ### 4.4 `GET /api/frontend/modules/market-data/charts/{chart_id}`
 
 查询参数：

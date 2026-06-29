@@ -3694,6 +3694,53 @@ class MarketDataSyncTests(unittest.TestCase):
         self.assertEqual(result, {"ok": True, "point_counts": {"wti_crude_oil": 1}})
         sync_indicator.assert_called_once_with("wti_crude_oil")
 
+    def test_market_data_service_runs_daily_commodity_and_metal_schedule_once_per_slot(self) -> None:
+        """校验商品和贵金属在 08:00 与 20:00 定时刷新，且同一时间槽不重复执行。"""
+        syncer = Mock(spec=MarketDataSyncService)
+        syncer.sync_commodities_history.return_value = {"wti_crude_oil": 1, "brent_crude_oil": 1}
+        syncer.sync_precious_metals_history.return_value = {
+            "gold_spot": 1,
+            "silver_spot": 1,
+            "copper": 1,
+        }
+        service = MarketDataService(
+            repository=MarketDataRepository(self.db_path),
+            sync_service=syncer,
+        )
+
+        first_run = service.run_due_scheduled_refresh(now=datetime(2026, 6, 29, 0, 0, tzinfo=UTC))
+        duplicate_run = service.run_due_scheduled_refresh(now=datetime(2026, 6, 29, 0, 0, tzinfo=UTC))
+        evening_run = service.run_due_scheduled_refresh(now=datetime(2026, 6, 29, 12, 0, tzinfo=UTC))
+
+        self.assertEqual(
+            first_run,
+            [
+                {
+                    "slot": "2026-06-29T08:00",
+                    "commodities": {"wti_crude_oil": 1, "brent_crude_oil": 1},
+                    "precious_metals": {"gold_spot": 1, "silver_spot": 1, "copper": 1},
+                }
+            ],
+        )
+        self.assertEqual(duplicate_run, [])
+        self.assertEqual(evening_run[0]["slot"], "2026-06-29T20:00")
+        self.assertEqual(syncer.sync_commodities_history.call_count, 2)
+        self.assertEqual(syncer.sync_precious_metals_history.call_count, 2)
+
+    def test_market_data_service_skips_schedule_before_due_time(self) -> None:
+        """校验未到 08:00 或 20:00 时不会触发商品与贵金属刷新。"""
+        syncer = Mock(spec=MarketDataSyncService)
+        service = MarketDataService(
+            repository=MarketDataRepository(self.db_path),
+            sync_service=syncer,
+        )
+
+        result = service.run_due_scheduled_refresh(now=datetime(2026, 6, 28, 23, 59, tzinfo=UTC))
+
+        self.assertEqual(result, [])
+        syncer.sync_commodities_history.assert_not_called()
+        syncer.sync_precious_metals_history.assert_not_called()
+
     def test_empty_housing_refresh_keeps_existing_history(self) -> None:
         """校验房地产上游全空时快速失败，不会删除库内仍可展示的历史序列。"""
         repository = MarketDataRepository(self.db_path)

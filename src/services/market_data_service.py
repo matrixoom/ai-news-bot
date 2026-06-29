@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+import logging
+import os
+import threading
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .market_data_repository import (
     MarketDataPoint,
@@ -22,6 +26,9 @@ MARKET_DATA_TABS = {
 
 MARKET_DATA_RANGES = {"6m", "1y", "3y", "5y", "10y", "15y", "20y", "25y", "30y", "custom"}
 MARKET_DATA_FREQUENCIES = {"daily", "monthly", "yearly"}
+MARKET_DATA_REFRESH_SCHEDULE_TIMES = ("08:00", "20:00")
+MARKET_DATA_REFRESH_TIMEZONE = "Asia/Shanghai"
+logger = logging.getLogger(__name__)
 
 _CHART_SYNC_GROUPS: dict[str, str] = {
     "wti_crude_oil": "commodities",
@@ -43,17 +50,159 @@ class ResolvedDateRange:
 class MarketDataService:
     """组织 Market Data 前端接口 payload。"""
 
-    def __init__(self, repository: MarketDataRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: MarketDataRepository | None = None,
+        *,
+        sync_service: Any | None = None,
+        enable_scheduler: bool = False,
+        scheduler_check_seconds: float | None = None,
+    ) -> None:
+        """初始化 Market Data 服务。
+
+        Args:
+            repository: Market Data 本地仓储。
+            sync_service: 商品、贵金属历史同步服务，测试可注入。
+            enable_scheduler: 是否启动商品和贵金属自动刷新线程。
+            scheduler_check_seconds: 后台定时检查间隔秒数。
+
+        Returns:
+            Market Data 服务实例。
+        """
+
         self._repository = repository or MarketDataRepository()
+        self._sync_service = sync_service
+        self._scheduled_refresh_lock = threading.Lock()
+        self._completed_scheduled_slots: set[str] = set()
+        self._scheduler_check_seconds = max(
+            5.0,
+            float(
+                scheduler_check_seconds
+                if scheduler_check_seconds is not None
+                else os.getenv("MARKET_DATA_SCHEDULER_CHECK_SECONDS", "20")
+            ),
+        )
+        self._scheduler_stop_event = threading.Event()
+        self._scheduler_thread: threading.Thread | None = None
+        if enable_scheduler:
+            self.start_scheduler()
 
     def sync_chart(self, chart_id: str) -> dict[str, Any]:
+        """同步指定 Market Data 图表。
+
+        Args:
+            chart_id: 图表指标 ID。
+
+        Returns:
+            同步成功标记和本次写入点位数量。
+        """
+
         if chart_id not in _CHART_SYNC_GROUPS:
             raise MarketDataValidationError("unknown chart id for sync")
-        from .market_data_sync_service import MarketDataSyncService
 
-        syncer = MarketDataSyncService(repository=self._repository)
+        syncer = self._syncer()
         point_counts = syncer.sync_indicator_history(chart_id)
         return {"ok": True, "point_counts": point_counts}
+
+    def start_scheduler(self) -> None:
+        """启动商品与贵金属后台自动刷新检查线程。"""
+
+        if self._scheduler_thread is not None:
+            return
+        self._scheduler_stop_event.clear()
+        self._scheduler_thread = threading.Thread(
+            target=self._scheduler_loop,
+            name="market-data-refresh-scheduler",
+            daemon=True,
+        )
+        self._scheduler_thread.start()
+
+    def stop_scheduler(self) -> None:
+        """停止商品与贵金属后台自动刷新检查线程。"""
+
+        self._scheduler_stop_event.set()
+        if self._scheduler_thread is not None:
+            self._scheduler_thread.join(timeout=2.0)
+            self._scheduler_thread = None
+
+    def run_due_scheduled_refresh(self, *, now: datetime | None = None) -> list[dict[str, Any]]:
+        """在上海时间 08:00 和 20:00 自动刷新商品、贵金属数据。
+
+        Args:
+            now: 测试可注入的当前 UTC 时间。
+
+        Returns:
+            本轮触发的刷新结果；未到时间或时间槽已执行时返回空列表。
+        """
+
+        current_time = now or datetime.now(UTC)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=UTC)
+        local_time = current_time.astimezone(ZoneInfo(MARKET_DATA_REFRESH_TIMEZONE))
+        current_slot_time = local_time.strftime("%H:%M")
+        if current_slot_time not in MARKET_DATA_REFRESH_SCHEDULE_TIMES:
+            return []
+
+        slot_key = f"{local_time.strftime('%Y-%m-%d')}T{current_slot_time}"
+        with self._scheduled_refresh_lock:
+            if slot_key in self._completed_scheduled_slots:
+                return []
+            self._completed_scheduled_slots.add(slot_key)
+            self._trim_completed_scheduled_slots(local_time.date().isoformat())
+
+        syncer = self._syncer()
+        try:
+            commodities_result = syncer.sync_commodities_history()
+            metals_result = syncer.sync_precious_metals_history()
+        except Exception:
+            with self._scheduled_refresh_lock:
+                self._completed_scheduled_slots.discard(slot_key)
+            logger.exception("market data scheduled refresh failed", extra={"slot": slot_key})
+            raise
+        logger.info("market data scheduled refresh completed", extra={"slot": slot_key})
+        return [
+            {
+                "slot": slot_key,
+                "commodities": commodities_result,
+                "precious_metals": metals_result,
+            }
+        ]
+
+    def _scheduler_loop(self) -> None:
+        """循环检查商品与贵金属自动刷新触发条件。"""
+
+        while not self._scheduler_stop_event.wait(self._scheduler_check_seconds):
+            try:
+                self.run_due_scheduled_refresh()
+            except Exception as error:  # pragma: no cover - 后台防御日志
+                logger.warning("market data scheduler loop failed: %s", error)
+
+    def _syncer(self) -> Any:
+        """延迟创建 Market Data 同步服务，避免测试和轻量接口提前加载外部依赖。
+
+        Returns:
+            可执行 Market Data 历史同步的服务实例。
+        """
+
+        if self._sync_service is None:
+            from .market_data_sync_service import MarketDataSyncService
+
+            self._sync_service = MarketDataSyncService(repository=self._repository)
+        return self._sync_service
+
+    def _trim_completed_scheduled_slots(self, current_day: str) -> None:
+        """保留当天已执行时间槽，避免长期运行进程内存持续增长。
+
+        Args:
+            current_day: 当前上海日期，格式为 `YYYY-MM-DD`。
+
+        Returns:
+            无返回值；直接清理内部集合。
+        """
+
+        self._completed_scheduled_slots = {
+            slot for slot in self._completed_scheduled_slots if slot.startswith(f"{current_day}T")
+        }
 
     def build_module_payload(self, tab: str = "commodities") -> dict[str, Any]:
         normalized_tab = self._validate_tab(tab)

@@ -107,6 +107,7 @@ def create_fastapi_app(
         dashboard_service: Dashboard 聚合服务。
         push_center_service: 推送中心服务。
         macro_data_service: Macro Data 模块服务。
+        market_data_service: Market Data 商品、贵金属与房地产服务。
         stock_market_service: Market Data 股票市场服务。
         event_outlook_service: Outlook 时间轴服务。
         event_insight_import_service: Event Insight 材料导入服务。
@@ -124,7 +125,7 @@ def create_fastapi_app(
         enable_scheduler=True,
     )
     macro_service = macro_data_service or MacroDataService()
-    market_service = market_data_service or MarketDataService()
+    market_service = market_data_service or MarketDataService(enable_scheduler=True)
     stock_service = stock_market_service or StockMarketService(
         enable_scheduler=True,
         market_module_rebuilder=getattr(service, "rebuild_market_module", None),
@@ -169,6 +170,9 @@ def create_fastapi_app(
     def shutdown_background_refresh() -> None:
         service.stop_background_refresh()
         push_service.stop_scheduler()
+        stop_market_scheduler = getattr(market_service, "stop_scheduler", None)
+        if callable(stop_market_scheduler):
+            stop_market_scheduler()
         stop_stock_scheduler = getattr(stock_service, "stop_scheduler", None)
         if callable(stop_stock_scheduler):
             stop_stock_scheduler()
