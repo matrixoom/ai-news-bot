@@ -1,6 +1,7 @@
 import unittest
 from contextlib import closing
 from datetime import UTC, date, datetime, timedelta
+from http.client import RemoteDisconnected
 from pathlib import Path
 import sqlite3
 import threading
@@ -1927,6 +1928,29 @@ class StockMarketModuleTests(unittest.TestCase):
         self.assertEqual([point.close_price for point in qfq_points], [5.0, 6.0])
         self.assertEqual([point.close_price for point in hfq_points], [30.0, 36.0])
 
+    def test_record_sync_warning_retries_transient_sqlite_lock(self) -> None:
+        """校验主库同步状态遇到短暂 SQLite 写锁时会重试，避免全量刷新级联失败。"""
+        repository = self._repository()
+        attempts = 0
+        original_upsert = repository._upsert_stock_sync_state
+
+        def flaky_upsert(*args: object, **kwargs: object) -> None:
+            """首次模拟 SQLite 短暂写锁，第二次走真实写入。"""
+
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise sqlite3.OperationalError("database is locked")
+            original_upsert(*args, **kwargs)
+
+        with patch.object(repository, "_upsert_stock_sync_state", side_effect=flaky_upsert):
+            repository.record_sync_warning("513600.SH", "复权因子刷新失败")
+
+        state = repository.get_sync_state("513600.SH")
+        self.assertEqual(attempts, 2)
+        self.assertIsNotNone(state)
+        self.assertEqual(state.warning_message, "复权因子刷新失败")
+
     def test_stock_detail_defaults_to_one_month_when_history_absent(self) -> None:
         """校验未指定范围时，详情查询和首次懒同步都使用最近一个月。"""
         repository = self._repository()
@@ -3295,6 +3319,30 @@ class StockMarketModuleTests(unittest.TestCase):
 
         self.assertEqual(frame.to_dict("records"), [{"date": "2026-06-01", "open": 2.0, "close": 2.1, "high": 2.2, "low": 1.9, "volume": 2000}])
         fake_akshare.fund_etf_hist_sina.assert_called_once_with(symbol="sz159007")
+
+    def test_etf_adjust_loader_retries_transient_remote_disconnect(self) -> None:
+        """校验 ETF 复权日线遇到远端断链时会短重试，降低复权因子刷新误报。"""
+        expected_frame = pd.DataFrame(
+            [{"日期": "2026-06-01", "开盘": 1.0, "收盘": 1.1, "最高": 1.2, "最低": 0.9, "成交量": 1000}]
+        )
+        fake_akshare = SimpleNamespace(
+            fund_etf_hist_em=Mock(
+                side_effect=[
+                    ConnectionError(
+                        "Connection aborted.",
+                        RemoteDisconnected("Remote end closed connection without response"),
+                    ),
+                    expected_frame,
+                ]
+            ),
+            fund_etf_hist_sina=Mock(),
+        )
+
+        with patch.dict("sys.modules", {"akshare": fake_akshare}):
+            frame = _ak_etf_daily(symbol="513600", start_date="20260601", end_date="20260606", adjust="qfq")
+
+        self.assertEqual(frame.to_dict("records"), expected_frame.to_dict("records"))
+        self.assertEqual(fake_akshare.fund_etf_hist_em.call_count, 2)
 
     def test_stock_daily_loader_normalizes_tencent_lot_volume(self) -> None:
         """校验腾讯 AkShare 回退数据会把手数转换为系统使用的股数。"""

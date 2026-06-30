@@ -98,13 +98,21 @@ const TURTLE_HELP_TEXT = {
   systemTwoExit: "多头持仓跌破前 20 日低点时触发离场。",
   addOn: "入场后每上涨 0.5N 触发一次加仓观察信号。",
 } as const;
-const KLINE_VISIBLE_MA_SERIES = ["MA5", "MA10", "MA20"] as const;
+const KLINE_MA_SERIES = [
+  { name: "MA5", field: "ma5", defaultSelected: true },
+  { name: "MA10", field: "ma10", defaultSelected: true },
+  { name: "MA20", field: "ma20", defaultSelected: true },
+  { name: "MA60", field: "ma60", defaultSelected: false },
+  { name: "MA120", field: "ma120", defaultSelected: false },
+] as const;
 const KLINE_MA_STYLES = {
-  MA5: { color: "#f59e0b", lineType: [6, 4] },
-  MA10: { color: "#3daee7", lineType: [3, 3] },
+  MA5: { color: "#f5970b", lineType: [6, 4] },
+  MA10: { color: "#30adec", lineType: [3, 3] },
   MA20: { color: "#3979f1", lineType: "solid" },
+  MA60: { color: "#7c3aed", lineType: [8, 4] },
+  MA120: { color: "#64748b", lineType: [6, 3] },
 } satisfies Record<string, { color: string; lineType: "solid" | number[] }>;
-type KlineVisibleMaSeries = (typeof KLINE_VISIBLE_MA_SERIES)[number];
+type KlineVisibleMaSeries = (typeof KLINE_MA_SERIES)[number]["name"];
 type StockDetailTab = "overview" | "financial";
 type TurtleTradingSystem = "systemOne" | "systemTwo";
 type TurtleThresholdSignal = {
@@ -1833,7 +1841,7 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
   const chartHeightClass = props.mode === "index" ? "min-h-[34rem]" : "min-h-[22rem]";
   const option = useMemo((): echarts.EChartsOption => {
     const labels = props.bars.map((bar) => bar.date);
-    const legendData = ["K线", ...KLINE_VISIBLE_MA_SERIES];
+    const legendData = ["K线", ...KLINE_MA_SERIES.map((series) => series.name)];
     return {
       animation: false,
       tooltip: {
@@ -1854,6 +1862,9 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
         itemHeight: 8,
         textStyle: chartTheme.legendText,
         data: legendData,
+        selected: Object.fromEntries(
+          KLINE_MA_SERIES.filter((series) => !series.defaultSelected).map((series) => [series.name, false]),
+        ),
       },
       grid: [
         { left: 54, right: 42, top: 48, height: "56%" },
@@ -1905,20 +1916,12 @@ function KlineChart(props: { bars: StockDailyBar[]; mode?: "stock" | "index"; sy
             borderColor0: workbenchTheme.negative,
           },
         },
-        lineSeries(
-          "MA5",
-          props.bars.map((bar) => bar.ma5),
-          KLINE_MA_STYLES.MA5,
-        ),
-        lineSeries(
-          "MA10",
-          props.bars.map((bar) => bar.ma10),
-          KLINE_MA_STYLES.MA10,
-        ),
-        lineSeries(
-          "MA20",
-          props.bars.map((bar) => bar.ma20),
-          KLINE_MA_STYLES.MA20,
+        ...KLINE_MA_SERIES.map((series) =>
+          lineSeries(
+            series.name,
+            props.bars.map((bar) => bar[series.field]),
+            KLINE_MA_STYLES[series.name],
+          ),
         ),
         {
           name: "成交量",
@@ -2224,9 +2227,11 @@ function buildKlineTooltipFormatter(
         : closeDistanceRate > 0
           ? positiveColor
           : negativeColor;
-    const maRows = KLINE_VISIBLE_MA_SERIES.flatMap((seriesName) => {
+    const maRows = KLINE_MA_SERIES.flatMap((series) => {
+      const seriesName = series.name;
       const value = klineMaValue(bar, seriesName);
       const point = points.find((item) => item.seriesName === seriesName);
+      if (!series.defaultSelected && !point) return [];
       return value === null ? [] : [buildTooltipRow(point?.marker, seriesName, formatKlineNumber(value))];
     });
     const rows = [
@@ -2260,12 +2265,8 @@ function normalizeKlineTooltipPoints(params: unknown): KlineTooltipPoint[] {
  * @returns 对应均线值；无数据时返回 null。
  */
 function klineMaValue(bar: StockDailyBar, seriesName: KlineVisibleMaSeries): number | null {
-  const keyBySeries = {
-    MA5: "ma5",
-    MA10: "ma10",
-    MA20: "ma20",
-  } as const;
-  return bar[keyBySeries[seriesName]];
+  const series = KLINE_MA_SERIES.find((item) => item.name === seriesName);
+  return series ? bar[series.field] : null;
 }
 
 /**

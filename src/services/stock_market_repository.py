@@ -7,8 +7,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 import json
+import logging
 from pathlib import Path
 import sqlite3
+import time
 from typing import Any, Callable, Collection, Iterator, Mapping, Sequence
 
 from src.services.stock_market_sharding import (
@@ -18,6 +20,11 @@ from src.services.stock_market_sharding import (
     migrate_legacy_market_stock_shards,
     resolve_market_stock_shard_path,
 )
+
+
+logger = logging.getLogger(__name__)
+SQLITE_LOCK_RETRY_ATTEMPTS = 5
+SQLITE_LOCK_RETRY_BASE_DELAY_SECONDS = 0.05
 
 
 class StockMarketValidationError(ValueError):
@@ -584,8 +591,11 @@ class StockMarketRepository:
                 """,
                 rows,
             )
-        with self._session() as connection:
-            self._refresh_stock_sync_state(connection, symbol, timestamp, warning_message="")
+        self._run_with_sqlite_lock_retry(
+            lambda: self._refresh_stock_sync_state_for_symbol(symbol, timestamp, warning_message=""),
+            context=f"refresh stock sync state for {symbol}",
+            suppress_final_lock=True,
+        )
         return len(rows)
 
     def has_daily_bars(self, symbol: str) -> bool:
@@ -658,19 +668,25 @@ class StockMarketRepository:
                 marked_rows.append((timestamp, target_start, end_date, timestamp, str(row["symbol"])))
         if not marked_rows:
             return 0
-        with self._session() as connection:
-            connection.executemany(
-                """
-                UPDATE market_stock_instrument
-                SET history_coverage_status = 'covered',
-                    history_coverage_at = ?,
-                    history_coverage_start_date = ?,
-                    history_coverage_end_date = ?,
-                    updated_at = ?
-                WHERE symbol = ?
-                """,
-                marked_rows,
-            )
+
+        def write_flags() -> None:
+            """批量写入历史覆盖标记，供 SQLite 写锁重试封装调用。"""
+
+            with self._session() as connection:
+                connection.executemany(
+                    """
+                    UPDATE market_stock_instrument
+                    SET history_coverage_status = 'covered',
+                        history_coverage_at = ?,
+                        history_coverage_start_date = ?,
+                        history_coverage_end_date = ?,
+                        updated_at = ?
+                    WHERE symbol = ?
+                    """,
+                    marked_rows,
+                )
+
+        self._run_with_sqlite_lock_retry(write_flags, context="refresh history coverage flags")
         return len(marked_rows)
 
     def mark_history_covered(self, *, symbol: str, start_date: str, end_date: str) -> None:
@@ -683,19 +699,25 @@ class StockMarketRepository:
         """
 
         timestamp = _utc_now()
-        with self._session() as connection:
-            connection.execute(
-                """
-                UPDATE market_stock_instrument
-                SET history_coverage_status = 'covered',
-                    history_coverage_at = ?,
-                    history_coverage_start_date = ?,
-                    history_coverage_end_date = ?,
-                    updated_at = ?
-                WHERE symbol = ?
-                """,
-                (timestamp, start_date, end_date, timestamp, symbol),
-            )
+
+        def write_flag() -> None:
+            """写入单只标的历史覆盖标记，供 SQLite 写锁重试封装调用。"""
+
+            with self._session() as connection:
+                connection.execute(
+                    """
+                    UPDATE market_stock_instrument
+                    SET history_coverage_status = 'covered',
+                        history_coverage_at = ?,
+                        history_coverage_start_date = ?,
+                        history_coverage_end_date = ?,
+                        updated_at = ?
+                    WHERE symbol = ?
+                    """,
+                    (timestamp, start_date, end_date, timestamp, symbol),
+                )
+
+        self._run_with_sqlite_lock_retry(write_flag, context=f"mark history covered for {symbol}")
 
     def has_daily_bar_date(self, *, symbol: str, trade_date: str) -> bool:
         """判断某只标的是否已有指定交易日的本地日线。
@@ -1000,15 +1022,17 @@ class StockMarketRepository:
                 """,
                 rows,
             )
-        with self._session() as connection:
-            self._upsert_stock_sync_state(
-                connection,
+        self._run_with_sqlite_lock_retry(
+            lambda: self._upsert_stock_sync_state_for_symbol(
                 symbol,
                 timestamp,
                 profile_status=None,
                 financial_status="live" if rows else "unavailable",
                 warning_message=None,
-            )
+            ),
+            context=f"refresh financial sync state for {symbol}",
+            suppress_final_lock=True,
+        )
         return len(rows)
 
     def has_financial_metrics(
@@ -1093,14 +1117,57 @@ class StockMarketRepository:
         """记录外部同步失败但不删除既有数据。"""
 
         timestamp = _utc_now()
-        with self._session() as connection:
-            self._upsert_stock_sync_state(
-                connection,
+        self._run_with_sqlite_lock_retry(
+            lambda: self._upsert_stock_sync_state_for_symbol(
                 symbol,
                 timestamp,
                 profile_status=None,
                 financial_status=None,
                 warning_message=warning_message,
+            ),
+            context=f"record stock sync warning for {symbol}",
+            suppress_final_lock=True,
+        )
+
+    def _upsert_stock_sync_state_for_symbol(
+        self,
+        symbol: str,
+        timestamp: str,
+        *,
+        profile_status: str | None,
+        financial_status: str | None,
+        warning_message: str | None,
+        earliest_trade_date: str | None = None,
+        latest_trade_date: str | None = None,
+        daily_point_count: int | None = None,
+    ) -> None:
+        """打开主库连接并更新同步状态，便于在写锁下整体重试。
+
+        Args:
+            symbol: 带交易所后缀的标的代码。
+            timestamp: 本次状态写入时间。
+            profile_status: 概况同步状态；None 表示沿用旧值。
+            financial_status: 财报同步状态；None 表示沿用旧值。
+            warning_message: 同步告警；None 表示沿用旧值。
+            earliest_trade_date: 本地最早交易日；None 表示沿用旧值。
+            latest_trade_date: 本地最新交易日；None 表示沿用旧值。
+            daily_point_count: 本地日线点数；None 表示沿用旧值。
+
+        Returns:
+            无返回值；写入失败时向上抛出 SQLite 异常供重试封装处理。
+        """
+
+        with self._session() as connection:
+            self._upsert_stock_sync_state(
+                connection,
+                symbol,
+                timestamp,
+                profile_status=profile_status,
+                financial_status=financial_status,
+                warning_message=warning_message,
+                earliest_trade_date=earliest_trade_date,
+                latest_trade_date=latest_trade_date,
+                daily_point_count=daily_point_count,
             )
 
     def _initialize(self) -> None:
@@ -1643,6 +1710,21 @@ class StockMarketRepository:
             daily_point_count=int(aggregate["daily_point_count"]) if aggregate else 0,
         )
 
+    def _refresh_stock_sync_state_for_symbol(self, symbol: str, timestamp: str, warning_message: str) -> None:
+        """打开主库连接并基于分片日线刷新同步状态。
+
+        Args:
+            symbol: 带交易所后缀的标的代码。
+            timestamp: 本次状态写入时间。
+            warning_message: 需要同步写入的告警信息。
+
+        Returns:
+            无返回值；SQLite 写锁由调用方统一重试。
+        """
+
+        with self._session() as connection:
+            self._refresh_stock_sync_state(connection, symbol, timestamp, warning_message)
+
     def _upsert_stock_sync_state(
         self,
         connection: sqlite3.Connection,
@@ -1701,6 +1783,50 @@ class StockMarketRepository:
                 timestamp,
             ),
         )
+
+    def _run_with_sqlite_lock_retry(
+        self,
+        operation: Callable[[], Any],
+        *,
+        context: str,
+        suppress_final_lock: bool = False,
+    ) -> Any:
+        """对短暂 SQLite 写锁执行有限重试。
+
+        Args:
+            operation: 需要执行的数据库写入闭包，必须可重复执行。
+            context: 日志上下文，便于定位发生锁冲突的业务动作。
+            suppress_final_lock: 重试耗尽后是否仅记录日志并返回 None。
+
+        Returns:
+            `operation` 的返回值；若允许抑制且锁未解除则返回 None。
+        """
+
+        for attempt in range(1, SQLITE_LOCK_RETRY_ATTEMPTS + 1):
+            try:
+                return operation()
+            except sqlite3.OperationalError as error:
+                if not _is_sqlite_lock_error(error) or attempt >= SQLITE_LOCK_RETRY_ATTEMPTS:
+                    if suppress_final_lock and _is_sqlite_lock_error(error):
+                        logger.warning(
+                            "sqlite write skipped after lock retries: context=%s attempts=%s error=%s",
+                            context,
+                            attempt,
+                            error,
+                        )
+                        return None
+                    raise
+                delay_seconds = SQLITE_LOCK_RETRY_BASE_DELAY_SECONDS * attempt
+                logger.warning(
+                    "sqlite write locked, retrying: context=%s attempt=%s/%s delay=%.2fs error=%s",
+                    context,
+                    attempt,
+                    SQLITE_LOCK_RETRY_ATTEMPTS,
+                    delay_seconds,
+                    error,
+                )
+                time.sleep(delay_seconds)
+        return None
 
     def _build_instrument(self, row: sqlite3.Row, *, latest_price: float | None = None) -> StockInstrument:
         """将 SQLite 行转换为标的数据类。"""
@@ -1832,6 +1958,20 @@ def _optional_float(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _is_sqlite_lock_error(error: sqlite3.OperationalError) -> bool:
+    """判断 SQLite 异常是否属于可短暂重试的写锁冲突。
+
+    Args:
+        error: SQLite 操作异常。
+
+    Returns:
+        错误信息表示数据库或表处于锁定/忙碌状态时返回 True。
+    """
+
+    message = str(error).lower()
+    return "database is locked" in message or "database is busy" in message or "database table is locked" in message
 
 
 def _with_adjusted_daily_prices(

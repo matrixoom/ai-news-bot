@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- 股市 K 线和宽基指数 K 线恢复 MA60/MA120 图例与曲线，默认不选中但可在图例中手动勾选显示；回归命令：`cd frontend && npm test -- --run`。
+- 股票市场全标的刷新增强 SQLite 写锁与 AkShare 断链容错：`market_stock_sync_state` 状态写入遇到短暂 `database is locked` 会有限退避重试并记录可定位日志，ETF 复权日线遇到 `RemoteDisconnected` 会短重试；回归命令：`.venv\Scripts\python.exe -m pytest tests/test_market_data_module.py`。
 - 股票市场 K 线默认选择前复权，并在浏览器本地记录最后选中的自定义标的分组，刷新页面后自动恢复该分组。
 - 股票详情 K 线均线改为读取时按当前价格口径重算，并让 `today`/`recent_week` 增量刷新补足前置历史，避免 15:30 自动刷新最近一周时把窗口开头 MA5/MA10/MA20 覆盖为空导致断线。
 - 股市标的和宽基指数 K 线 tooltip 新增末行“至今涨幅”，鼠标指向历史交易日时按红涨绿跌展示该日收盘价相对最新交易日收盘价的偏离。

@@ -114,8 +114,8 @@ const dailyBars = [
     ma5: 10.2,
     ma10: 10.1,
     ma20: null,
-    ma60: null,
-    ma120: null,
+    ma60: 10.9,
+    ma120: 10.8,
     pe_ttm: 5.1,
     pb_mrq: 0.48,
     dividend_yield_ttm: 3.2,
@@ -556,16 +556,16 @@ describe("StockMarketWorkspace", () => {
         legend?: { data?: string[]; left?: string; top?: number; orient?: string; selected?: Record<string, boolean> };
         series?: Array<{ name?: string; data?: unknown[]; lineStyle?: { type?: string | number[] } }>;
       };
-      expect(indexOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20"]);
+      expect(indexOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
       expect(indexOption.legend?.top).toBe(10);
       expect(indexOption.legend?.left).toBe("center");
       expect(indexOption.legend?.orient).toBe("horizontal");
-      expect(indexOption.legend?.selected).toBeUndefined();
+      expect(indexOption.legend?.selected).toEqual({ MA60: false, MA120: false });
       expect(indexOption.series?.find((series) => series.name === "MA5")?.lineStyle?.type).toEqual([6, 4]);
       expect(indexOption.series?.find((series) => series.name === "MA10")?.lineStyle?.type).toEqual([3, 3]);
       expect(indexOption.series?.find((series) => series.name === "MA20")?.lineStyle?.type).toBe("solid");
-      expect(indexOption.series?.find((series) => series.name === "MA60")).toBeUndefined();
-      expect(indexOption.series?.find((series) => series.name === "MA120")).toBeUndefined();
+      expect(indexOption.series?.find((series) => series.name === "MA60")).toBeDefined();
+      expect(indexOption.series?.find((series) => series.name === "MA120")).toBeDefined();
       expect(indexOption.series?.find((series) => series.name === "PE(TTM)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "PB(MRQ)")).toBeUndefined();
       expect(indexOption.series?.find((series) => series.name === "K线")?.data).toHaveLength(2);
@@ -1182,7 +1182,7 @@ describe("StockMarketWorkspace", () => {
     expect(mocks.detailAdjustments.at(-1)).toBe("hfq");
   });
 
-  it("uses compact chart labels and hides valuation metrics from the kline legend", async () => {
+  it("uses compact chart labels and keeps long moving averages manually selectable", async () => {
     render(<StockMarketWorkspace />);
 
     await waitFor(() => expect(mocks.echartOptions.length).toBeGreaterThan(0));
@@ -1217,16 +1217,16 @@ describe("StockMarketWorkspace", () => {
     expect(klineOption.legend?.top).toBe(10);
     expect(klineOption.legend?.left).toBe("center");
     expect(klineOption.legend?.orient).toBe("horizontal");
-    expect(klineOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20"]);
-    expect(klineOption.legend?.selected).toBeUndefined();
+    expect(klineOption.legend?.data).toEqual(["K线", "MA5", "MA10", "MA20", "MA60", "MA120"]);
+    expect(klineOption.legend?.selected).toEqual({ MA60: false, MA120: false });
     expect(seriesByName["PE(TTM)"]).toBeUndefined();
     expect(seriesByName["PB(MRQ)"]).toBeUndefined();
     expect(seriesByName["总市值"]).toBeUndefined();
     expect(seriesByName["MA5"]?.lineStyle?.type).toEqual([6, 4]);
     expect(seriesByName["MA10"]?.lineStyle?.type).toEqual([3, 3]);
     expect(seriesByName["MA20"]?.lineStyle?.type).toBe("solid");
-    expect(seriesByName["MA60"]).toBeUndefined();
-    expect(seriesByName["MA120"]).toBeUndefined();
+    expect(seriesByName["MA60"]).toBeDefined();
+    expect(seriesByName["MA120"]).toBeDefined();
     expect(klineOption.tooltip?.textStyle?.fontSize).toBe(10);
     expect(klineOption.tooltip?.padding).toEqual([6, 8]);
     const tooltipHtml = klineOption.tooltip?.formatter?.([
@@ -1239,8 +1239,8 @@ describe("StockMarketWorkspace", () => {
     expect(tooltipHtml).toContain("至今涨幅");
     expect(tooltipHtml).toContain("-4.55%");
     expect(tooltipHtml).toContain("color:#059669");
-    expect(tooltipHtml).not.toContain("MA60");
-    expect(tooltipHtml).not.toContain("MA120");
+    expect(tooltipHtml).toContain("MA60");
+    expect(tooltipHtml).toContain("MA120");
     expect((tooltipHtml?.indexOf("MA5") ?? -1)).toBeLessThan(tooltipHtml?.indexOf("至今涨幅") ?? -1);
     expect(klineOption.grid?.[0]?.height).toBe("56%");
     expect(klineOption.yAxis?.[0]?.axisLabel?.fontSize).toBe(10);

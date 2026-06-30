@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 import logging
 import re
+import time
 from typing import Any, Callable, Mapping, Sequence
 
 from .stock_market_repository import StockInstrument, StockMarketRepository
@@ -13,6 +14,8 @@ from .stock_market_repository import StockInstrument, StockMarketRepository
 DataFrameLoader = Callable[..., Any]
 logger = logging.getLogger(__name__)
 AKSHARE_DAILY_TIMEOUT_SECONDS = 10
+AKSHARE_TRANSIENT_RETRY_ATTEMPTS = 3
+AKSHARE_TRANSIENT_RETRY_BASE_DELAY_SECONDS = 0.2
 
 
 class StockMarketSyncService:
@@ -537,14 +540,28 @@ def _first_successful_akshare_call(loaders: Sequence[tuple[str, Callable[[], Any
 
     errors: list[str] = []
     for name, loader in loaders:
-        try:
-            frame = loader()
-            if getattr(frame, "empty", False):
-                errors.append(f"{name}: empty")
-                continue
-            return frame
-        except Exception as error:
-            errors.append(f"{name}: {_compact_error_message(error)}")
+        for attempt in range(1, AKSHARE_TRANSIENT_RETRY_ATTEMPTS + 1):
+            try:
+                frame = loader()
+                if getattr(frame, "empty", False):
+                    errors.append(f"{name}: empty")
+                    break
+                return frame
+            except Exception as error:
+                if _is_transient_akshare_error(error) and attempt < AKSHARE_TRANSIENT_RETRY_ATTEMPTS:
+                    delay_seconds = AKSHARE_TRANSIENT_RETRY_BASE_DELAY_SECONDS * attempt
+                    logger.warning(
+                        "akshare endpoint transient failed, retrying: endpoint=%s attempt=%s/%s delay=%.2fs error=%s",
+                        name,
+                        attempt,
+                        AKSHARE_TRANSIENT_RETRY_ATTEMPTS,
+                        delay_seconds,
+                        _compact_error_message(error),
+                    )
+                    time.sleep(delay_seconds)
+                    continue
+                errors.append(f"{name}: {_compact_error_message(error)}")
+                break
     raise RuntimeError("; ".join(errors))
 
 
@@ -593,6 +610,31 @@ def _compact_error_message(error: Exception) -> str:
     if "invalid argument" in lowered:
         return "上游端点参数或本地网络环境异常"
     return message[:180]
+
+
+def _is_transient_akshare_error(error: Exception) -> bool:
+    """判断 AkShare 上游异常是否适合短重试。
+
+    Args:
+        error: 上游端点抛出的异常。
+
+    Returns:
+        连接中断、超时或远端关闭这类瞬时网络错误返回 True。
+    """
+
+    message = str(error).lower()
+    transient_tokens = (
+        "connection aborted",
+        "remote end closed connection",
+        "remote disconnected",
+        "connection reset",
+        "connection timed out",
+        "read timed out",
+        "max retries exceeded",
+        "temporarily unavailable",
+        "timeout",
+    )
+    return any(token in message for token in transient_tokens)
 
 
 def _compact_date(raw_value: str) -> str:
